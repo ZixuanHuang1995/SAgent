@@ -1,0 +1,19 @@
+key: database
+name: 資料庫設計
+description: 說明資料模型、資料表欄位、索引和資料處理規則。
+order: 4
+sections:
+  - heading: 設計說明
+    goal: 說明資料庫的用途、使用的資料庫產品和命名規則。
+  - heading: 資料模型
+    goal: 說明有哪些實體，以及實體之間的關聯。
+    diagrams: [er]
+  - heading: 資料表定義
+    goal: 每張資料表用一個表格說明：欄位名稱、型別、長度、必填、預設值、說明。
+  - heading: 索引與限制
+    goal: 列出主鍵、外來鍵、唯一鍵和索引，說明建立的原因。
+  - heading: 資料生命週期
+    goal: 說明資料怎麼建立、更新、封存和刪除。
+    diagrams: [state]
+  - heading: 資料移轉與備份
+    goal: 說明初始資料、資料移轉的方式，以及備份和還原的做法。

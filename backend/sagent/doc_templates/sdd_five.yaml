@@ -1,0 +1,18 @@
+key: sdd_five
+name: SDD 功能規格（五節體例）
+description: 依 Requirement → Decision → Constraint → Rule → Verification 五節撰寫，適合 AI 輔助開發流程使用。
+order: 6
+sections:
+  - heading: Requirement 需求
+    goal: 說明要做什麼、為什麼要做、誰會使用。逐條列出需求，編號 R-01、R-02…。
+    diagrams: [usecase]
+  - heading: Decision 決策
+    goal: 列出已經決定的做法和原因，編號 D-01…。還沒決定的事寫進待確認事項。
+    diagrams: [flowchart]
+  - heading: Constraint 限制
+    goal: 列出技術、法規、時程、相容性等限制，編號 C-01…。
+  - heading: Rule 規則
+    goal: 列出業務規則、欄位規則、下拉選單值域和計算規則，編號 RL-01…，欄位用表格說明。
+    diagrams: [state]
+  - heading: Verification 驗證
+    goal: 用「假設…當…則…」的格式寫驗收條件，編號 V-01…，每條註明對應的需求編號。

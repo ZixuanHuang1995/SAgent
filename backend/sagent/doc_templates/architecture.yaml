@@ -1,0 +1,24 @@
+key: architecture
+name: 系統架構設計
+description: 說明系統由哪些元件組成、怎麼部署、用什麼技術，以及重要的設計決策。
+order: 3
+sections:
+  - heading: 設計目標與限制
+    goal: 列出架構要達成的目標（效能、可用性、安全等）和已知的限制。
+  - heading: 系統環境
+    goal: 說明系統和使用者、外部系統之間的關係。
+  - heading: 元件設計
+    goal: 列出系統內部的元件，說明每個元件的職責和對外介面。
+    diagrams: [component]
+  - heading: 主要流程
+    goal: 說明重要情境下，元件之間怎麼互動。
+    diagrams: [sequence]
+  - heading: 部署架構
+    goal: 說明執行環境、主機、網路區域和部署方式。
+    diagrams: [deployment]
+  - heading: 技術選型
+    goal: 用表格列出使用的技術、版本和選擇原因。
+  - heading: 安全設計
+    goal: 說明身分驗證、授權、資料保護和稽核紀錄的做法。
+  - heading: 設計決策
+    goal: 列出重要的設計決策，每個決策寫背景、考慮過的選項、最後的選擇和原因。

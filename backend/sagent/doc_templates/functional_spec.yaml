@@ -1,0 +1,29 @@
+key: functional_spec
+name: 功能規格書
+description: 說明一個功能要做什麼、怎麼運作、有哪些規則，以及怎麼驗收。
+order: 1
+sections:
+  - heading: 目的與範圍
+    goal: 說明這個功能要解決什麼問題，範圍包含什麼、不包含什麼。
+  - heading: 名詞定義
+    goal: 用表格列出文件會用到的專有名詞和縮寫。
+  - heading: 角色與使用案例
+    goal: 列出會使用這個功能的角色，以及每個角色可以做的事。
+    diagrams: [usecase]
+  - heading: 功能需求
+    goal: 逐條列出功能需求，編號 FR-01、FR-02…，每條寫清楚輸入、處理、輸出。
+  - heading: 業務流程
+    goal: 用步驟說明主要流程和例外流程。
+    diagrams: [flowchart]
+  - heading: 系統互動
+    goal: 說明使用者、前端、後端、外部系統之間怎麼互動。
+    diagrams: [sequence]
+  - heading: 資料需求
+    goal: 列出需要的資料實體、主要欄位和關聯。
+    diagrams: [er]
+  - heading: 業務規則
+    goal: 逐條列出業務規則和檢核條件，編號 BR-01、BR-02…。
+  - heading: 非功能需求
+    goal: 列出效能、安全、可用性、稽核等要求，編號 NFR-01…，盡量寫成可量測的數字。
+  - heading: 驗收條件
+    goal: 用「假設…當…則…」的格式寫驗收條件，編號 AC-01…，每條註明對應的功能需求編號。

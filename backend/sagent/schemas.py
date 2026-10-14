@@ -1,0 +1,223 @@
+"""API 的輸入與輸出格式。"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class ORMModel(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+
+# --- 專案 / 階段 ---
+
+
+class ProjectCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    code: str = Field("", max_length=40)
+    description: str = ""
+    phases: list[str] | None = None
+
+
+class ProjectUpdate(BaseModel):
+    name: str | None = Field(None, max_length=200)
+    code: str | None = Field(None, max_length=40)
+    description: str | None = None
+
+
+class ProjectOut(ORMModel):
+    id: int
+    name: str
+    code: str
+    description: str
+    created_at: datetime
+    updated_at: datetime
+    phase_count: int = 0
+    spec_count: int = 0
+
+
+class PhaseCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str = ""
+
+
+class PhaseUpdate(BaseModel):
+    name: str | None = Field(None, max_length=200)
+    description: str | None = None
+    sort_order: int | None = None
+
+
+class PhaseOut(ORMModel):
+    id: int
+    project_id: int
+    name: str
+    description: str
+    sort_order: int
+
+
+class PhaseReorder(BaseModel):
+    phase_ids: list[int]
+
+
+# --- Spec / 版本 ---
+
+
+class SpecCreate(BaseModel):
+    phase_id: int
+    title: str = Field(min_length=1, max_length=300)
+    doc_type: str = "functional_spec"
+    # 內容來源：blank 空白、template 依範本骨架、content 使用 content 欄位（例如匯入）
+    init: Literal["blank", "template", "content", "none"] = "template"
+    content: str | None = None
+
+
+class SpecUpdate(BaseModel):
+    title: str | None = Field(None, max_length=300)
+    phase_id: int | None = None
+    status: Literal["draft", "reviewing", "approved", "deprecated"] | None = None
+    doc_type: str | None = None
+
+
+class SpecOut(ORMModel):
+    id: int
+    project_id: int
+    phase_id: int
+    title: str
+    doc_type: str
+    status: str
+    head_version_no: int
+    archived: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class VersionMeta(ORMModel):
+    id: int
+    spec_id: int
+    version_no: int
+    message: str
+    source: str
+    run_id: int | None
+    label: str | None
+    created_at: datetime
+    content_hash: str
+    lines_added: int | None = None
+    lines_removed: int | None = None
+
+
+class VersionDetail(VersionMeta):
+    content: str
+
+
+class SpecDetail(SpecOut):
+    content: str
+    head: VersionMeta | None
+    active_run_id: int | None
+
+
+class ContentSave(BaseModel):
+    content: str
+    message: str = ""
+    base_version_no: int | None = None
+
+
+class SaveResult(BaseModel):
+    created: bool
+    version: VersionMeta
+    spec: SpecOut
+
+
+class LabelIn(BaseModel):
+    label: str | None = Field(None, max_length=100)
+
+
+class RestoreIn(BaseModel):
+    message: str = ""
+
+
+class ProjectTree(BaseModel):
+    project: ProjectOut
+    phases: list[PhaseOut]
+    specs: list[SpecOut]
+
+
+# --- 基準版本 ---
+
+
+class BaselineCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    note: str = ""
+    phase_id: int | None = None
+
+
+class BaselineOut(ORMModel):
+    id: int
+    project_id: int
+    name: str
+    note: str
+    phase_id: int | None
+    created_at: datetime
+    item_count: int = 0
+
+
+# --- AI 工作 ---
+
+
+class RunOptionsIn(BaseModel):
+    model: str | None = None
+    uml_syntax: Literal["auto", "mermaid", "plantuml"] | None = None
+    max_revisions: int | None = Field(None, ge=0, le=3)
+    temperature: float | None = Field(None, ge=0, le=1.5)
+    diagrams: bool | None = None
+    max_diagrams: int | None = Field(None, ge=0, le=10)
+
+
+class RunCreate(BaseModel):
+    spec_id: int
+    mode: Literal["draft", "revise"] = "draft"
+    requirement: str = Field(min_length=1)
+    doc_type: str | None = None
+    options: RunOptionsIn = Field(default_factory=RunOptionsIn)
+
+
+class RunOut(ORMModel):
+    id: int
+    project_id: int
+    spec_id: int
+    mode: str
+    status: str
+    model: str
+    doc_type: str
+    requirement: str
+    options: dict[str, Any]
+    base_version_no: int
+    result_version_no: int | None
+    error: str
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+    stats: dict[str, Any] | None
+    spec_title: str = ""
+    queue_position: int | None = None
+
+
+class EventOut(BaseModel):
+    seq: int
+    type: str
+    agent: str
+    message: str
+    data: dict[str, Any]
+    ts: str
+
+
+class RunDetail(RunOut):
+    plan: dict[str, Any] | None
+    review: dict[str, Any] | None
+    events: list[EventOut]
+
+
+class RenderIn(BaseModel):
+    source: str = Field(min_length=1, max_length=200_000)

@@ -1,0 +1,429 @@
+"""三個 agent 的提示詞。
+
+給小模型的提示詞原則：
+- 規則用編號條列，一條只講一件事
+- 輸出格式講清楚，JSON 另外用 schema 約束
+- 共用的內容（需求、大綱）放前面，同一個 agent 連續呼叫時 Ollama 可以重用快取，CPU 上會快很多
+"""
+
+from __future__ import annotations
+
+import re
+
+from .diagram_kinds import KINDS, kinds_text
+from .types import Issue, Plan, RunInput, SectionPlan
+
+STYLE_RULES = """寫作規則：
+1. 使用繁體中文（台灣用語），技術名詞可以保留英文。
+2. 句子簡單直白，一句只講一件事，不要寫空泛的形容詞。
+3. 多用條列和 Markdown 表格。小標題用 ###。
+4. 只根據需求內容撰寫。需求沒提到的細節不要編造；必要的假設標註「（假設）」，不確定的地方標註「（待確認）」。
+5. 編號格式：功能需求 FR-01、業務規則 BR-01、非功能需求 NFR-01、驗收條件 AC-01。只有這一節的目標或要點寫明要編號時才新增編號；其他章節提到這些項目時，引用前面已經定義的編號，不要重新編號，也不要發明新的編號種類。"""
+
+
+def _doc_info(inp: RunInput) -> str:
+    lines = [f"專案：{inp.project_name}"]
+    if inp.project_description.strip():
+        lines.append(f"專案說明：{inp.project_description.strip()}")
+    lines += [
+        f"階段：{inp.phase_name}",
+        f"文件標題：{inp.spec_title}",
+        f"文件類型：{inp.template.name}（{inp.template.description}）",
+    ]
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Planner
+# ---------------------------------------------------------------------------
+
+_DIAGRAM_ITEM_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "kind": {"type": "string", "enum": list(KINDS)},
+        "title": {"type": "string"},
+        "description": {"type": "string"},
+    },
+    "required": ["kind", "title", "description"],
+}
+
+PLAN_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string"},
+        "summary": {"type": "string"},
+        "sections": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "heading": {"type": "string"},
+                    "goal": {"type": "string"},
+                    "key_points": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
+                    "diagrams": {"type": "array", "items": _DIAGRAM_ITEM_SCHEMA, "maxItems": 2},
+                },
+                "required": ["heading", "goal", "key_points", "diagrams"],
+            },
+            "maxItems": 12,
+        },
+        "open_questions": {"type": "array", "items": {"type": "string"}, "maxItems": 8},
+    },
+    "required": ["title", "summary", "sections", "open_questions"],
+}
+
+REVISE_PLAN_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "summary": {"type": "string"},
+        "changes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "section_id": {"type": "string"},
+                    "action": {"type": "string", "enum": ["update", "remove"]},
+                    "instruction": {"type": "string"},
+                },
+                "required": ["section_id", "action", "instruction"],
+            },
+        },
+        "new_sections": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "after": {"type": "string"},
+                    "heading": {"type": "string"},
+                    "goal": {"type": "string"},
+                    "key_points": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
+                    "diagrams": {"type": "array", "items": _DIAGRAM_ITEM_SCHEMA, "maxItems": 2},
+                },
+                "required": ["after", "heading", "goal", "key_points", "diagrams"],
+            },
+            "maxItems": 5,
+        },
+        "open_questions": {"type": "array", "items": {"type": "string"}, "maxItems": 8},
+    },
+    "required": ["summary", "changes", "new_sections", "open_questions"],
+}
+
+
+def planner_messages(inp: RunInput) -> list[dict[str, str]]:
+    opts = inp.options
+    diagram_rule = (
+        f"4. 只有真的需要圖的章節才放 diagrams，整份文件最多 {opts.max_diagrams} 張圖。kind 只能用：{kinds_text()}。"
+        if opts.diagrams and opts.max_diagrams > 0
+        else "4. 這次不畫圖，每個章節的 diagrams 都給空陣列。"
+    )
+    system = f"""你是資深系統分析師，現在要「規劃」一份系統分析文件的大綱。你只負責規劃，不用寫內文。
+
+規劃規則：
+1. 參考「建議章節」，依照需求內容調整：跟需求無關的章節可以刪除，缺少的可以新增。章節數量 4 到 {opts.max_sections} 個。
+2. heading 只寫章節名稱，不要加編號。不要規劃「待確認事項」章節，系統會自動加。
+3. 每個章節寫 goal（這一節要寫什麼，一句話）和 key_points（2 到 4 個具體要點，每個要點一句短句，盡量使用需求裡的名詞）。
+{diagram_rule}
+5. 需求中不清楚、缺少或互相矛盾的地方，寫進 open_questions，不要自己猜。
+6. summary 用一兩句話說明這份文件的內容。
+7. 使用繁體中文。只輸出 JSON，不要縮排和多餘的空白。"""
+
+    suggested = []
+    for sec in inp.template.sections:
+        diagrams = "、".join(f"{d} {KINDS[d].name}" for d in sec.diagrams) if sec.diagrams else "無"
+        suggested.append(f"- {sec.heading}：{sec.goal}（建議的圖：{diagrams}）")
+    user = f"""## 文件資訊
+{_doc_info(inp)}
+
+## 建議章節
+{chr(10).join(suggested)}
+
+## 需求內容
+{inp.requirement.strip()}
+
+請輸出大綱 JSON。"""
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
+def _section_digest(body: str, limit: int = 200) -> str:
+    text = re.sub(r"```.*?```", "[圖]", body, flags=re.S)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text[:limit] + ("…" if len(text) > limit else "")
+
+
+def revise_planner_messages(inp: RunInput, existing: list[tuple[str, str, str]]) -> list[dict[str, str]]:
+    """existing：[(E1, 標題, 內文), …]"""
+    opts = inp.options
+    diagram_rule = (
+        f"新增章節需要圖時才放 diagrams，kind 只能用：{kinds_text()}。"
+        if opts.diagrams and opts.max_diagrams > 0
+        else "這次不畫圖，diagrams 都給空陣列。"
+    )
+    system = f"""你是資深系統分析師，現在要「規劃如何修訂」一份既有的系統分析文件。你只負責規劃，不用寫內文。
+
+規劃規則：
+1. 看「修訂需求」，找出哪些既有章節要修改、哪些要刪除、需不需要新增章節。
+2. 不用改的章節不要列出來，系統會原樣保留。
+3. changes 每一項寫 section_id（例如 E2）、action（update 修改或 remove 刪除）和 instruction（具體說明要怎麼改）。
+4. 要新增的章節放在 new_sections：after 寫要放在哪個 section_id 後面（放最後寫 END），heading 不要加編號。{diagram_rule}
+5. 修訂需求中不清楚的地方寫進 open_questions。
+6. summary 用一句話說明這次修訂的重點。
+7. 使用繁體中文。只輸出 JSON，不要縮排和多餘的空白。"""
+    listing = "\n".join(
+        f"[{sid}] {heading}\n摘要：{_section_digest(body)}" for sid, heading, body in existing
+    )
+    user = f"""## 文件資訊
+{_doc_info(inp)}
+
+## 既有章節
+{listing}
+
+## 修訂需求
+{inp.requirement.strip()}
+
+請輸出修訂計畫 JSON。"""
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
+# ---------------------------------------------------------------------------
+# Writer
+# ---------------------------------------------------------------------------
+
+WRITER_SYSTEM = f"""你是系統分析師，負責撰寫系統分析文件中的「一個章節」。
+
+{STYLE_RULES}
+6. 只寫指定的這一節。不要寫章節標題，不要寫其他章節的內容，不要寫開場白或結語。
+7. 不要畫圖，不要輸出 ```mermaid 或 ```plantuml，圖會由另一個步驟產生。
+
+直接輸出這一節的 Markdown 內文。"""
+
+
+def _outline(plan: Plan) -> str:
+    return "\n".join(f"{i}. {s.heading}" for i, s in enumerate(plan.sections, start=1))
+
+
+def _writer_context(inp: RunInput, plan: Plan) -> str:
+    """同一次執行中每次寫章節都一樣的前段，讓 Ollama 重用快取。"""
+    return f"""## 文件資訊
+{_doc_info(inp)}
+文件摘要：{plan.summary}
+
+## 需求內容
+{inp.requirement.strip()}
+
+## 文件大綱
+{_outline(plan)}"""
+
+
+def section_messages(
+    inp: RunInput, plan: Plan, sec: SectionPlan, number: int, known_items: list[str]
+) -> list[dict[str, str]]:
+    points = "\n".join(f"- {p}" for p in sec.key_points) or "- （依目標撰寫）"
+    extra = ""
+    if sec.diagrams:
+        titles = "、".join(d.title for d in sec.diagrams)
+        extra += f"\n這一節後面會附上圖：{titles}。內文可以寫「如下圖」，但不要自己畫。"
+    if known_items:
+        extra += "\n\n前面章節已經定義的編號項目（引用時請用同樣的編號）：\n" + "\n".join(
+            f"- {item}" for item in known_items
+        )
+    user = f"""{_writer_context(inp, plan)}
+
+## 現在要寫的章節
+第 {number} 節：{sec.heading}
+目標：{sec.goal}
+要點：
+{points}{extra}
+
+請輸出第 {number} 節「{sec.heading}」的內文。"""
+    return [{"role": "system", "content": WRITER_SYSTEM}, {"role": "user", "content": user}]
+
+
+UPDATE_SYSTEM = f"""你是系統分析師，負責依照修訂說明修改系統分析文件中的「一個章節」。
+
+{STYLE_RULES}
+6. 只輸出這一節修改後的完整內文。不要寫章節標題，不要寫其他章節，不要說明你改了什麼。
+7. 沒有要改的部分照原樣保留。
+8. 原本的圖（```mermaid 或 ```plantuml 區塊）要保留；修訂說明要求改圖時才修改圖的內容，並維持原本的語法。"""
+
+
+def update_section_messages(inp: RunInput, plan: Plan, sec: SectionPlan) -> list[dict[str, str]]:
+    user = f"""## 文件資訊
+{_doc_info(inp)}
+
+## 修訂需求
+{inp.requirement.strip()}
+
+## 這次修訂的重點
+{plan.summary}
+
+## 要修改的章節：{sec.heading}
+（原本內容開始）
+{sec.source_body.strip()}
+（原本內容結束）
+
+## 修改說明
+{sec.instruction}
+
+請輸出修改後「{sec.heading}」這一節的完整內文。"""
+    return [{"role": "system", "content": UPDATE_SYSTEM}, {"role": "user", "content": user}]
+
+
+REVISE_SYSTEM = f"""你是系統分析師，負責依照審查意見修改系統分析文件中的「一個章節」。
+
+{STYLE_RULES}
+6. 只輸出這一節修改後的完整內文。不要寫章節標題，不要寫其他章節，不要說明你改了什麼。
+7. 內文中的 [[圖1]]、[[圖2]] 是圖的位置標記，一定要原樣保留在原本的位置。
+8. 不要輸出 ```mermaid 或 ```plantuml。"""
+
+
+def revise_section_messages(
+    inp: RunInput, plan: Plan, sec: SectionPlan, body_with_markers: str, issues: list[Issue]
+) -> list[dict[str, str]]:
+    comments = "\n".join(
+        f"- （{i.severity}）問題：{i.problem}" + (f"；建議：{i.suggestion}" if i.suggestion else "")
+        for i in issues
+    )
+    user = f"""{_writer_context(inp, plan)}
+
+## 要修改的章節：{sec.heading}
+目標：{sec.goal}
+（目前內容開始）
+{body_with_markers.strip()}
+（目前內容結束）
+
+## 審查意見
+{comments}
+
+請依照審查意見修改「{sec.heading}」，輸出修改後的完整內文。"""
+    return [{"role": "system", "content": REVISE_SYSTEM}, {"role": "user", "content": user}]
+
+
+DIAGRAM_SYSTEM = """你負責畫系統分析文件裡的圖。
+
+規則：
+1. 只輸出一個程式碼區塊（```mermaid 或 ```plantuml），區塊外面不要有任何文字。
+2. 嚴格照「語法規則」和「範例」的寫法，範例怎麼寫你就怎麼寫。
+3. 圖的內容要跟章節內文一致。顯示的文字用繁體中文，語法規則要求用英文的地方才用英文。
+4. 圖不要太大：節點、參與者或實體最多 12 個。"""
+
+
+def diagram_messages(
+    inp: RunInput, heading: str, section_text: str, kind: str, title: str, description: str, syntax: str
+) -> list[dict[str, str]]:
+    info = KINDS[kind]
+    lang = "plantuml" if syntax == "plantuml" else "mermaid"
+    guide = info.plantuml_guide if lang == "plantuml" else info.mermaid_guide
+    example = info.plantuml_example if lang == "plantuml" else info.mermaid_example
+    text = re.sub(r"```.*?```", "", section_text, flags=re.S).strip()
+    user = f"""## 文件
+{inp.spec_title}
+
+## 需求內容（節錄）
+{inp.requirement.strip()[:1500]}
+
+## 章節內文：{heading}
+{text[:2500]}
+
+## 要畫的圖
+類型：{info.name}
+標題：{title}
+說明：{description or title}
+
+## 語法：{"PlantUML" if lang == "plantuml" else "Mermaid"}
+語法規則：
+{guide}
+
+範例：
+```{lang}
+{example}
+```
+
+請輸出「{title}」的 ```{lang} 程式碼區塊。"""
+    return [{"role": "system", "content": DIAGRAM_SYSTEM}, {"role": "user", "content": user}]
+
+
+def diagram_fix_message(errors: list[str], lang: str) -> dict[str, str]:
+    errs = "\n".join(f"- {e}" for e in errors)
+    return {
+        "role": "user",
+        "content": f"這段程式碼有語法錯誤：\n{errs}\n\n請照語法規則和範例修正，重新輸出完整的 ```{lang} 程式碼區塊，不要其他文字。",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Reviewer
+# ---------------------------------------------------------------------------
+
+REVIEW_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "issues": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "section_id": {"type": "string"},
+                    "severity": {"type": "string", "enum": ["high", "medium", "low"]},
+                    "problem": {"type": "string"},
+                    "suggestion": {"type": "string"},
+                },
+                "required": ["section_id", "severity", "problem", "suggestion"],
+            },
+            "maxItems": 8,
+        },
+        "summary": {"type": "string"},
+        "score": {"type": "integer", "minimum": 1, "maximum": 10},
+    },
+    "required": ["issues", "summary", "score"],
+}
+
+REVIEWER_SYSTEM = """你是嚴格但務實的系統分析文件審查員。請對照「需求內容」和「文件大綱」審查「文件草稿」。
+
+檢查重點：
+1. 需求裡的每一項重點，文件有沒有寫到。漏掉的也當成問題，section_id 寫應該補在哪一節。
+2. 文件有沒有跟需求矛盾，或寫了需求沒有、又沒有標註（假設）的內容。
+3. 每一節有沒有達成大綱寫的目標。
+4. 名詞、編號、角色名稱前後是否一致。
+
+規則：
+1. 只提出會影響文件正確性或完整性的問題，不要挑剔用字和文筆。最多列 6 個最重要的問題。
+2. 每個問題寫 section_id（例如 S2）、severity、problem（問題是什麼）、suggestion（具體怎麼改）。
+3. severity：high 是錯誤或漏掉重要需求；medium 是內容不完整或不一致；low 是小建議。
+4. 沒有明顯問題時 issues 給空陣列，不要硬找問題。
+5. 只根據「需求內容」判斷。需求沒寫的條件或數字，不要要求文件加入。
+6. 需求內容裡的條列編號（1、2、3…）只是順序，跟文件裡的 FR-01 等編號無關，不要拿來對照。
+7. 同一個需求在不同章節出現（例如功能需求和驗收條件都提到）是正常的，不算重複。
+8. summary 用一兩句話總結文件品質；score 是 1 到 10 分。
+9. 使用繁體中文。只輸出 JSON，不要縮排和多餘的空白。"""
+
+
+def reviewer_messages(
+    inp: RunInput, plan: Plan, draft_text: str, check_notes: list[str], partial: bool = False
+) -> list[dict[str, str]]:
+    outline = "\n".join(f"[{s.id}] {s.heading}：{s.goal}" for s in plan.sections)
+    checks = "\n".join(f"- {n}" for n in check_notes) if check_notes else "- 沒有發現格式問題"
+    draft_title = (
+        "## 修改過的章節\n（其他章節上一輪已經審查過，這次只審查下面這些章節，section_id 只能用這些章節的編號）"
+        if partial
+        else "## 文件草稿"
+    )
+    user = f"""## 文件資訊
+{_doc_info(inp)}
+
+## 需求內容
+{inp.requirement.strip()}
+
+## 文件大綱
+{outline}
+
+## 自動檢查結果
+{checks}
+
+{draft_title}
+{draft_text}
+
+請輸出審查結果 JSON。"""
+    return [{"role": "system", "content": REVIEWER_SYSTEM}, {"role": "user", "content": user}]
+
+
+def json_retry_message() -> dict[str, str]:
+    return {"role": "user", "content": "上一次的輸出不是正確的 JSON。請重新輸出，只輸出 JSON，不要其他文字。"}

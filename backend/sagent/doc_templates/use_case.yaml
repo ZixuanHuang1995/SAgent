@@ -1,0 +1,20 @@
+key: use_case
+name: 使用案例規格
+description: 用使用案例描述角色和系統的互動，包含主要流程、替代流程和例外流程。
+order: 2
+sections:
+  - heading: 概述
+    goal: 說明這組使用案例的目的和範圍。
+  - heading: 角色
+    goal: 用表格列出角色名稱、說明和主要目標。
+  - heading: 使用案例總覽
+    goal: 列出所有使用案例，編號 UC-01…，並註明對應的角色。
+    diagrams: [usecase]
+  - heading: 使用案例說明
+    goal: 每個使用案例寫出前置條件、主要流程（步驟編號）、替代流程、例外流程和後置條件。
+    diagrams: [sequence]
+  - heading: 狀態變化
+    goal: 說明主要資料物件有哪些狀態，以及狀態轉換的條件。
+    diagrams: [state]
+  - heading: 業務規則
+    goal: 逐條列出使用案例要遵守的規則，編號 BR-01…。

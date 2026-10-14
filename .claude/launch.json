@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "sagent",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "--project", "backend", "sagent", "serve", "--port", "8765"],
+      "port": 8765
+    },
+    {
+      "name": "sagent-demo",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "--project", "backend", "sagent", "serve", "--port", "8766", "--fake-llm", "--data-dir", "data-demo"],
+      "port": 8766
+    }
+  ]
+}
