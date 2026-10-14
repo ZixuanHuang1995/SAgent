@@ -8,7 +8,7 @@
 - 後端 `backend/`：Python 3.11 以上、FastAPI、SQLAlchemy、SQLite。用 uv 管理套件。
 - 前端 `frontend/`：React 19、Vite 8、TypeScript、TanStack Query、CodeMirror、Mermaid 12。
 - 前端打包到 `frontend/dist`，由後端直接提供。執行時不需要 Node.js。
-- 這個資料夾還不是 git repo。使用者沒要求前，不要 `git init` 或 commit。
+- Git repo：https://github.com/ZixuanHuang1995/SAgent ，主分支 `main`。使用者沒要求前，不要 commit 或 push。
 
 ## 常用指令
 
