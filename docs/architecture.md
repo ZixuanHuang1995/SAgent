@@ -159,7 +159,7 @@ sequenceDiagram
 
 | 方法 | 路徑 | 說明 |
 |---|---|---|
-| GET/POST | `/api/projects` | 專案清單、建立專案 |
+| GET/POST | `/api/projects` | 專案清單（含各階段的 Spec 數量）、建立專案 |
 | GET/PATCH/DELETE | `/api/projects/{id}` | 專案（含階段與 Spec 清單） |
 | POST | `/api/projects/{id}/phases` | 新增階段 |
 | POST | `/api/projects/{id}/phases/reorder` | 調整階段順序 |

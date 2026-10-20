@@ -1,28 +1,13 @@
 // 設定：模型連線、AI 預設選項、PlantUML、文件範本
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { useEffect, useRef, useState } from 'react'
+import { useBlocker, useNavigate } from 'react-router'
 import { api, type Settings, type UmlSyntax } from '../api'
 import { KIND_NAMES } from '../kinds'
-import { Badge, errorText, Field, Skeleton, Spinner, useToast } from '../components/ui'
+import { Badge, ConfirmDialog, errorText, Field, Skeleton, Spinner, useToast } from '../components/ui'
 import { formatBytes, UML_SYNTAX } from '../format'
 import { keys, useHealth, useModels, useSettings, useTemplates } from '../queries'
-
-/** 回到上一頁；直接開設定頁（沒有上一頁）時回專案清單 */
-function BackLink() {
-  const navigate = useNavigate()
-  const hasHistory = ((window.history.state as { idx?: number } | null)?.idx ?? 0) > 0
-  return hasHistory ? (
-    <button className="link-btn back-link" onClick={() => navigate(-1)}>
-      ← 返回
-    </button>
-  ) : (
-    <Link className="back-link" to="/">
-      ← 專案清單
-    </Link>
-  )
-}
 
 export function SettingsPage() {
   const settings = useSettings()
@@ -32,6 +17,26 @@ export function SettingsPage() {
   const qc = useQueryClient()
   const toast = useToast()
   const [form, setForm] = useState<Settings | null>(null)
+  const navigate = useNavigate()
+  const dirty = !!form && !!settings.data && JSON.stringify(form) !== JSON.stringify(settings.data)
+
+  // 有未儲存的修改時，離開頁面要確認
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => dirty && currentLocation.pathname !== nextLocation.pathname)
+  // 確認離開後 ConfirmDialog 還會呼叫 onClose，這時的 blocker 還是舊的，不能再 reset
+  const leaving = useRef(false)
+  useEffect(() => {
+    if (!dirty) return
+    const onBeforeUnload = (e: BeforeUnloadEvent) => e.preventDefault()
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [dirty])
+
+  /** 回到上一頁；直接開設定頁（沒有上一頁）時回專案清單 */
+  const leave = () => {
+    const hasHistory = ((window.history.state as { idx?: number } | null)?.idx ?? 0) > 0
+    if (hasHistory) navigate(-1)
+    else navigate('/')
+  }
 
   useEffect(() => {
     if (settings.data && !form) setForm(settings.data)
@@ -61,8 +66,17 @@ export function SettingsPage() {
 
   return (
     <div className="page page-narrow">
-      <BackLink />
-      <h1>設定</h1>
+      <div className="settings-head">
+        <h1>設定</h1>
+        {dirty && <Badge tone="amber">有未儲存的修改</Badge>}
+        <span className="spacer" />
+        <button className="btn" onClick={leave}>
+          取消
+        </button>
+        <button className="btn btn-primary" disabled={save.isPending} onClick={() => save.mutate(form)}>
+          儲存設定
+        </button>
+      </div>
 
       <section className="card">
         <div className="card-title">系統狀態</div>
@@ -164,15 +178,6 @@ export function SettingsPage() {
         </Field>
       </section>
 
-      <div className="row gap-sm">
-        <button className="btn btn-primary" disabled={save.isPending} onClick={() => save.mutate(form)}>
-          儲存設定
-        </button>
-        <button className="btn" onClick={() => settings.data && setForm(settings.data)}>
-          還原
-        </button>
-      </div>
-
       <section className="card mt">
         <div className="card-title">文件範本</div>
         <p className="muted small">
@@ -195,6 +200,23 @@ export function SettingsPage() {
           </details>
         ))}
       </section>
+
+      {blocker.state === 'blocked' && (
+        <ConfirmDialog
+          title="還沒儲存"
+          message="設定有未儲存的修改，離開後修改會不見。確定要離開嗎？"
+          confirmText="不儲存，直接離開"
+          danger
+          onConfirm={() => {
+            leaving.current = true
+            blocker.proceed()
+          }}
+          onClose={() => {
+            if (leaving.current) leaving.current = false
+            else if (blocker.state === 'blocked') blocker.reset()
+          }}
+        />
+      )}
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
-import { createBrowserRouter, Link, Outlet, RouterProvider, useParams, useRouteError } from 'react-router'
+import { createBrowserRouter, Link, Outlet, RouterProvider, useMatch, useParams, useRouteError } from 'react-router'
 import { Icon } from './components/icons'
+import logoUrl from './logo.svg'
 import { useHealth, useProjectTree } from './queries'
 import { useThemePref, type ThemePref } from './theme'
 import { BaselinesPage } from './pages/BaselinesPage'
@@ -54,7 +55,17 @@ function ThemeToggle() {
 
 function Breadcrumb() {
   const { projectId } = useParams()
+  const onSettings = useMatch('/settings')
   const tree = useProjectTree(Number(projectId ?? 0))
+  if (onSettings)
+    return (
+      <>
+        <span className="crumb-sep">/</span>
+        <span className="crumb" aria-current="page">
+          設定
+        </span>
+      </>
+    )
   if (!projectId || !tree.data) return null
   return (
     <>
@@ -96,7 +107,7 @@ function Shell() {
     <div className="app">
       <header className="topbar">
         <Link to="/" className="brand">
-          <img src="/favicon.svg" alt="" width={22} height={22} />
+          <img src={logoUrl} alt="" width={22} height={22} />
           <span>SAgent</span>
           <span className="brand-sub">系統分析代理</span>
         </Link>

@@ -159,6 +159,8 @@ export function SpecPage() {
 
   // 有未存檔的修改時，離開頁面要確認
   const blocker = useBlocker(({ currentLocation, nextLocation }) => dirty && currentLocation.pathname !== nextLocation.pathname)
+  // 確認離開後 ConfirmDialog 還會呼叫 onClose，這時的 blocker 還是舊的，不能再 reset
+  const leaving = useRef(false)
   useEffect(() => {
     if (!dirty) return
     const onBeforeUnload = (e: BeforeUnloadEvent) => e.preventDefault()
@@ -649,8 +651,14 @@ export function SpecPage() {
           message="這份文件有未儲存的修改，離開後修改會不見。確定要離開嗎？"
           confirmText="不存檔，直接離開"
           danger
-          onConfirm={() => blocker.proceed()}
-          onClose={() => blocker.state === 'blocked' && blocker.reset()}
+          onConfirm={() => {
+            leaving.current = true
+            blocker.proceed()
+          }}
+          onClose={() => {
+            if (leaving.current) leaving.current = false
+            else if (blocker.state === 'blocked') blocker.reset()
+          }}
         />
       )}
     </div>

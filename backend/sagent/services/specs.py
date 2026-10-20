@@ -99,6 +99,16 @@ def project_counts(s: Session, project_id: int) -> tuple[int, int]:
     return phases, specs
 
 
+def phase_spec_counts(s: Session, project_id: int) -> dict[int, int]:
+    """每個階段底下的 Spec 數量（不含封存）。沒有 Spec 的階段不會出現在結果裡。"""
+    rows = s.execute(
+        select(Spec.phase_id, func.count(Spec.id))
+        .where(Spec.project_id == project_id, Spec.archived.is_(False))
+        .group_by(Spec.phase_id)
+    ).all()
+    return {phase_id: n for phase_id, n in rows}
+
+
 # ---------------------------------------------------------------------------
 # 階段
 # ---------------------------------------------------------------------------

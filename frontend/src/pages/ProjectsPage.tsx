@@ -3,10 +3,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { api } from '../api'
+import { api, type Project } from '../api'
 import { relativeTime } from '../format'
 import { keys, useProjects } from '../queries'
 import { Empty, errorText, Field, Modal, Skeleton, useToast } from '../components/ui'
+import { NewSpecDialog } from './ProjectLayout'
 
 export function ProjectsPage() {
   const projects = useProjects()
@@ -39,19 +40,64 @@ export function ProjectsPage() {
       )}
       <div className="project-grid">
         {projects.data?.map((p) => (
-          <Link key={p.id} to={`/p/${p.id}`} className="project-card">
-            <div className="project-card-head">
-              <span className="project-name">{p.name}</span>
-              {p.code && <span className="project-code">{p.code}</span>}
-            </div>
-            <p className="project-desc">{p.description || '（沒有說明）'}</p>
-            <div className="project-meta muted small">
-              {p.phase_count} 個階段・{p.spec_count} 份 Spec・更新於 {relativeTime(p.updated_at)}
-            </div>
-          </Link>
+          <ProjectCard key={p.id} project={p} />
         ))}
       </div>
       {creating && <CreateProjectDialog onClose={() => setCreating(false)} />}
+    </div>
+  )
+}
+
+function ProjectCard({ project: p }: { project: Project }) {
+  const [newSpec, setNewSpec] = useState(false)
+  const filled = p.phases.filter((ph) => ph.spec_count > 0).length
+  const percent = p.phases.length ? Math.round((filled / p.phases.length) * 100) : 0
+  return (
+    <div className="project-card">
+      <Link to={`/p/${p.id}`} className="project-card-main">
+        <div className="project-card-head">
+          <span className="project-avatar" aria-hidden="true">
+            {(p.code || p.name).slice(0, 2).toUpperCase()}
+          </span>
+          <span className="project-name">{p.name}</span>
+        </div>
+        <p className="project-desc">{p.description || '（沒有說明）'}</p>
+      </Link>
+      {p.phases.length > 0 && (
+        <>
+          <div className="phase-chips">
+            {p.phases.map((ph) => (
+              <span key={ph.id} className={`phase-chip${ph.spec_count > 0 ? ' phase-chip-filled' : ''}`}>
+                {ph.name} {ph.spec_count}
+              </span>
+            ))}
+          </div>
+          <div
+            className="progress"
+            role="progressbar"
+            aria-label="有內容的階段"
+            aria-valuenow={filled}
+            aria-valuemin={0}
+            aria-valuemax={p.phases.length}
+          >
+            <span style={{ width: `${percent}%` }} />
+          </div>
+        </>
+      )}
+      <div className="project-meta muted small">
+        {filled}/{p.phases.length} 個階段有內容・{p.spec_count} 份 Spec・更新於 {relativeTime(p.updated_at)}
+      </div>
+      <div className="project-actions">
+        <Link to={`/p/${p.id}`} className="btn btn-sm">
+          開啟
+        </Link>
+        <button className="btn btn-sm" onClick={() => setNewSpec(true)} disabled={p.phases.length === 0}>
+          + 新增 Spec
+        </button>
+      </div>
+      {newSpec && (
+        <NewSpecDialog projectId={p.id} phases={p.phases} phaseId={null} onClose={() => setNewSpec(false)} />
+      )}
     </div>
   )
 }

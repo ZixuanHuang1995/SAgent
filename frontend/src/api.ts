@@ -14,6 +14,8 @@ export interface Project {
   updated_at: string
   phase_count: number
   spec_count: number
+  /** 各階段和底下的 Spec 數量（不含封存），依階段順序 */
+  phases: PhaseSummary[]
 }
 
 export interface Phase {
@@ -22,6 +24,10 @@ export interface Phase {
   name: string
   description: string
   sort_order: number
+}
+
+export interface PhaseSummary extends Phase {
+  spec_count: number
 }
 
 export interface Spec {

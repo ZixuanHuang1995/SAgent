@@ -37,6 +37,8 @@ class ProjectOut(ORMModel):
     updated_at: datetime
     phase_count: int = 0
     spec_count: int = 0
+    # 各階段和底下的 Spec 數量（不含封存），依階段順序排列，首頁卡片用
+    phases: list[PhaseSummary] = []
 
 
 class PhaseCreate(BaseModel):
@@ -56,6 +58,10 @@ class PhaseOut(ORMModel):
     name: str
     description: str
     sort_order: int
+
+
+class PhaseSummary(PhaseOut):
+    spec_count: int = 0
 
 
 class PhaseReorder(BaseModel):

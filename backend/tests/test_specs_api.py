@@ -18,6 +18,21 @@ def test_project_created_with_default_phases(client, project):
     assert "已經有" in resp.json()["detail"]
 
 
+def test_project_list_has_phase_spec_counts(client, project):
+    phases = project["phases"]
+    _create_spec(client, project)
+    _create_spec(client, project, title="註冊功能")
+    archived = _create_spec(client, project, title="舊功能", phase_id=phases[1]["id"])
+    client.post(f"/api/specs/{archived['id']}/archive")
+    [item] = client.get("/api/projects").json()
+    assert item["spec_count"] == 2
+    assert [(p["name"], p["spec_count"]) for p in item["phases"]] == [
+        ("需求分析", 2),
+        ("系統設計", 0),
+        ("詳細設計", 0),
+    ]
+
+
 def test_phase_crud(client, project):
     pid = project["project"]["id"]
     phase = client.post(f"/api/projects/{pid}/phases", json={"name": "第二期"}).json()

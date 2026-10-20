@@ -17,6 +17,7 @@ from ..schemas import (
     PhaseCreate,
     PhaseOut,
     PhaseReorder,
+    PhaseSummary,
     PhaseUpdate,
     ProjectCreate,
     ProjectOut,
@@ -38,7 +39,14 @@ router = APIRouter(prefix="/api", tags=["projects"])
 
 def project_out(s: Session, project: Project) -> ProjectOut:
     phases, specs = spec_service.project_counts(s, project.id)
-    return ProjectOut.model_validate(project).model_copy(update={"phase_count": phases, "spec_count": specs})
+    per_phase = spec_service.phase_spec_counts(s, project.id)
+    summaries = [
+        PhaseSummary.model_validate(ph).model_copy(update={"spec_count": per_phase.get(ph.id, 0)})
+        for ph in project.phases
+    ]
+    return ProjectOut.model_validate(project).model_copy(
+        update={"phase_count": phases, "spec_count": specs, "phases": summaries}
+    )
 
 
 @router.get("/projects", response_model=list[ProjectOut])
