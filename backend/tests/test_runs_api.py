@@ -111,6 +111,32 @@ def test_list_runs_and_templates_and_settings(client, project):
     assert client.post("/api/render/plantuml", json={"source": "@startuml\nA->B\n@enduml"}).status_code == 503
 
 
+def test_uiux_advice_run_never_draws(client, project):
+    templates = {t["key"]: t for t in client.get("/api/agent/templates").json()}
+    assert templates["uiux_advice"]["advice"] is True
+    assert templates["uiux_advice"]["allow_diagrams"] is False
+    assert templates["functional_spec"]["allow_diagrams"] is True
+
+    spec = _spec(client, project)
+    r = client.post(
+        "/api/agent/runs",
+        json={
+            "spec_id": spec["id"],
+            "requirement": "員工要能在手機上快速請假",
+            "doc_type": "uiux_advice",
+            "options": {"diagrams": True},
+        },
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["options"]["diagrams"] is False  # 工作紀錄要顯示「不畫圖」
+    run = wait_run(client, r.json()["id"])
+    assert run["status"] == "succeeded", run["error"]
+    detail = client.get(f"/api/specs/{spec['id']}").json()
+    assert detail["doc_type"] == "uiux_advice"
+    assert "文件類型：UI/UX 設計建議" in detail["content"]
+    assert "```" not in detail["content"]
+
+
 def test_diagram_kinds_for_editor(client):
     kinds = client.get("/api/agent/diagram-kinds").json()
     keys = [k["key"] for k in kinds]

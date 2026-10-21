@@ -129,6 +129,10 @@ export interface Template {
   name: string
   description: string
   builtin: boolean
+  /** 建議類文件（例如 UI/UX 設計建議）：可以提出需求沒寫的做法 */
+  advice: boolean
+  /** false：這種文件不畫圖 */
+  allow_diagrams: boolean
   sections: { heading: string; goal: string; diagrams: string[] }[]
 }
 

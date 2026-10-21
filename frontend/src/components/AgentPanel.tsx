@@ -158,6 +158,9 @@ function RunForm({ spec }: { spec: SpecDetail }) {
   const s = settings.data
   const model = options.model ?? s?.default_model ?? ''
   const ollamaDown = health.data?.llm_provider === 'ollama' && health.data && !health.data.ollama.reachable
+  const template = templates.data?.find((t) => t.key === docType)
+  // 有些文件類型不畫圖（例如 UI/UX 設計建議），圖表相關選項就不顯示
+  const canDraw = template?.allow_diagrams !== false
 
   const start = async () => {
     if (!requirement.trim()) {
@@ -254,7 +257,7 @@ function RunForm({ spec }: { spec: SpecDetail }) {
         }}
       />
 
-      <Field label="文件類型">
+      <Field label="文件類型" hint={template?.description}>
         <select className="input" value={docType} onChange={(e) => setDocType(e.target.value)}>
           {templates.data?.map((t) => (
             <option key={t.key} value={t.key}>
@@ -265,7 +268,7 @@ function RunForm({ spec }: { spec: SpecDetail }) {
       </Field>
 
       <button className="link-btn mb-sm" aria-expanded={advanced} onClick={() => setAdvanced((a) => !a)}>
-        {advanced ? '▾' : '▸'} 進階選項（模型、圖表、審查次數）
+        {advanced ? '▾' : '▸'} 進階選項（{canDraw ? '模型、圖表、審查次數' : '模型、審查次數'}）
       </button>
       {advanced && s && (
         <div className="advanced">
@@ -279,40 +282,46 @@ function RunForm({ spec }: { spec: SpecDetail }) {
               ))}
             </select>
           </Field>
-          <Field label="UML 圖語法">
-            <select
-              className="input"
-              value={options.uml_syntax ?? s.uml_syntax}
-              onChange={(e) => setOptions((o) => ({ ...o, uml_syntax: e.target.value as UmlSyntax }))}
-            >
-              {Object.entries(UML_SYNTAX).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <div className="form-row">
-            <Field label="畫圖">
+          {canDraw && (
+            <Field label="UML 圖語法">
               <select
                 className="input"
-                value={String(options.diagrams ?? s.diagrams)}
-                onChange={(e) => setOptions((o) => ({ ...o, diagrams: e.target.value === 'true' }))}
+                value={options.uml_syntax ?? s.uml_syntax}
+                onChange={(e) => setOptions((o) => ({ ...o, uml_syntax: e.target.value as UmlSyntax }))}
               >
-                <option value="true">要</option>
-                <option value="false">不要（比較快）</option>
+                {Object.entries(UML_SYNTAX).map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v}
+                  </option>
+                ))}
               </select>
             </Field>
-            <Field label="最多幾張圖">
-              <input
-                className="input"
-                type="number"
-                min={0}
-                max={10}
-                value={options.max_diagrams ?? 4}
-                onChange={(e) => setOptions((o) => ({ ...o, max_diagrams: Number(e.target.value) }))}
-              />
-            </Field>
+          )}
+          <div className="form-row">
+            {canDraw && (
+              <>
+                <Field label="畫圖">
+                  <select
+                    className="input"
+                    value={String(options.diagrams ?? s.diagrams)}
+                    onChange={(e) => setOptions((o) => ({ ...o, diagrams: e.target.value === 'true' }))}
+                  >
+                    <option value="true">要</option>
+                    <option value="false">不要（比較快）</option>
+                  </select>
+                </Field>
+                <Field label="最多幾張圖">
+                  <input
+                    className="input"
+                    type="number"
+                    min={0}
+                    max={10}
+                    value={options.max_diagrams ?? 4}
+                    onChange={(e) => setOptions((o) => ({ ...o, max_diagrams: Number(e.target.value) }))}
+                  />
+                </Field>
+              </>
+            )}
             <Field label="審查後修訂幾輪">
               <input
                 className="input"

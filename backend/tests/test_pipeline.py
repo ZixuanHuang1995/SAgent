@@ -17,14 +17,14 @@ from sagent.services.diagrams import extract_diagrams, lint_mermaid
 from sagent.services.markdown_doc import parse_markdown
 
 
-def make_input(mode="draft", existing="", **opts) -> RunInput:
+def make_input(mode="draft", existing="", template="functional_spec", **opts) -> RunInput:
     return RunInput(
         mode=mode,
         project_name="訂單系統",
         project_description="線上訂單管理",
         phase_name="需求分析",
         spec_title="下單功能",
-        template=load_templates()["functional_spec"],
+        template=load_templates()[template],
         requirement="客戶可以在網站下單，訂單送出後要通知倉庫出貨。",
         existing_content=existing,
         options=PipelineOptions(**opts),
@@ -261,3 +261,43 @@ def test_revise_without_preamble_adds_nothing():
     existing = "## 1. 目的\n\n內容\n\n## 2. 流程\n\n步驟"
     result, _ = run(FakeLLM(), make_input(mode="revise", existing=existing, max_revisions=0))
     assert result.markdown.startswith("## 1. 目的")
+
+
+def test_uiux_advice_template():
+    tpl = load_templates()["uiux_advice"]
+    assert tpl.name == "UI/UX 設計建議"
+    assert tpl.advice and not tpl.allow_diagrams
+    assert tpl.role == "UI/UX 設計師"
+    assert all(not s.diagrams for s in tpl.sections)
+    assert tpl.to_dict()["advice"] is True and tpl.to_dict()["allow_diagrams"] is False
+    # 其他範本維持原本的設定
+    spec = load_templates()["functional_spec"]
+    assert not spec.advice and spec.allow_diagrams and spec.role == "系統分析師"
+
+
+def test_advice_doc_uses_advice_rules_and_draws_nothing():
+    llm = FakeLLM()
+    inp = make_input(template="uiux_advice", diagrams=True, max_diagrams=4)
+    result, _ = run(llm, inp)
+    assert inp.options.diagrams is False
+    assert extract_diagrams(result.markdown) == []
+    assert not any(":diagram:" in c["purpose"] for c in llm.calls)
+
+    planner_system = llm.calls[0]["messages"][0]["content"]
+    assert planner_system.startswith("你是資深 UI/UX 設計師")
+    assert "這次不畫圖" in planner_system
+    writer = [c["messages"][0]["content"] for c in llm.calls if ":section:" in c["purpose"]]
+    assert writer and all("這是建議文件" in s and "只根據需求內容撰寫" not in s for s in writer)
+    reviewer = [c["messages"][0]["content"] for c in llm.calls if c["purpose"].startswith("reviewer")]
+    assert reviewer and all("需求沒寫的建議是正常的" in s for s in reviewer)
+    # 目標寫了 UX 編號的章節才編號
+    assert "| UX-02 |" in result.markdown
+    assert "FR-" not in result.markdown
+
+
+def test_spec_doc_keeps_spec_rules():
+    llm = FakeLLM()
+    run(llm, make_input(max_revisions=0))
+    writer = [c["messages"][0]["content"] for c in llm.calls if ":section:" in c["purpose"]]
+    assert all(s.startswith("你是系統分析師") and "只根據需求內容撰寫" in s for s in writer)
+    assert not any("這是建議文件" in s for s in writer)

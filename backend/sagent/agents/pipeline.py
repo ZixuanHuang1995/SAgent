@@ -47,6 +47,8 @@ class SpecPipeline:
         self.reviewer = Reviewer(llm, emitter, self.stats)
 
     async def run(self, inp: RunInput) -> PipelineResult:
+        if not inp.template.allow_diagrams:
+            inp.options.diagrams = False  # 這種文件類型不畫圖（例如 UI/UX 設計建議）
         emit = self.emitter.emit
         await emit("phase", "planner", "Planner：規劃文件", {"phase": "plan"})
         plan = await self.planner.plan(inp)

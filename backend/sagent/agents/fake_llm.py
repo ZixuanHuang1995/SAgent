@@ -94,7 +94,7 @@ class FakeLLM:
             original = _between(full, "（原本內容開始）", "（原本內容結束）")
             instruction = _section(full, "修改說明").splitlines()[0]
             return f"{original}\n\n- 修訂：{instruction}"
-        return self._section_text(prompt)
+        return self._section_text(prompt, advice="這是建議文件" in full)
 
     def _plan(self, full: str) -> str:
         sections = []
@@ -145,16 +145,23 @@ class FakeLLM:
         }
         return json.dumps(plan, ensure_ascii=False)
 
-    def _section_text(self, prompt: str) -> str:
+    def _section_text(self, prompt: str, advice: bool = False) -> str:
         m = re.search(r"第 (\d+) 節：(.+)", prompt)
         heading = m.group(2).strip() if m else "本節"
         number = int(m.group(1)) if m else 1
         points = re.findall(r"^- (.+)$", _between(prompt, "要點：", "請輸出"), re.M)
         bullet = "\n".join(f"- {p}" for p in points[:4]) or "- 依需求內容撰寫"
+        # 目標寫了「編號 UX-01」這類格式就照著用；建議文件的其他章節不編號
+        prefix = re.search(r"編號 ([A-Z]{1,4})-01", _between(prompt, "目標：", "\n"))
+        if prefix:
+            item_id = f"{prefix.group(1)}-{number:02d}"
+        else:
+            item_id = "—" if advice else f"FR-{number:02d}"
+        text = f"建議{heading}保持簡單，常用操作放在明顯的位置" if advice else f"系統要提供{heading}相關功能"
         return (
             f"{heading}說明如下。\n\n{bullet}\n\n"
             f"| 編號 | 項目 | 說明 |\n|---|---|---|\n"
-            f"| FR-{number:02d} | {heading} | 系統要提供{heading}相關功能 |\n"
+            f"| {item_id} | {heading} | {text} |\n"
         )
 
     def _diagram(self, full: str) -> str:

@@ -109,7 +109,8 @@ async def create_run(body: RunCreate, state: AppState = Depends(get_state)):
                 "uml_syntax": o.uml_syntax or current.uml_syntax,
                 "max_revisions": current.max_revisions if o.max_revisions is None else o.max_revisions,
                 "temperature": current.temperature if o.temperature is None else o.temperature,
-                "diagrams": current.diagrams if o.diagrams is None else o.diagrams,
+                "diagrams": (current.diagrams if o.diagrams is None else o.diagrams)
+                and templates[doc_type].allow_diagrams,
                 "max_diagrams": 4 if o.max_diagrams is None else o.max_diagrams,
                 "ollama_url": current.ollama_url,
                 "num_ctx": current.num_ctx,

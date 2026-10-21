@@ -186,7 +186,8 @@ export function SettingsPage() {
         {templates.data?.map((t) => (
           <details key={t.key} className="template-item">
             <summary>
-              <strong>{t.name}</strong> <span className="muted small">{t.key}</span> {!t.builtin && <Badge tone="violet">自訂</Badge>}
+              <strong>{t.name}</strong> <span className="muted small">{t.key}</span> {!t.builtin && <Badge tone="violet">自訂</Badge>}{' '}
+              {t.advice && <Badge tone="blue">建議類</Badge>} {!t.allow_diagrams && <Badge>不畫圖</Badge>}
             </summary>
             <p className="muted small">{t.description}</p>
             <ol className="small">

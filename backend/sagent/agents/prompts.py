@@ -11,14 +11,40 @@ from __future__ import annotations
 import re
 
 from .diagram_kinds import KINDS, kinds_text
+from .doc_templates import DocTemplate
 from .types import Issue, Plan, RunInput, SectionPlan
 
-STYLE_RULES = """寫作規則：
-1. 使用繁體中文（台灣用語），技術名詞可以保留英文。
-2. 句子簡單直白，一句只講一件事，不要寫空泛的形容詞。
-3. 多用條列和 Markdown 表格。小標題用 ###。
-4. 只根據需求內容撰寫。需求沒提到的細節不要編造；必要的假設標註「（假設）」，不確定的地方標註「（待確認）」。
-5. 編號格式：功能需求 FR-01、業務規則 BR-01、非功能需求 NFR-01、驗收條件 AC-01。只有這一節的目標或要點寫明要編號時才新增編號；其他章節提到這些項目時，引用前面已經定義的編號，不要重新編號，也不要發明新的編號種類。"""
+_COMMON_RULES = [
+    "使用繁體中文（台灣用語），技術名詞可以保留英文。",
+    "句子簡單直白，一句只講一件事，不要寫空泛的形容詞。",
+    "多用條列和 Markdown 表格。小標題用 ###。",
+]
+_SPEC_RULES = [
+    "只根據需求內容撰寫。需求沒提到的細節不要編造；必要的假設標註「（假設）」，不確定的地方標註「（待確認）」。",
+    "編號格式：功能需求 FR-01、業務規則 BR-01、非功能需求 NFR-01、驗收條件 AC-01。只有這一節的目標或要點寫明要編號時才新增編號；其他章節提到這些項目時，引用前面已經定義的編號，不要重新編號，也不要發明新的編號種類。",
+]
+# 建議類文件（範本 advice: true）：可以提出需求沒寫的做法，但需求沒有的事實不能編造
+_ADVICE_RULES = [
+    "這是建議文件，可以提出需求沒有寫的做法。每條建議要具體，看了就知道怎麼做，並寫出理由：對應哪個需求、哪類使用者或哪個常見問題。",
+    "用「建議…」的寫法，不要寫成「系統必須…」。",
+    "需求沒提到的事實（數字、既有系統、使用者人數、調查結果）不要編造；必要的假設標註「（假設）」，不確定的地方標註「（待確認）」。",
+    "只有這一節的目標或要點寫明要編號時才新增編號，格式照目標寫的（例如 UX-01）；其他章節提到時引用前面已經定義的編號，不要重新編號。",
+]
+
+
+def _rules(template: DocTemplate, *extra: str) -> str:
+    rules = [*_COMMON_RULES, *(_ADVICE_RULES if template.advice else _SPEC_RULES), *extra]
+    return "寫作規則：\n" + "\n".join(f"{i}. {r}" for i, r in enumerate(rules, start=1))
+
+
+def _doc_noun(template: DocTemplate) -> str:
+    return f"「{template.name}」文件" if template.advice else "系統分析文件"
+
+
+def _with_role(prefix: str, template: DocTemplate) -> str:
+    """「資深」+「系統分析師」不用空格，「資深」+「UI/UX 設計師」中間加空格。"""
+    role = template.role
+    return f"{prefix} {role}" if role[:1].isascii() else f"{prefix}{role}"
 
 
 def _doc_info(inp: RunInput) -> str:
@@ -115,7 +141,13 @@ def planner_messages(inp: RunInput) -> list[dict[str, str]]:
         if opts.diagrams and opts.max_diagrams > 0
         else "4. 這次不畫圖，每個章節的 diagrams 都給空陣列。"
     )
-    system = f"""你是資深系統分析師，現在要「規劃」一份系統分析文件的大綱。你只負責規劃，不用寫內文。
+    tpl = inp.template
+    advice_rule = (
+        "\n8. 這是建議文件：key_points 寫這一節要給的具體建議方向，要跟需求裡的使用者、工作或資料有關。"
+        if tpl.advice
+        else ""
+    )
+    system = f"""你是{_with_role("資深", tpl)}，現在要「規劃」一份{_doc_noun(tpl)}的大綱。你只負責規劃，不用寫內文。
 
 規劃規則：
 1. 參考「建議章節」，依照需求內容調整：跟需求無關的章節可以刪除，缺少的可以新增。章節數量 4 到 {opts.max_sections} 個。
@@ -124,7 +156,7 @@ def planner_messages(inp: RunInput) -> list[dict[str, str]]:
 {diagram_rule}
 5. 需求中不清楚、缺少或互相矛盾的地方，寫進 open_questions，不要自己猜。
 6. summary 用一兩句話說明這份文件的內容。
-7. 使用繁體中文。只輸出 JSON，不要縮排和多餘的空白。"""
+7. 使用繁體中文。只輸出 JSON，不要縮排和多餘的空白。{advice_rule}"""
 
     suggested = []
     for sec in inp.template.sections:
@@ -157,7 +189,7 @@ def revise_planner_messages(inp: RunInput, existing: list[tuple[str, str, str]])
         if opts.diagrams and opts.max_diagrams > 0
         else "這次不畫圖，diagrams 都給空陣列。"
     )
-    system = f"""你是資深系統分析師，現在要「規劃如何修訂」一份既有的系統分析文件。你只負責規劃，不用寫內文。
+    system = f"""你是{_with_role("資深", inp.template)}，現在要「規劃如何修訂」一份既有的{_doc_noun(inp.template)}。你只負責規劃，不用寫內文。
 
 規劃規則：
 1. 看「修訂需求」，找出哪些既有章節要修改、哪些要刪除、需不需要新增章節。
@@ -187,11 +219,15 @@ def revise_planner_messages(inp: RunInput, existing: list[tuple[str, str, str]])
 # Writer
 # ---------------------------------------------------------------------------
 
-WRITER_SYSTEM = f"""你是系統分析師，負責撰寫系統分析文件中的「一個章節」。
+def writer_system(template: DocTemplate) -> str:
+    rules = _rules(
+        template,
+        "只寫指定的這一節。不要寫章節標題，不要寫其他章節的內容，不要寫開場白或結語。",
+        "不要畫圖，不要輸出 ```mermaid 或 ```plantuml，圖會由另一個步驟產生。",
+    )
+    return f"""{_with_role("你是", template)}，負責撰寫{_doc_noun(template)}中的「一個章節」。
 
-{STYLE_RULES}
-6. 只寫指定的這一節。不要寫章節標題，不要寫其他章節的內容，不要寫開場白或結語。
-7. 不要畫圖，不要輸出 ```mermaid 或 ```plantuml，圖會由另一個步驟產生。
+{rules}
 
 直接輸出這一節的 Markdown 內文。"""
 
@@ -234,15 +270,19 @@ def section_messages(
 {points}{extra}
 
 請輸出第 {number} 節「{sec.heading}」的內文。"""
-    return [{"role": "system", "content": WRITER_SYSTEM}, {"role": "user", "content": user}]
+    return [{"role": "system", "content": writer_system(inp.template)}, {"role": "user", "content": user}]
 
 
-UPDATE_SYSTEM = f"""你是系統分析師，負責依照修訂說明修改系統分析文件中的「一個章節」。
+def update_system(template: DocTemplate) -> str:
+    rules = _rules(
+        template,
+        "只輸出這一節修改後的完整內文。不要寫章節標題，不要寫其他章節，不要說明你改了什麼。",
+        "沒有要改的部分照原樣保留。",
+        "原本的圖（```mermaid 或 ```plantuml 區塊）要保留；修訂說明要求改圖時才修改圖的內容，並維持原本的語法。",
+    )
+    return f"""{_with_role("你是", template)}，負責依照修訂說明修改{_doc_noun(template)}中的「一個章節」。
 
-{STYLE_RULES}
-6. 只輸出這一節修改後的完整內文。不要寫章節標題，不要寫其他章節，不要說明你改了什麼。
-7. 沒有要改的部分照原樣保留。
-8. 原本的圖（```mermaid 或 ```plantuml 區塊）要保留；修訂說明要求改圖時才修改圖的內容，並維持原本的語法。"""
+{rules}"""
 
 
 def update_section_messages(inp: RunInput, plan: Plan, sec: SectionPlan) -> list[dict[str, str]]:
@@ -264,15 +304,19 @@ def update_section_messages(inp: RunInput, plan: Plan, sec: SectionPlan) -> list
 {sec.instruction}
 
 請輸出修改後「{sec.heading}」這一節的完整內文。"""
-    return [{"role": "system", "content": UPDATE_SYSTEM}, {"role": "user", "content": user}]
+    return [{"role": "system", "content": update_system(inp.template)}, {"role": "user", "content": user}]
 
 
-REVISE_SYSTEM = f"""你是系統分析師，負責依照審查意見修改系統分析文件中的「一個章節」。
+def revise_system(template: DocTemplate) -> str:
+    rules = _rules(
+        template,
+        "只輸出這一節修改後的完整內文。不要寫章節標題，不要寫其他章節，不要說明你改了什麼。",
+        "內文中的 [[圖1]]、[[圖2]] 是圖的位置標記，一定要原樣保留在原本的位置。",
+        "不要輸出 ```mermaid 或 ```plantuml。",
+    )
+    return f"""{_with_role("你是", template)}，負責依照審查意見修改{_doc_noun(template)}中的「一個章節」。
 
-{STYLE_RULES}
-6. 只輸出這一節修改後的完整內文。不要寫章節標題，不要寫其他章節，不要說明你改了什麼。
-7. 內文中的 [[圖1]]、[[圖2]] 是圖的位置標記，一定要原樣保留在原本的位置。
-8. 不要輸出 ```mermaid 或 ```plantuml。"""
+{rules}"""
 
 
 def revise_section_messages(
@@ -294,7 +338,7 @@ def revise_section_messages(
 {comments}
 
 請依照審查意見修改「{sec.heading}」，輸出修改後的完整內文。"""
-    return [{"role": "system", "content": REVISE_SYSTEM}, {"role": "user", "content": user}]
+    return [{"role": "system", "content": revise_system(inp.template)}, {"role": "user", "content": user}]
 
 
 DIAGRAM_SYSTEM = """你負責畫系統分析文件裡的圖。
@@ -396,6 +440,30 @@ REVIEWER_SYSTEM = """你是嚴格但務實的系統分析文件審查員。請�
 9. 使用繁體中文。只輸出 JSON，不要縮排和多餘的空白。"""
 
 
+def advice_reviewer_system(template: DocTemplate) -> str:
+    """建議類文件的審查：需求沒寫的建議是正常的，要看的是建議具不具體、有沒有理由、有沒有編造事實。"""
+    return f"""你是嚴格但務實的審查員，{_with_role("熟悉", template)}的工作。這是一份建議文件，請對照「需求內容」和「文件大綱」審查「文件草稿」。
+
+檢查重點：
+1. 需求裡的每一項重點，文件有沒有給出對應的建議。漏掉的也當成問題，section_id 寫應該補在哪一節。
+2. 建議有沒有跟需求矛盾。
+3. 有沒有編造需求沒提到的事實（數字、既有系統、使用者人數、調查結果），又沒有標註（假設）。需求沒寫的建議是正常的，不算編造。
+4. 每條建議是否具體、有寫理由。空泛的建議（例如「介面要友善」）算問題。
+5. 每一節有沒有達成大綱寫的目標。
+6. 名詞、編號、角色名稱前後是否一致。
+
+規則：
+1. 只提出會影響建議品質的問題，不要挑剔用字和文筆。最多列 6 個最重要的問題。
+2. 每個問題寫 section_id（例如 S2）、severity、problem（問題是什麼）、suggestion（具體怎麼改）。
+3. severity：high 是跟需求矛盾、編造事實或漏掉重要需求；medium 是建議空泛、沒有理由或前後不一致；low 是小建議。
+4. 沒有明顯問題時 issues 給空陣列，不要硬找問題。
+5. 不要因為建議超出需求就要求刪除。需求沒寫的事實或數字，不要要求文件加入。
+6. 需求內容裡的條列編號（1、2、3…）只是順序，跟文件裡的編號無關，不要拿來對照。
+7. 同一個建議在不同章節出現（例如重點建議和後面的細節章節都提到）是正常的，不算重複。
+8. summary 用一兩句話總結文件品質；score 是 1 到 10 分。
+9. 使用繁體中文。只輸出 JSON，不要縮排和多餘的空白。"""
+
+
 def reviewer_messages(
     inp: RunInput, plan: Plan, draft_text: str, check_notes: list[str], partial: bool = False
 ) -> list[dict[str, str]]:
@@ -422,7 +490,8 @@ def reviewer_messages(
 {draft_text}
 
 請輸出審查結果 JSON。"""
-    return [{"role": "system", "content": REVIEWER_SYSTEM}, {"role": "user", "content": user}]
+    system = advice_reviewer_system(inp.template) if inp.template.advice else REVIEWER_SYSTEM
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
 def json_retry_message() -> dict[str, str]:

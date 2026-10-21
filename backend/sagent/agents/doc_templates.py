@@ -2,6 +2,11 @@
 
 內建範本在 sagent/doc_templates/*.yaml。
 使用者可以在 data/templates/ 放自己的 yaml，key 相同時會蓋過內建範本。
+
+範本的選用欄位：
+- role：撰寫這種文件的角色，會放進提示詞，預設「系統分析師」
+- advice：true 表示建議類文件（例如 UI/UX 設計建議），可以提出需求沒寫的做法，寫作和審查規則不同
+- allow_diagrams：false 表示這種文件不畫圖
 """
 
 from __future__ import annotations
@@ -31,6 +36,9 @@ class DocTemplate:
     sections: list[TemplateSection] = field(default_factory=list)
     order: int = 100
     builtin: bool = True
+    role: str = "系統分析師"
+    advice: bool = False
+    allow_diagrams: bool = True
 
     def skeleton(self, title: str) -> str:
         """手動建立 Spec 時用的空白骨架。"""
@@ -48,6 +56,8 @@ class DocTemplate:
             "name": self.name,
             "description": self.description,
             "builtin": self.builtin,
+            "advice": self.advice,
+            "allow_diagrams": self.allow_diagrams,
             "sections": [
                 {"heading": s.heading, "goal": s.goal, "diagrams": s.diagrams} for s in self.sections
             ],
@@ -74,6 +84,9 @@ def _parse(path: Path, builtin: bool) -> DocTemplate:
         sections=sections,
         order=int(data.get("order", 100)),
         builtin=builtin,
+        role=str(data.get("role") or "").strip() or "系統分析師",
+        advice=data.get("advice") is True,
+        allow_diagrams=data.get("allow_diagrams") is not False,
     )
 
 

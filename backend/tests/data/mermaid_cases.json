@@ -1,0 +1,445 @@
+{
+ "mermaid_version": "12.1.0",
+ "cases": {
+  "example_flowchart": {
+   "code": "flowchart TD\n    A([\"開始\"]) --> B[\"使用者輸入帳號密碼\"]\n    B --> C{\"帳號密碼正確？\"}\n    C -->|是| D[\"建立登入工作階段\"]\n    C -->|否| E[\"顯示錯誤訊息\"]\n    E --> B\n    D --> F([\"結束\"])",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "example_sequence": {
+   "code": "sequenceDiagram\n    actor U as 使用者\n    participant W as 網頁前端\n    participant S as 後端服務\n    participant D as 資料庫\n    U->>W: 輸入帳號密碼\n    W->>S: POST /api/login\n    S->>D: 查詢使用者資料\n    D-->>S: 回傳使用者資料\n    alt 驗證成功\n        S-->>W: 回傳 token\n        W-->>U: 進入首頁\n    else 驗證失敗\n        S-->>W: 401 錯誤\n        W-->>U: 顯示錯誤訊息\n    end",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "example_class": {
+   "code": "classDiagram\n    class Customer {\n        +String customerId\n        +String name\n    }\n    class Order {\n        +String orderId\n        +Date orderDate\n        +String status\n        +submit()\n        +cancel()\n    }\n    class OrderItem {\n        +String productId\n        +int quantity\n    }\n    Customer \"1\" --> \"*\" Order : 下訂\n    Order \"1\" *-- \"1..*\" OrderItem : 包含",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "example_state": {
+   "code": "stateDiagram-v2\n    state \"草稿\" as Draft\n    state \"審核中\" as Submitted\n    state \"已核准\" as Approved\n    state \"已退回\" as Rejected\n    [*] --> Draft\n    Draft --> Submitted : 送出\n    Submitted --> Approved : 核准\n    Submitted --> Rejected : 退回\n    Rejected --> Draft : 修改後重送\n    Approved --> [*]",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "example_er": {
+   "code": "erDiagram\n    CUSTOMER ||--o{ ORDERS : \"下訂\"\n    ORDERS ||--|{ ORDER_ITEM : \"包含\"\n    PRODUCT ||--o{ ORDER_ITEM : \"被訂購\"\n    CUSTOMER {\n        string customer_id PK \"客戶編號\"\n        string name \"客戶名稱\"\n        string email \"電子郵件\"\n    }\n    ORDERS {\n        string order_id PK \"訂單編號\"\n        string customer_id FK \"客戶編號\"\n        date order_date \"訂單日期\"\n        string status \"訂單狀態\"\n    }\n    ORDER_ITEM {\n        string order_id FK \"訂單編號\"\n        string product_id FK \"商品編號\"\n        int quantity \"數量\"\n    }\n    PRODUCT {\n        string product_id PK \"商品編號\"\n        string name \"商品名稱\"\n        decimal price \"單價\"\n    }",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "example_usecase": {
+   "code": "usecase-beta\n    direction LR\n    actor U1(\"一般使用者\")\n    actor U2(\"管理員\")\n    systemBoundary SYS(\"訂單系統\")\n        UC1(\"查詢訂單\")\n        UC2(\"建立訂單\")\n        UC3(\"審核訂單\")\n    end\n    U1 --> UC1\n    U1 --> UC2\n    U2 --> UC3\n    UC2 ..>:include UC1",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "example_component": {
+   "code": "flowchart LR\n    subgraph FE[\"前端\"]\n        WEB[\"Web 介面\"]\n    end\n    subgraph BE[\"後端服務\"]\n        API[\"API 閘道\"]\n        SVC[\"訂單服務\"]\n    end\n    DB[(\"訂單資料庫\")]\n    EXT[\"外部金流系統\"]\n    WEB -->|HTTPS| API\n    API --> SVC\n    SVC --> DB\n    SVC -->|REST| EXT",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "example_deployment": {
+   "code": "flowchart TB\n    USER((\"使用者\"))\n    subgraph DMZ[\"DMZ 區\"]\n        LB[\"負載平衡器\"]\n    end\n    subgraph APP[\"應用程式區\"]\n        AP1[\"AP 主機 1\"]\n        AP2[\"AP 主機 2\"]\n    end\n    subgraph DATA[\"資料區\"]\n        DB[(\"資料庫主機\")]\n    end\n    USER -->|HTTPS 443| LB\n    LB --> AP1\n    LB --> AP2\n    AP1 --> DB\n    AP2 --> DB",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "example_gantt": {
+   "code": "gantt\n    title 專案時程\n    dateFormat YYYY-MM-DD\n    section 需求\n    需求訪談 :a1, 2026-01-05, 10d\n    需求確認 :a2, after a1, 5d\n    section 開發\n    系統開發 :b1, after a2, 30d\n    section 測試\n    整合測試 :c1, after b1, 10d",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "flow_cn_ids": {
+   "code": "flowchart TD\n    使用者 --> 系統\n    系統 --> 資料庫",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "flow_node_paren": {
+   "code": "flowchart TD\n    A[使用者 (管理員)] --> B",
+   "valid": false,
+   "valid_after_fix": true
+  },
+  "flow_edge_paren": {
+   "code": "flowchart TD\n    A -->|送出(表單)| B",
+   "valid": false,
+   "valid_after_fix": true
+  },
+  "flow_edge_paren_quoted": {
+   "code": "flowchart TD\n    A -->|\"送出(表單)\"| B",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "flow_dash_text": {
+   "code": "flowchart TD\n    A -- 送出 --> B",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "flow_dash_text_paren": {
+   "code": "flowchart TD\n    A -- 送出(表單) --> B",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "flow_end_node": {
+   "code": "flowchart TD\n    A --> end",
+   "valid": false,
+   "valid_after_fix": false
+  },
+  "flow_end_upper": {
+   "code": "flowchart TD\n    A --> End",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "flow_question": {
+   "code": "flowchart TD\n    B{是否通過?} --> C[完成]",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "flow_cn_colon": {
+   "code": "flowchart TD\n    A[步驟：輸入] --> B[結果；完成]",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "flow_quote_entity": {
+   "code": "flowchart TD\n    A[\"他說 #quot;好#quot;\"] --> B",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "flow_semicolon_end": {
+   "code": "graph TD;\n    A-->B;",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "flow_subgraph_cn": {
+   "code": "flowchart TD\n    subgraph 後台系統\n    A --> B\n    end",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "flow_subgraph_paren": {
+   "code": "flowchart TD\n    subgraph G[群組 (後台)]\n    A --> B\n    end",
+   "valid": false,
+   "valid_after_fix": true
+  },
+  "flow_slash_label": {
+   "code": "flowchart TD\n    A[/api/login] --> B",
+   "valid": false,
+   "valid_after_fix": true
+  },
+  "flow_parallelogram": {
+   "code": "flowchart TD\n    A[/輸入資料/] --> B",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "flow_trapezoid": {
+   "code": "flowchart TD\n    A[/輸入資料\\] --> B",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "flow_amp": {
+   "code": "flowchart TD\n    A[查詢 & 匯出] --> B",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "flow_lt": {
+   "code": "flowchart TD\n    A[數量 < 10] --> B",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "lbl_semicolon": {
+   "code": "flowchart TD\n    A[a;b] --> B",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "lbl_hash": {
+   "code": "flowchart TD\n    A[a#b] --> B",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "lbl_pipe": {
+   "code": "flowchart TD\n    A[a|b] --> B",
+   "valid": false,
+   "valid_after_fix": true
+  },
+  "lbl_dquote": {
+   "code": "flowchart TD\n    A[a\"b] --> B",
+   "valid": false,
+   "valid_after_fix": true
+  },
+  "lbl_brace": {
+   "code": "flowchart TD\n    A[a{b}] --> B",
+   "valid": false,
+   "valid_after_fix": true
+  },
+  "lbl_bracket": {
+   "code": "flowchart TD\n    A[a[b]] --> B",
+   "valid": false,
+   "valid_after_fix": true
+  },
+  "lbl_url": {
+   "code": "flowchart TD\n    A[http://x.com/a] --> B",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "lbl_at": {
+   "code": "flowchart TD\n    A[a@b.com] --> B",
+   "valid": false,
+   "valid_after_fix": true
+  },
+  "lbl_rhombus_paren": {
+   "code": "flowchart TD\n    A{a (b)} --> B",
+   "valid": false,
+   "valid_after_fix": true
+  },
+  "lbl_round_bracket": {
+   "code": "flowchart TD\n    A(a [b]) --> B",
+   "valid": false,
+   "valid_after_fix": true
+  },
+  "lbl_stadium_paren": {
+   "code": "flowchart TD\n    A([開始 (早上)]) --> B",
+   "valid": false,
+   "valid_after_fix": true
+  },
+  "lbl_db_paren": {
+   "code": "flowchart TD\n    A[(資料庫 (主))] --> B",
+   "valid": false,
+   "valid_after_fix": true
+  },
+  "flow_multi_nodes": {
+   "code": "flowchart TD\n    A[甲 (1)] --> B[乙 (2)] --> C{丙?}",
+   "valid": false,
+   "valid_after_fix": true
+  },
+  "flow_amp_nodes": {
+   "code": "flowchart TD\n    A & B --> C[結果 (x)]",
+   "valid": false,
+   "valid_after_fix": true
+  },
+  "flow_classdef": {
+   "code": "flowchart TD\n    A --> B\n    classDef red fill:#f00\n    class A red",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "flow_style_line": {
+   "code": "flowchart TD\n    A --> B\n    style A fill:#f9f,stroke:#333",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "state_cn": {
+   "code": "stateDiagram-v2\n    [*] --> 草稿\n    草稿 --> 審核中 : 送出\n    審核中 --> [*]",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "state_composite": {
+   "code": "stateDiagram-v2\n    state 審核 {\n        [*] --> 主管\n        主管 --> 經理\n    }",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "state_unbalanced": {
+   "code": "stateDiagram-v2\n    state 審核 {\n        [*] --> 主管",
+   "valid": false,
+   "valid_after_fix": false
+  },
+  "class_cn": {
+   "code": "classDiagram\n    class 訂單 {\n        +String 編號\n        +送出()\n    }",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "class_member_colon": {
+   "code": "classDiagram\n    class Order\n    Order : +String id",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "seq_cn": {
+   "code": "sequenceDiagram\n    participant 使用者\n    participant 系統\n    使用者->>系統: 登入",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "seq_no_colon": {
+   "code": "sequenceDiagram\n    A->>B 沒冒號",
+   "valid": false,
+   "valid_after_fix": false
+  },
+  "seq_semicolon_msg": {
+   "code": "sequenceDiagram\n    A->>B: 呼叫; 再呼叫",
+   "valid": false,
+   "valid_after_fix": true
+  },
+  "seq_hash_msg": {
+   "code": "sequenceDiagram\n    A->>B: 編號 #1",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "seq_loop_noend": {
+   "code": "sequenceDiagram\n    loop 重試\n    A->>B: hi",
+   "valid": false,
+   "valid_after_fix": false
+  },
+  "seq_Note": {
+   "code": "sequenceDiagram\n    A->>B: hi\n    Note over A,B: 說明",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "seq_rect": {
+   "code": "sequenceDiagram\n    rect rgb(200, 220, 255)\n    A->>B: x\n    end",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "seq_activation": {
+   "code": "sequenceDiagram\n    A->>+B: 呼叫\n    B-->>-A: 回應",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "seq_paren_alias": {
+   "code": "sequenceDiagram\n    participant A as 使用者 (前台)\n    A->>A: x",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "er_cn_entity": {
+   "code": "erDiagram\n    客戶 ||--o{ 訂單 : \"下訂\"\n    客戶 {\n        string 客戶編號 PK \"說明\"\n    }",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "er_label_noquote": {
+   "code": "erDiagram\n    A ||--o{ B : 下訂",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "er_type_with_len": {
+   "code": "erDiagram\n    A {\n        varchar(20) name \"名稱\"\n    }",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "er_attr_cn_type": {
+   "code": "erDiagram\n    A {\n        字串 name \"名稱\"\n    }",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "er_attr_no_type": {
+   "code": "erDiagram\n    A {\n        name \"說明\"\n    }",
+   "valid": false,
+   "valid_after_fix": false
+  },
+  "er_attr_three_words": {
+   "code": "erDiagram\n    A {\n        string 客戶 名稱\n    }",
+   "valid": false,
+   "valid_after_fix": false
+  },
+  "er_attr_comment_first": {
+   "code": "erDiagram\n    A {\n        string name \"說明\" PK\n    }",
+   "valid": false,
+   "valid_after_fix": false
+  },
+  "er_attr_pk_fk": {
+   "code": "erDiagram\n    A {\n        string name PK, FK \"說明\"\n    }",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "er_rel_no_label": {
+   "code": "erDiagram\n    A ||--|| B",
+   "valid": false,
+   "valid_after_fix": false
+  },
+  "er_rel_words": {
+   "code": "erDiagram\n    A one to many B : has",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "er_one_word": {
+   "code": "erDiagram\n    CUSTOMER",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "uc_ok_include": {
+   "code": "usecase-beta\n    direction LR\n    actor U1(\"一般使用者\")\n    systemBoundary SYS(\"訂單系統\")\n        UC1(\"查詢訂單\")\n        UC2(\"建立訂單\")\n    end\n    U1 --> UC1\n    UC2 ..>:include UC1",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "uc_ok_extend_space": {
+   "code": "usecase-beta\n    direction LR\n    actor U1(\"一般使用者\")\n    systemBoundary SYS(\"訂單系統\")\n        UC1(\"查詢訂單\")\n        UC2(\"建立訂單\")\n    end\n    U1 --> UC1\n    UC2 ..> : extend UC1",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "uc_ok_labeled": {
+   "code": "usecase-beta\n    direction LR\n    actor U1(\"一般使用者\")\n    systemBoundary SYS(\"訂單系統\")\n        UC1(\"查詢訂單\")\n        UC2(\"建立訂單\")\n    end\n    U1 -- \"使用\" --> UC1",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "uc_ok_note": {
+   "code": "usecase-beta\n    direction LR\n    actor U1(\"一般使用者\")\n    systemBoundary SYS(\"訂單系統\")\n        UC1(\"查詢訂單\")\n        UC2(\"建立訂單\")\n    end\n    U1 --> UC1\n    note for UC1 \"只能查自己的\"",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "uc_ok_general": {
+   "code": "usecase-beta\n    actor U1(\"員工\")\n    actor U2(\"主管\")\n    U2 --|> U1",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "uc_ok_quoted_actor": {
+   "code": "usecase-beta\n    actor \"一般使用者\"\n    \"一般使用者\" --> UC1(\"查詢訂單\")",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "uc_ok_boundary_plain": {
+   "code": "usecase-beta\n    actor U1\n    systemBoundary SYS\n        UC1(\"查詢\")\n    end\n    U1 --> UC1",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "uc_bad_cn_actor": {
+   "code": "usecase-beta\n    actor 使用者\n    使用者 --> UC1(\"查詢\")",
+   "valid": false,
+   "valid_after_fix": false
+  },
+  "uc_bad_include_puml": {
+   "code": "usecase-beta\n    direction LR\n    actor U1(\"一般使用者\")\n    systemBoundary SYS(\"訂單系統\")\n        UC1(\"查詢訂單\")\n        UC2(\"建立訂單\")\n    end\n    UC2 ..> UC1 : <<include>>",
+   "valid": false,
+   "valid_after_fix": false
+  },
+  "uc_bad_paren_uc": {
+   "code": "usecase-beta\n    actor U1\n    U1 --> (查詢訂單)",
+   "valid": false,
+   "valid_after_fix": false
+  },
+  "uc_bad_puml_style": {
+   "code": "usecase-beta\n    actor \"使用者\" as U1\n    usecase \"查詢\" as UC1\n    U1 --> UC1",
+   "valid": false,
+   "valid_after_fix": false
+  },
+  "uc_bad_no_end": {
+   "code": "usecase-beta\n    actor U1\n    systemBoundary SYS(\"系統\")\n        UC1(\"查詢\")\n    U1 --> UC1",
+   "valid": false,
+   "valid_after_fix": false
+  },
+  "uc_bad_bracket_label": {
+   "code": "usecase-beta\n    actor U1[\"使用者\"]",
+   "valid": false,
+   "valid_after_fix": false
+  },
+  "uc_bad_edge_colon": {
+   "code": "usecase-beta\n    direction LR\n    actor U1(\"一般使用者\")\n    systemBoundary SYS(\"訂單系統\")\n        UC1(\"查詢訂單\")\n        UC2(\"建立訂單\")\n    end\n    U1 --> UC1 : 使用",
+   "valid": false,
+   "valid_after_fix": false
+  },
+  "quoted_label_with_brackets": {
+   "code": "flowchart TD\n    A[\"輸入姓名 [必填] 與電話\"] --> B",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "quoted_round_with_parens": {
+   "code": "flowchart TD\n    B(\"執行 save() 存檔\") --> C",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "quoted_rhombus_with_braces": {
+   "code": "flowchart TD\n    C{\"金額 {含稅} 超過上限？\"} --> D",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "quoted_edge_with_pipe_text": {
+   "code": "flowchart TD\n    A -->|\"是 (Y)\"| B[\"完成 [OK]\"]",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "unquoted_and_quoted_mixed": {
+   "code": "flowchart TD\n    A[待處理 (新)] --> B[\"已處理 [舊]\"]",
+   "valid": false,
+   "valid_after_fix": true
+  }
+ }
+}

@@ -1,6 +1,6 @@
 # 資料（資料庫、自訂範本）
-data/
-data-demo/
+/data/
+/data-demo/
 
 # Python
 backend/.venv/
