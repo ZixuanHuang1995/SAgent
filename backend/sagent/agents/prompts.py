@@ -430,83 +430,72 @@ REVIEW_SCHEMA = {
             },
             "maxItems": 8,
         },
+        "review_points": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "section_id": {"type": "string"},
+                    "item": {"type": "string"},
+                    "reason": {"type": "string"},
+                },
+                "required": ["section_id", "item", "reason"],
+            },
+            "maxItems": 10,
+        },
         "summary": {"type": "string"},
-        "score": {"type": "integer", "minimum": 1, "maximum": 10},
     },
-    "required": ["issues", "summary", "score"],
+    "required": ["issues", "review_points", "summary"],
 }
 
-REVIEWER_SYSTEM = """你是嚴格但務實的系統分析文件審查員。請對照「需求內容」和「文件大綱」審查「文件草稿」。
+# 三種文件的審查重點一樣（格式、邏輯錯誤，以及要人工覆核的地方），只差這一行說明
+_REVIEW_STYLE_NOTE = {
+    "spec": "這是規格文件：內容要根據需求。需求沒提到、文件卻寫得很具體的內容（數字、期限、規則、欄位），列為人工覆核。",
+    "advice": (
+        "這是建議文件：提出需求沒寫的建議是正常的，不算錯誤，也不用列人工覆核。"
+        "但建議裡用到需求沒提到的事實（數字、既有系統、使用者人數、調查結果），要列為人工覆核。"
+    ),
+    "idea": (
+        "這是構想文件：想法還沒確定，內容本來就不完整，不要要求補上細節。"
+        "寫成細節規格（欄位、API、FR 編號需求）算格式錯誤。「可能的做法」這類章節提出需求沒寫的做法是正常的，不算錯誤。"
+    ),
+}
 
-檢查重點：
-1. 需求裡的每一項重點，文件有沒有寫到。漏掉的也當成問題，section_id 寫應該補在哪一節。
-2. 文件有沒有跟需求矛盾，或寫了需求沒有、又沒有標註（假設）的內容。
-3. 每一節有沒有達成大綱寫的目標。
-4. 名詞、編號、角色名稱前後是否一致。
+
+def reviewer_system(template: DocTemplate) -> str:
+    """Reviewer 只做兩件事：找出格式、邏輯錯誤（交給 Writer 修），找出要人工覆核的地方（列給使用者）。
+
+    不評論寫得好不好、完不完整，也不打分數。
+    """
+    return f"""你是嚴格但務實的文件審查員。請對照「需求內容」審查「文件草稿」，只做下面兩件事。
+
+一、找出錯誤，寫在 issues。這些會交給撰寫者修正：
+1. 格式錯誤：表格欄位數不一致、編號重複或跳號、引用了沒有定義的編號、條列或標題格式混亂。
+2. 邏輯錯誤：同一件事在不同章節寫得不一樣（數字、期限、狀態、角色、流程）、跟需求矛盾、條件互相衝突、流程或狀態轉換有缺口（例如進得去出不來的狀態）。
+
+二、找出需要人工覆核的地方，寫在 review_points。這些只列給使用者確認，不會自動修改：
+3. 需求沒提到、文件卻寫得很具體的內容，可能是撰寫者自己補的。
+4. 需要業務單位或主管決定的事。
+已經標註（假設）、（待確認）的地方程式會自動列出，不用重複。
+
+{_REVIEW_STYLE_NOTE.get(template.style, _REVIEW_STYLE_NOTE["spec"])}
 
 規則：
-1. 只提出會影響文件正確性或完整性的問題，不要挑剔用字和文筆。最多列 6 個最重要的問題。
-2. 每個問題寫 section_id（例如 S2）、severity、problem（問題是什麼）、suggestion（具體怎麼改）。
-3. severity：high 是錯誤或漏掉重要需求；medium 是內容不完整或不一致；low 是小建議。
-4. 沒有明顯問題時 issues 給空陣列，不要硬找問題。
-5. 只根據「需求內容」判斷。需求沒寫的條件或數字，不要要求文件加入。
-6. 需求內容裡的條列編號（1、2、3…）只是順序，跟文件裡的 FR-01 等編號無關，不要拿來對照。
-7. 同一個需求在不同章節出現（例如功能需求和驗收條件都提到）是正常的，不算重複。
-8. summary 用一兩句話總結文件品質；score 是 1 到 10 分。
-9. 使用繁體中文。只輸出 JSON，不要縮排和多餘的空白。"""
-
-
-def advice_reviewer_system(template: DocTemplate) -> str:
-    """建議類文件的審查：需求沒寫的建議是正常的，要看的是建議具不具體、有沒有理由、有沒有編造事實。"""
-    return f"""你是嚴格但務實的審查員，{_with_role("熟悉", template)}的工作。這是一份建議文件，請對照「需求內容」和「文件大綱」審查「文件草稿」。
-
-檢查重點：
-1. 需求裡的每一項重點，文件有沒有給出對應的建議。漏掉的也當成問題，section_id 寫應該補在哪一節。
-2. 建議有沒有跟需求矛盾。
-3. 有沒有編造需求沒提到的事實（數字、既有系統、使用者人數、調查結果），又沒有標註（假設）。需求沒寫的建議是正常的，不算編造。
-4. 每條建議是否具體、有寫理由。空泛的建議（例如「介面要友善」）算問題。
-5. 每一節有沒有達成大綱寫的目標。
-6. 名詞、編號、角色名稱前後是否一致。
-
-規則：
-1. 只提出會影響建議品質的問題，不要挑剔用字和文筆。最多列 6 個最重要的問題。
-2. 每個問題寫 section_id（例如 S2）、severity、problem（問題是什麼）、suggestion（具體怎麼改）。
-3. severity：high 是跟需求矛盾、編造事實或漏掉重要需求；medium 是建議空泛、沒有理由或前後不一致；low 是小建議。
-4. 沒有明顯問題時 issues 給空陣列，不要硬找問題。
-5. 不要因為建議超出需求就要求刪除。需求沒寫的事實或數字，不要要求文件加入。
+1. 不要評論寫得好不好、完不完整，不要挑剔用字和文筆，也不要要求補上需求沒寫的內容。
+2. issues 最多 6 個，每個寫 section_id（例如 S2）、severity、problem（哪裡錯、為什麼錯）、suggestion（具體怎麼改）。
+3. severity：high 是邏輯錯誤或跟需求矛盾；medium 是格式錯誤；low 是不影響理解的小問題。
+4. review_points 最多 8 個，每個寫 section_id、item（要確認的內容，一句話）、reason（為什麼要人工確認）。
+5. 沒有問題時給空陣列，不要硬找。
 6. 需求內容裡的條列編號（1、2、3…）只是順序，跟文件裡的編號無關，不要拿來對照。
-7. 同一個建議在不同章節出現（例如重點建議和後面的細節章節都提到）是正常的，不算重複。
-8. summary 用一兩句話總結文件品質；score 是 1 到 10 分。
+7. 同一件事在不同章節出現（例如功能需求和驗收條件都提到）是正常的，只有寫得不一樣才算錯誤。
+8. summary 用一兩句話說明審查結果。
 9. 使用繁體中文。只輸出 JSON，不要縮排和多餘的空白。"""
-
-
-def idea_reviewer_system(template: DocTemplate) -> str:
-    """構想文件的審查：重點是問題講清楚、假設列出來、沒有編造，而且沒有寫成細節規格。"""
-    return f"""你是嚴格但務實的審查員，{_with_role("熟悉", template)}的工作。這是一份構想文件，想法還沒確定，請對照「需求內容」和「文件大綱」審查「文件草稿」。
-
-檢查重點：
-1. 要解決的問題、影響的對象有沒有講清楚。
-2. 需求裡的每一項重點，文件有沒有寫到。漏掉的也當成問題，section_id 寫應該補在哪一節。
-3. 有沒有編造需求沒提到的事實（數字、既有系統、使用者人數、調查結果），又沒有標註（假設）。
-4. 構想成立需要的假設、還不清楚的地方，有沒有列出來。
-5. 有沒有寫成細節規格（欄位、API、FR 編號需求）。構想文件不需要這些，寫了算問題。
-6. 目標寫明可以提出做法的章節（例如「可能的做法」）提出需求沒寫的做法是正常的，不算編造；但要寫出優缺點和理由。
-
-規則：
-1. 只提出會影響構想是否清楚、正確的問題，不要挑剔用字和文筆。最多列 6 個最重要的問題。
-2. 每個問題寫 section_id（例如 S2）、severity、problem（問題是什麼）、suggestion（具體怎麼改）。
-3. severity：high 是跟需求矛盾、編造事實或漏掉重要需求；medium 是問題沒講清楚、假設沒列出來或寫成細節規格；low 是小建議。
-4. 沒有明顯問題時 issues 給空陣列，不要硬找問題。
-5. 構想文件本來就比較短，不要要求補上需求沒寫的細節、條件或數字。
-6. 需求內容裡的條列編號（1、2、3…）只是順序，不要拿來對照。
-7. summary 用一兩句話總結文件品質；score 是 1 到 10 分。
-8. 使用繁體中文。只輸出 JSON，不要縮排和多餘的空白。"""
 
 
 def reviewer_messages(
     inp: RunInput, plan: Plan, draft_text: str, check_notes: list[str], partial: bool = False
 ) -> list[dict[str, str]]:
-    outline = "\n".join(f"[{s.id}] {s.heading}：{s.goal}" for s in plan.sections)
+    outline = "\n".join(f"[{s.id}] {s.heading}" for s in plan.sections)
     checks = "\n".join(f"- {n}" for n in check_notes) if check_notes else "- 沒有發現格式問題"
     draft_title = (
         "## 修改過的章節\n（其他章節上一輪已經審查過，這次只審查下面這些章節，section_id 只能用這些章節的編號）"
@@ -519,23 +508,17 @@ def reviewer_messages(
 ## 需求內容
 {inp.requirement.strip()}
 
-## 文件大綱
+## 章節
 {outline}
 
-## 自動檢查結果
+## 程式檢查找到的格式問題（已經列入，不用重複）
 {checks}
 
 {draft_title}
 {draft_text}
 
 請輸出審查結果 JSON。"""
-    if inp.template.idea:
-        system = idea_reviewer_system(inp.template)
-    elif inp.template.advice:
-        system = advice_reviewer_system(inp.template)
-    else:
-        system = REVIEWER_SYSTEM
-    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+    return [{"role": "system", "content": reviewer_system(inp.template)}, {"role": "user", "content": user}]
 
 
 def json_retry_message() -> dict[str, str]:

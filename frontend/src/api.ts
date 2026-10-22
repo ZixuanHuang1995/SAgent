@@ -237,13 +237,25 @@ export interface ReviewIssue {
   diagram_index: number | null
 }
 
+/** 需要人工覆核的地方：只列給使用者確認，不會自動修改。source 是 check 表示文件標註了（假設）、（待確認） */
+export interface ReviewPoint {
+  section_id: string | null
+  item: string
+  reason: string
+  source: 'check' | 'llm'
+}
+
+/** 審查結果。issues 是格式、邏輯錯誤，會交給 Writer 修正 */
 export interface ReviewOut {
   round: number
-  score: number | null
+  /** 舊版審查才有（1～10 分），現在不打分數 */
+  score?: number | null
   summary: string
   verdict: 'pass' | 'revise'
   llm_ok: boolean
   issues: ReviewIssue[]
+  /** 舊版審查沒有這個欄位 */
+  review_points?: ReviewPoint[]
 }
 
 export interface RunEvent {

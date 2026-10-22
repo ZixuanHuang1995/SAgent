@@ -1,4 +1,8 @@
-"""Reviewer：先做程式檢查（章節是否空白、圖表語法），再請模型對照需求審查內容。"""
+"""Reviewer：找出格式和邏輯上的錯誤（交給 Writer 修正），以及需要人工覆核的地方（列給使用者）。
+
+不評論寫得好不好、完不完整，也不打分數。
+格式問題盡量用程式檢查（小模型數表格欄位、對編號都不可靠），模型只負責程式看不出來的邏輯問題。
+"""
 
 from __future__ import annotations
 
@@ -9,14 +13,76 @@ from ..services.diagrams import extract_diagrams, lint_mermaid, lint_plantuml
 from .base import AgentBase
 from .prompts import REVIEW_SCHEMA, reviewer_messages
 from .textutil import normalize_sid, text_length
-from .types import Draft, Issue, Plan, Review, RunInput
+from .types import Draft, Issue, Plan, Review, ReviewPoint, RunInput
 
 _PLACEHOLDER_RE = re.compile(r"\b(TODO|TBD|FIXME|Lorem ipsum)\b|（待補充）", re.I)
 _SEVERITIES = ("high", "medium", "low")
+_FENCE_RE = re.compile(r"```.*?```", re.S)
+_ID_RE = re.compile(r"\b([A-Z]{1,4})-(\d{2,3})\b")
+# 一行的開頭（條列、標題、粗體之後）或表格第一欄出現的編號，算是「定義」
+_ID_DEF_RE = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)]\s+|#+\s+|\|\s*)?(?:\*\*|`)?([A-Z]{1,4}-\d{2,3})\b", re.M)
+_MARK_RE = re.compile(r"[（(](假設|待確認)[）)]")
+MAX_CHECK_POINTS = 20
+
+
+def _without_code(text: str) -> str:
+    return _FENCE_RE.sub("", text)
+
+
+def _cells(row: str) -> int:
+    row = row.strip().replace("\\|", "")
+    return len(row.strip("|").split("|"))
+
+
+def table_problems(body: str) -> list[str]:
+    """Markdown 表格：每一列的欄位數要跟標題列一樣。"""
+    problems: list[str] = []
+    lines = _without_code(body).splitlines()
+    i = 0
+    table_no = 0
+    while i < len(lines):
+        if lines[i].strip().startswith("|") and i + 1 < len(lines) and re.match(r"^\s*\|?\s*:?-{3,}", lines[i + 1]):
+            table_no += 1
+            header = _cells(lines[i])
+            bad = 0
+            j = i + 2
+            while j < len(lines) and lines[j].strip().startswith("|"):
+                if _cells(lines[j]) != header:
+                    bad += 1
+                j += 1
+            if bad:
+                problems.append(f"第 {table_no} 個表格有 {bad} 列的欄位數跟標題列（{header} 欄）不一樣")
+            i = j
+        else:
+            i += 1
+    return problems
+
+
+def undefined_ids(draft: Draft) -> dict[str, list[str]]:
+    """引用了整份文件都沒有定義的編號，回傳 {章節編號: [編號, …]}。
+
+    只看文件裡有定義過的編號種類（例如有定義 FR-01，才檢查 FR-07 有沒有定義），
+    避免把需求裡提到的外部編號當成錯誤。
+    """
+    defined: set[str] = set()
+    for sec in draft.sections:
+        defined.update(_ID_DEF_RE.findall(_without_code(sec.body)))
+    prefixes = {d.split("-")[0] for d in defined}
+    result: dict[str, list[str]] = {}
+    for sec in draft.sections:
+        missing = []
+        for prefix, number in _ID_RE.findall(_without_code(sec.body)):
+            item = f"{prefix}-{number}"
+            if prefix in prefixes and item not in defined and item not in missing:
+                missing.append(item)
+        if missing:
+            result[sec.id] = missing
+    return result
 
 
 def static_checks(plan: Plan, draft: Draft) -> list[Issue]:
     issues: list[Issue] = []
+    undefined = undefined_ids(draft)
     for sec in draft.sections:
         sec_plan = plan.section(sec.id)
         if sec_plan is not None and sec_plan.action == "keep":
@@ -36,6 +102,19 @@ def static_checks(plan: Plan, draft: Draft) -> list[Issue]:
                         diagram_index=idx,
                     )
                 )
+        for problem in table_problems(sec.body):
+            issues.append(Issue(sec.id, "medium", problem, "補齊或合併欄位，讓每一列的欄位數一致", source="check"))
+        if sec.id in undefined:
+            ids = "、".join(undefined[sec.id][:5])
+            issues.append(
+                Issue(
+                    sec.id,
+                    "medium",
+                    f"引用了文件裡沒有定義的編號：{ids}",
+                    "改成前面章節已經定義的編號，或刪除這個引用",
+                    source="check",
+                )
+            )
         if _PLACEHOLDER_RE.search(sec.body):
             issues.append(
                 Issue(
@@ -47,6 +126,35 @@ def static_checks(plan: Plan, draft: Draft) -> list[Issue]:
                 )
             )
     return issues
+
+
+def _plain(line: str) -> str:
+    """去掉 Markdown 記號，留下給人看的文字。"""
+    text = re.sub(r"^\s*(?:[-*+]\s+(?:\[[ x]\]\s+)?|\d+[.)]\s+|#+\s+|>\s*)", "", line)
+    text = text.replace("**", "").replace("`", "")
+    if text.strip().startswith("|"):
+        text = " / ".join(c.strip() for c in text.strip().strip("|").split("|") if c.strip())
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def marked_points(draft: Draft) -> list[ReviewPoint]:
+    """文件裡標註（假設）、（待確認）的地方，都要人工確認。"""
+    points: list[ReviewPoint] = []
+    seen: set[str] = set()
+    for sec in draft.sections:
+        for line in _without_code(sec.body).splitlines():
+            m = _MARK_RE.search(line)
+            if not m:
+                continue
+            text = _plain(line)
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            reason = "文件標註為假設，內容要確認是否正確" if m.group(1) == "假設" else "文件標註為待確認"
+            points.append(ReviewPoint(sec.id, text[:120] + ("…" if len(text) > 120 else ""), reason, "check"))
+            if len(points) >= MAX_CHECK_POINTS:
+                return points
+    return points
 
 
 def draft_for_review(plan: Plan, draft: Draft, only: set[str] | None = None) -> str:
@@ -88,6 +196,21 @@ def parse_llm_issues(data: dict[str, Any], plan: Plan) -> list[Issue]:
     return issues[:12]
 
 
+def parse_llm_points(data: dict[str, Any], plan: Plan) -> list[ReviewPoint]:
+    points: list[ReviewPoint] = []
+    seen: set[str] = set()
+    for raw in data.get("review_points") or []:
+        if not isinstance(raw, dict):
+            continue
+        item = str(raw.get("item", "")).strip()
+        if not item or item in seen:
+            continue
+        seen.add(item)
+        sid = normalize_sid(raw.get("section_id"), "S", len(plan.sections))
+        points.append(ReviewPoint(sid, item[:300], str(raw.get("reason", "")).strip()[:300], "llm"))
+    return points[:10]
+
+
 class Reviewer(AgentBase):
     role = "reviewer"
 
@@ -114,6 +237,7 @@ class Reviewer(AgentBase):
         )
         async with self.step(step, label) as info:
             checks = static_checks(plan, draft)
+            marked = marked_points(draft)
             notes = [f"[{i.section_id}] {i.problem}" for i in checks if i.severity != "low"]
             data = await self.chat_json(
                 step,
@@ -125,35 +249,34 @@ class Reviewer(AgentBase):
                 max_tokens=2000,
             )
             carried: list[Issue] = []
+            carried_points: list[ReviewPoint] = []
             if focus and previous is not None:
                 carried = [i for i in previous.issues if i.source == "llm" and i.section_id not in focus]
+                carried_points = [
+                    p for p in previous.review_points if p.source == "llm" and p.section_id not in focus
+                ]
             if data is None:
                 review = Review(
                     round=round_no,
-                    score=previous.score if previous else None,
-                    summary="審查模型沒有給出可用的結果，只列出程式檢查的問題。",
+                    summary="審查模型沒有給出可用的結果，只列出程式檢查的結果。",
                     issues=checks + carried,
+                    review_points=marked + carried_points,
                     llm_ok=False,
                 )
             else:
-                score = data.get("score")
-                try:
-                    score = max(1, min(10, int(score)))
-                except (TypeError, ValueError):
-                    score = previous.score if previous else None
                 new_issues = parse_llm_issues(data, plan)
+                new_points = parse_llm_points(data, plan)
                 if focus:
                     new_issues = [i for i in new_issues if i.section_id is None or i.section_id in focus]
+                    new_points = [p for p in new_points if p.section_id is None or p.section_id in focus]
                 review = Review(
                     round=round_no,
-                    score=score,
                     summary=str(data.get("summary", "")).strip()[:500],
                     issues=checks + new_issues + carried,
+                    review_points=marked + new_points + carried_points,
                 )
             info.output = review.to_dict()
-            high = sum(1 for i in review.issues if i.severity == "high")
-            medium = sum(1 for i in review.issues if i.severity == "medium")
-            score_text = f"{review.score} 分，" if review.score is not None else ""
-            verdict = "需要修訂" if review.needs_revision else "通過"
-            info.message = f"審查結果：{score_text}{verdict}（重要問題 {high} 個、一般問題 {medium} 個）"
+            errors = sum(1 for i in review.issues if i.severity in ("high", "medium"))
+            verdict = f"需要修訂（錯誤 {errors} 個）" if review.needs_revision else "沒有需要修正的錯誤"
+            info.message = f"審查結果：{verdict}，需要人工覆核 {len(review.review_points)} 項"
         return review

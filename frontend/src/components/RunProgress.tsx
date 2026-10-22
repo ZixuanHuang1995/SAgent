@@ -1,7 +1,7 @@
 // AI 工作的進度畫面：階段、每個步驟、即時輸出、大綱、審查結果
 
 import { useEffect, useRef, useState } from 'react'
-import type { PlanOut, ReviewIssue, ReviewOut, Run } from '../api'
+import type { PlanOut, ReviewIssue, ReviewOut, ReviewPoint, Run } from '../api'
 import { AGENT_NAME, formatDuration, RUN_STATUS } from '../format'
 import { assemblePreview, type RunStreamState, type StepState } from '../hooks/useRunStream'
 import { MarkdownView } from './MarkdownView'
@@ -188,38 +188,61 @@ export function ReviewView(props: {
   const headingOf = (id: string | null) => (id ? plan?.sections.find((s) => s.id === id)?.heading ?? id : null)
   const order = { high: 0, medium: 1, low: 2 }
   const issues = [...review.issues].sort((a, b) => order[a.severity] - order[b.severity])
-  const verdict = review.verdict === 'pass' ? '通過' : props.final ? '待人工確認' : '需要修訂'
+  const verdict = review.verdict === 'pass' ? '沒有錯誤' : props.final ? '錯誤待人工確認' : '需要修訂'
+  // 舊版的審查結果沒有 review_points
+  const points = review.review_points ?? []
+  const sectionLink = (id: string | null) => {
+    const heading = headingOf(id)
+    return heading && onJump ? (
+      <button className="link-btn small" title="跳到文件裡的這一節" onClick={() => onJump(heading)}>
+        {heading}
+      </button>
+    ) : (
+      <span className="muted small">{heading ?? '整份文件'}</span>
+    )
+  }
   return (
     <div className="review-view">
       <div className="review-head">
-        {review.score !== null && <span className="review-score">{review.score}<small>/10</small></span>}
+        {review.score != null && <span className="review-score">{review.score}<small>/10</small></span>}
         <Badge tone={review.verdict === 'pass' ? 'green' : 'amber'}>{verdict}</Badge>
+        {points.length > 0 && <Badge tone="blue">人工覆核 {points.length} 項</Badge>}
         {!review.llm_ok && <Badge tone="neutral">只有程式檢查</Badge>}
       </div>
       {review.summary && <p>{review.summary}</p>}
+      <div className="subhead">格式、邏輯錯誤</div>
       {issues.length === 0 ? (
-        <div className="muted">沒有發現問題。</div>
+        <div className="muted small">沒有發現格式或邏輯錯誤。</div>
       ) : (
         <ul className="issue-list">
-          {issues.map((i: ReviewIssue, k) => {
-            const heading = headingOf(i.section_id)
-            return (
+          {issues.map((i: ReviewIssue, k) => (
             <li key={k}>
-              <Badge tone={SEVERITY[i.severity].tone}>{SEVERITY[i.severity].text}</Badge>{' '}
-              {heading && onJump ? (
-                <button className="link-btn small" title="跳到文件裡的這一節" onClick={() => onJump(heading)}>
-                  {heading}
-                </button>
-              ) : (
-                <span className="muted small">{heading ?? '整份文件'}</span>
-              )}
+              <Badge tone={SEVERITY[i.severity].tone}>{SEVERITY[i.severity].text}</Badge> {sectionLink(i.section_id)}
               {i.source === 'check' && <span className="muted small">・程式檢查</span>}
               <div>{i.problem}</div>
               {i.suggestion && <div className="muted small">建議：{i.suggestion}</div>}
             </li>
-            )
-          })}
+          ))}
         </ul>
+      )}
+      {(points.length > 0 || review.review_points) && (
+        <>
+          <div className="subhead">需要人工覆核</div>
+          {points.length === 0 ? (
+            <div className="muted small">沒有需要特別確認的地方。</div>
+          ) : (
+            <ul className="issue-list">
+              {points.map((p: ReviewPoint, k) => (
+                <li key={k}>
+                  {sectionLink(p.section_id)}
+                  {p.source === 'check' && <span className="muted small">・文件標註</span>}
+                  <div>{p.item}</div>
+                  {p.reason && <div className="muted small">{p.reason}</div>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
     </div>
   )

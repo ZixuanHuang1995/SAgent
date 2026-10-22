@@ -5,6 +5,7 @@ from sagent.agents.doc_templates import load_templates
 from sagent.agents.fake_llm import FakeLLM
 from sagent.agents.pipeline import SpecPipeline
 from sagent.agents.planner import Planner
+from sagent.agents.reviewer import marked_points, static_checks, table_problems, undefined_ids
 from sagent.agents.textutil import (
     clean_section_body,
     diagrams_to_markers,
@@ -12,7 +13,7 @@ from sagent.agents.textutil import (
     markers_to_diagrams,
     parse_json_object,
 )
-from sagent.agents.types import PipelineOptions, RunInput
+from sagent.agents.types import Draft, PipelineOptions, Plan, RunInput, SectionDraft, SectionPlan
 from sagent.services.diagrams import extract_diagrams, lint_mermaid
 from sagent.services.markdown_doc import parse_markdown
 
@@ -213,6 +214,10 @@ def test_second_review_only_sends_revised_sections():
     assert "[S2] ## 2." in revised_part and "[S1] ## 1." not in revised_part
     # 第二輪通過；第一輪的問題已經修掉，不會被沿用
     assert result.reviews[1].issues == []
+    # 第一輪模型列的人工覆核（S1）沒有修改，第二輪沿用；修訂加上的（假設）由程式列出
+    points = result.reviews[1].review_points
+    assert any(p.source == "llm" and p.section_id == "S1" for p in points)
+    assert any(p.source == "check" and p.section_id == "S2" and "假設" in p.reason for p in points)
 
 
 def test_subheadings_start_at_level_three():
@@ -289,7 +294,7 @@ def test_advice_doc_uses_advice_rules_and_draws_nothing():
     writer = [c["messages"][0]["content"] for c in llm.calls if ":section:" in c["purpose"]]
     assert writer and all("這是建議文件" in s and "只根據需求內容撰寫" not in s for s in writer)
     reviewer = [c["messages"][0]["content"] for c in llm.calls if c["purpose"].startswith("reviewer")]
-    assert reviewer and all("需求沒寫的建議是正常的" in s for s in reviewer)
+    assert reviewer and all("這是建議文件" in s and "提出需求沒寫的建議是正常的" in s for s in reviewer)
     # 目標寫了 UX 編號的章節才編號
     assert "| UX-02 |" in result.markdown
     assert "FR-" not in result.markdown
@@ -332,8 +337,55 @@ def test_idea_doc_uses_idea_rules_and_one_diagram():
     writer = [c["messages"][0]["content"] for c in llm.calls if ":section:" in c["purpose"]]
     assert writer and all("這是構想文件" in s and "只根據需求內容撰寫" not in s for s in writer)
     reviewer = [c["messages"][0]["content"] for c in llm.calls if c["purpose"].startswith("reviewer")]
-    assert reviewer and all("這是一份構想文件" in s for s in reviewer)
+    assert reviewer and all("這是構想文件" in s and "不要要求補上細節" in s for s in reviewer)
     # 可能的做法這一節的目標允許提出建議
     user = next(c["messages"][1]["content"] for c in llm.calls if "第 4 節：可能的做法" in c["messages"][1]["content"])
     assert "可以提出需求沒寫的做法" in user
     assert "FR-" not in result.markdown
+
+
+def _draft(*bodies: str) -> tuple[Plan, Draft]:
+    secs = [SectionDraft(id=f"S{i}", heading=f"第{i}節", body=b) for i, b in enumerate(bodies, start=1)]
+    plan = Plan(title="t", summary="", sections=[SectionPlan(id=s.id, heading=s.heading, goal="") for s in secs])
+    return plan, Draft(sections=secs)
+
+
+def test_reviewer_checks_table_columns():
+    body = "\n".join(
+        [
+            "| 編號 | 說明 |",
+            "|---|---|",
+            "| FR-01 | 登入 |",
+            "| FR-02 | 登出 | 多一欄 |",
+            "",
+            "`a|b` 不算表格",
+        ]
+    )
+    assert table_problems(body) == ["第 1 個表格有 1 列的欄位數跟標題列（2 欄）不一樣"]
+    # 對齊記號、跳脫的 \| 都不算錯
+    assert table_problems("| a | b |\n|:--|--:|\n| 1 | 2 |\n| 3 \\| 4 | 5 |") == []
+
+
+def test_reviewer_checks_undefined_ids():
+    plan, draft = _draft(
+        "| 編號 | 說明 |\n|---|---|\n| FR-01 | 登入 |\n\n- **BR-01**：密碼錯三次鎖定",
+        "- AC-01：對應 FR-01、FR-07，參考 ISO-27001、UTF-8\n\n```mermaid\nflowchart LR\n  A[FR-09] --> B\n```",
+    )
+    # FR-07 沒有定義；圖裡的 FR-09 不算；AC-01 在條列開頭算定義
+    assert undefined_ids(draft) == {"S2": ["FR-07"]}
+    issues = static_checks(plan, draft)
+    assert [(i.section_id, i.severity) for i in issues] == [("S2", "medium")]
+    assert "FR-07" in issues[0].problem
+
+
+def test_reviewer_lists_marked_points():
+    plan, draft = _draft(
+        "- 緊急報修 30 分鐘內派工（假設）。\n- 一般報修當天派工。",
+        "| 項目 | 說明 |\n|---|---|\n| 保存期限 | 5 年（待確認） |\n\n- 緊急報修 30 分鐘內派工（假設）。",
+    )
+    points = marked_points(draft)
+    assert [(p.section_id, p.item, p.source) for p in points] == [
+        ("S1", "緊急報修 30 分鐘內派工（假設）。", "check"),
+        ("S2", "保存期限 / 5 年（待確認）", "check"),
+    ]
+    assert "假設" in points[0].reason and points[1].reason == "文件標註為待確認"

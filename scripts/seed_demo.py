@@ -242,7 +242,9 @@ class Seeder:
             result = self.wait(run["id"])
             if result["status"] == "succeeded":
                 review = (result.get("review") or {}).get("final") or {}
-                log(f"AI {label}「{spec['title']}」完成，審查 {review.get('score', '—')} 分")
+                errors = sum(1 for i in review.get("issues", []) if i.get("severity") in ("high", "medium"))
+                points = len(review.get("review_points", []))
+                log(f"AI {label}「{spec['title']}」完成，剩下錯誤 {errors} 個、需要人工覆核 {points} 項")
                 return self.refresh(spec)
             log(f"AI {label}「{spec['title']}」{result['status']}：{result.get('error') or ''}")
             if attempt < retries:

@@ -187,13 +187,15 @@ class FakeLLM:
                     {
                         "section_id": "S2",
                         "severity": "medium",
-                        "problem": "沒有說明發生例外時怎麼處理",
+                        "problem": "第 2 節沒有寫發生例外時的處理，跟其他章節的流程接不起來",
                         "suggestion": "補上例外情況和處理方式",
                     }
                 ],
-                "summary": "內容大致完整，第 2 節缺少例外處理。",
-                "score": 7,
+                "review_points": [
+                    {"section_id": "S1", "item": "需求沒有提到使用者人數", "reason": "要跟需求提出人確認規模"}
+                ],
+                "summary": "第 2 節的流程有缺口，另有 1 項要人工確認。",
             }
         else:
-            data = {"issues": [], "summary": "已補上例外處理，內容完整。", "score": 8}
+            data = {"issues": [], "review_points": [], "summary": "沒有發現格式或邏輯錯誤。"}
         return json.dumps(data, ensure_ascii=False)

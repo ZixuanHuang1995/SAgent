@@ -57,7 +57,9 @@ def wait_run(client: TestClient, run_id: int, timeout: float = 20) -> dict:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         run = client.get(f"/api/agent/runs/{run_id}").json()
-        if run["status"] in ("succeeded", "failed", "cancelled"):
+        # runner 先改狀態、再送 run_end 事件，兩個都到了才算結束，不然偶爾會拿到少了 run_end 的事件
+        ended = not run["events"] or run["events"][-1]["type"] == "run_end"
+        if run["status"] in ("succeeded", "failed", "cancelled") and ended:
             return run
         time.sleep(0.05)
     raise AssertionError(f"run {run_id} 沒有在時間內完成")

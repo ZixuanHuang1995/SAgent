@@ -120,11 +120,27 @@ class Issue:
 
 
 @dataclass
+class ReviewPoint:
+    """需要人工覆核的地方。只列給使用者確認，不會交給 Writer 自動修改。"""
+
+    section_id: str | None
+    item: str
+    reason: str = ""
+    # check：程式找到的（文件標註了假設、待確認）；llm：審查模型找到的
+    source: Literal["check", "llm"] = "llm"
+
+
+@dataclass
 class Review:
+    """審查結果。issues 是格式、邏輯錯誤，會交給 Writer 修正；review_points 是要人工覆核的地方。
+
+    舊版的審查有 1～10 分，現在不打分數（舊資料裡的 score 保留在資料庫，畫面照樣顯示）。
+    """
+
     round: int
-    score: int | None
     summary: str
     issues: list[Issue] = field(default_factory=list)
+    review_points: list[ReviewPoint] = field(default_factory=list)
     llm_ok: bool = True
 
     @property
@@ -134,11 +150,11 @@ class Review:
     def to_dict(self) -> dict[str, Any]:
         return {
             "round": self.round,
-            "score": self.score,
             "summary": self.summary,
             "verdict": "revise" if self.needs_revision else "pass",
             "llm_ok": self.llm_ok,
             "issues": [asdict(i) for i in self.issues],
+            "review_points": [asdict(p) for p in self.review_points],
         }
 
 
