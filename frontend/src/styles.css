@@ -1,8 +1,23 @@
 /* SAgent 樣式。顏色都用變數，深色模式跟著系統設定。 */
 
 :root {
-  --font-sans: 'Segoe UI', 'Microsoft JhengHei', 'PingFang TC', 'Noto Sans TC', system-ui, sans-serif;
-  --font-mono: 'Cascadia Code', Consolas, 'SFMono-Regular', Menlo, monospace;
+  /* 英文用 Segoe UI。中文優先用思源黑體（Noto Sans TC，Windows 11 新版內建），比微軟正黑體好讀，
+     而且每種字重都有；電腦上沒有思源黑體時（例如 Windows 10）才用微軟正黑體 */
+  --font-sans: 'Segoe UI', 'Noto Sans TC', 'Microsoft JhengHei', 'PingFang TC', system-ui, sans-serif;
+  /* Cascadia Mono 沒有連字。等寬字型沒有中文字，要指定中文字型，不然中文可能變成細明體 */
+  --font-mono: 'Cascadia Mono', 'Cascadia Code', Consolas, 'SFMono-Regular', Menlo, 'Noto Sans TC', 'Microsoft JhengHei', monospace;
+
+  /* 字級：只用這幾種，都是整數（中文字型在小數字級容易糊）。中文最小 13px */
+  --fs-xs: 13px;
+  --fs-sm: 14px;
+  --fs-md: 16px;
+  --fs-lg: 18px;
+  --fs-xl: 22px;
+  --fs-2xl: 28px;
+  /* 字重：只用三種。思源黑體每種字重都有；備用的微軟正黑體只有 400、700，600 會顯示成粗體 */
+  --fw-normal: 400;
+  --fw-semibold: 600;
+  --fw-bold: 700;
 
   --bg: #f6f7f9;
   --surface: #ffffff;
@@ -134,7 +149,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
-  font-size: 16px;
+  font-size: var(--fs-md);
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
@@ -151,12 +166,13 @@ code,
 pre,
 .mono {
   font-family: var(--font-mono);
+  font-variant-ligatures: none;
 }
 
 h1 {
-  font-size: 24px;
+  font-size: var(--fs-xl);
   margin: 0 0 4px;
-  font-weight: 650;
+  font-weight: var(--fw-bold);
 }
 
 /* ---------- 外框 ---------- */
@@ -183,30 +199,30 @@ h1 {
   align-items: center;
   gap: 8px;
   color: var(--text);
-  font-weight: 700;
-  font-size: 18px;
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-lg);
 }
 .brand:hover {
   text-decoration: none;
 }
 .brand-sub {
   color: var(--muted);
-  font-weight: 400;
-  font-size: 15px;
+  font-weight: var(--fw-normal);
+  font-size: var(--fs-sm);
 }
 .crumb-sep {
   color: var(--border-strong);
 }
 .crumb {
   color: var(--text-2);
-  font-weight: 500;
+  font-weight: var(--fw-normal);
 }
 .topbar-link {
   color: var(--text-2);
 }
 
 .health {
-  font-size: 14px;
+  font-size: var(--fs-sm);
   padding: 3px 10px;
   border-radius: 999px;
   border: 1px solid var(--border);
@@ -283,10 +299,10 @@ h1 {
   color: var(--muted);
 }
 .small {
-  font-size: 14px;
+  font-size: var(--fs-sm);
 }
 .strong {
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 .nowrap {
   white-space: nowrap;
@@ -335,7 +351,7 @@ h1 {
   background: var(--surface);
   color: var(--text);
   font: inherit;
-  font-weight: 500;
+  font-weight: var(--fw-normal);
   cursor: pointer;
   white-space: nowrap;
   text-decoration: none;
@@ -351,7 +367,7 @@ h1 {
 .btn-sm {
   height: 26px;
   padding: 0 9px;
-  font-size: 14px;
+  font-size: var(--fs-sm);
 }
 .btn-block {
   width: 100%;
@@ -383,7 +399,7 @@ h1 {
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  font-size: 16px;
+  font-size: var(--fs-md);
   padding: 2px 6px;
   border-radius: 4px;
   line-height: 1.4;
@@ -422,7 +438,7 @@ h1 {
 }
 .input-sm {
   height: 28px;
-  font-size: 15px;
+  font-size: var(--fs-sm);
 }
 .textarea {
   height: auto;
@@ -441,12 +457,12 @@ select.input {
   margin-bottom: 12px;
 }
 .field-label {
-  font-weight: 600;
-  font-size: 15px;
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-sm);
 }
 .field-hint {
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--fs-sm);
 }
 
 .seg {
@@ -481,7 +497,7 @@ select.input {
 }
 .seg-sm button {
   padding: 3px 10px;
-  font-size: 14px;
+  font-size: var(--fs-sm);
 }
 .seg-wrap {
   flex-wrap: wrap;
@@ -493,8 +509,8 @@ select.input {
   gap: 3px;
   padding: 1px 8px;
   border-radius: 999px;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-normal);
   white-space: nowrap;
   background: var(--surface-3);
   color: var(--text-2);
@@ -529,7 +545,7 @@ select.input {
   box-shadow: var(--shadow);
 }
 .card-title {
-  font-weight: 650;
+  font-weight: var(--fw-bold);
   margin-bottom: 8px;
   display: flex;
   align-items: center;
@@ -547,7 +563,7 @@ details.card[open] > summary::before {
   content: '▾ ';
 }
 .subhead {
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   margin: 10px 0 4px;
 }
 
@@ -588,8 +604,8 @@ details.card[open] > summary::before {
   color: var(--muted);
 }
 .empty-title {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
   color: var(--text-2);
   margin-bottom: 6px;
 }
@@ -627,9 +643,9 @@ details.card[open] > summary::before {
   vertical-align: middle;
 }
 .table th {
-  font-size: 14px;
+  font-size: var(--fs-sm);
   color: var(--muted);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 .table tr.clickable {
   cursor: pointer;
@@ -641,7 +657,7 @@ details.card[open] > summary::before {
 .mini-table td {
   padding: 4px 6px;
   text-align: left;
-  font-size: 14px;
+  font-size: var(--fs-sm);
   border-bottom: 1px solid var(--border);
 }
 
@@ -782,7 +798,7 @@ details.card[open] > summary::before {
   border-bottom: 1px solid var(--border);
 }
 .modal-head h2 {
-  font-size: 18px;
+  font-size: var(--fs-lg);
   margin: 0;
 }
 .modal-body {
@@ -885,8 +901,8 @@ details.card[open] > summary::before {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
-  font-weight: 650;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
   background: var(--accent-soft);
   color: var(--accent);
 }
@@ -896,7 +912,7 @@ details.card[open] > summary::before {
   gap: 6px;
 }
 .phase-chip {
-  font-size: 13px;
+  font-size: var(--fs-xs);
   padding: 1px 8px;
   border-radius: 4px;
   border: 1px solid var(--border);
@@ -925,12 +941,12 @@ details.card[open] > summary::before {
   margin-top: auto;
 }
 .project-name {
-  font-weight: 650;
-  font-size: 17px;
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-lg);
 }
 .project-code {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
   padding: 1px 6px;
   border-radius: 4px;
   background: var(--accent-soft);
@@ -959,12 +975,12 @@ details.card[open] > summary::before {
   padding: 12px 16px;
 }
 .stat-num {
-  font-size: 26px;
-  font-weight: 700;
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-bold);
 }
 .stat-label {
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--fs-sm);
 }
 
 /* ---------- 專案工作區 ---------- */
@@ -1000,7 +1016,7 @@ details.card[open] > summary::before {
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-sm);
-  font-size: 18px;
+  font-size: var(--fs-lg);
   color: var(--text-2);
 }
 .rail-btn:hover {
@@ -1064,7 +1080,7 @@ details.card[open] > summary::before {
 .sidebar-nav a.active {
   background: var(--accent-soft);
   color: var(--accent);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 .sidebar-search {
   margin-bottom: 8px;
@@ -1086,7 +1102,7 @@ details.card[open] > summary::before {
   background: none;
   text-align: left;
   font: inherit;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--text-2);
   cursor: pointer;
   padding: 4px;
@@ -1136,7 +1152,7 @@ details.card[open] > summary::before {
   white-space: nowrap;
 }
 .tree-spec-ver {
-  font-size: 13px;
+  font-size: var(--fs-xs);
   color: var(--muted);
 }
 .sidebar-foot {
@@ -1179,7 +1195,7 @@ details.card[open] > summary::before {
   margin-top: 6px;
 }
 .spec-title {
-  font-size: 20px;
+  font-size: var(--fs-xl);
   margin: 0;
   cursor: text;
   border-radius: 4px;
@@ -1190,8 +1206,8 @@ details.card[open] > summary::before {
 }
 .title-input {
   max-width: 480px;
-  font-size: 18px;
-  font-weight: 600;
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-semibold);
 }
 .save-message {
   width: 220px;
@@ -1273,10 +1289,11 @@ body.is-resizing .cm-editor {
   height: 100%;
 }
 .editor .cm-editor {
-  font-size: 15.5px;
+  font-size: var(--fs-md);
 }
 .editor .cm-scroller {
   font-family: var(--font-mono);
+  font-variant-ligatures: none;
   line-height: 1.6;
 }
 
@@ -1306,7 +1323,7 @@ body.is-resizing .cm-editor {
 .tabs button.active {
   color: var(--accent);
   border-bottom-color: var(--accent);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 .side-panel-body {
   flex: 1;
@@ -1333,14 +1350,14 @@ body.is-resizing .cm-editor {
   color: var(--text);
 }
 .outline-l1 {
-  font-weight: 650;
+  font-weight: var(--fw-bold);
 }
 .outline-l2 {
   padding-left: 16px !important;
 }
 .outline-l3 {
   padding-left: 30px !important;
-  font-size: 15px;
+  font-size: var(--fs-sm);
 }
 
 /* ---------- 版本 ---------- */
@@ -1388,11 +1405,12 @@ body.is-resizing .cm-editor {
 }
 .line-stats {
   font-family: var(--font-mono);
+  font-variant-ligatures: none;
   white-space: nowrap;
 }
 .raw-markdown {
   white-space: pre-wrap;
-  font-size: 15px;
+  font-size: var(--fs-md);
 }
 
 /* ---------- 差異 ---------- */
@@ -1402,7 +1420,7 @@ body.is-resizing .cm-editor {
   gap: 12px;
   align-items: center;
   margin-bottom: 8px;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 .diff-stat-add {
   color: var(--diff-add-text);
@@ -1421,7 +1439,8 @@ body.is-resizing .cm-editor {
   width: 100%;
   border-collapse: collapse;
   font-family: var(--font-mono);
-  font-size: 14.5px;
+  font-variant-ligatures: none;
+  font-size: var(--fs-sm);
   border: 1px solid var(--border);
 }
 .diff-table td {
@@ -1468,8 +1487,8 @@ body.is-resizing .cm-editor {
 
 .agent-badge {
   display: inline-block;
-  font-size: 13px;
-  font-weight: 650;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
   padding: 1px 7px;
   border-radius: 4px;
   background: var(--surface-3);
@@ -1538,7 +1557,7 @@ body.is-resizing .cm-editor {
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  font-size: 14px;
+  font-size: var(--fs-sm);
   color: var(--muted);
   position: relative;
 }
@@ -1569,7 +1588,7 @@ body.is-resizing .cm-editor {
 }
 .stepper-active {
   color: var(--text);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 .stepper-active .stepper-dot {
   background: var(--agent, var(--accent));
@@ -1601,7 +1620,7 @@ body.is-resizing .cm-editor {
 }
 .live-label {
   flex: 1;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 .live-output {
   margin: 0;
@@ -1609,7 +1628,7 @@ body.is-resizing .cm-editor {
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: 14px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
   background: var(--surface-2);
   border-radius: 4px;
@@ -1641,7 +1660,7 @@ body.is-resizing .cm-editor {
   width: 16px;
   text-align: center;
   color: var(--success);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
 }
 .step-failed .step-icon {
   color: var(--danger);
@@ -1692,7 +1711,7 @@ body.is-resizing .cm-editor {
 .plan-points {
   margin: 2px 0;
   padding-left: 16px;
-  font-size: 14px;
+  font-size: var(--fs-sm);
   color: var(--text-2);
 }
 
@@ -1702,13 +1721,13 @@ body.is-resizing .cm-editor {
   gap: 8px;
 }
 .review-score {
-  font-size: 24px;
-  font-weight: 700;
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-bold);
 }
 .review-score small {
-  font-size: 14px;
+  font-size: var(--fs-sm);
   color: var(--muted);
-  font-weight: 400;
+  font-weight: var(--fw-normal);
 }
 .issue-list {
   list-style: none;
@@ -1769,27 +1788,27 @@ body.is-resizing .cm-editor {
 .markdown {
   max-width: 900px;
   line-height: 1.7;
-  font-size: 16.5px;
+  font-size: var(--fs-md);
   word-wrap: break-word;
 }
 .markdown h1 {
-  font-size: 28px;
+  font-size: var(--fs-2xl);
   border-bottom: 1px solid var(--border);
   padding-bottom: 8px;
   margin: 0 0 16px;
 }
 .markdown h2 {
-  font-size: 22px;
+  font-size: var(--fs-xl);
   margin: 28px 0 12px;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--border);
 }
 .markdown h3 {
-  font-size: 18px;
+  font-size: var(--fs-lg);
   margin: 20px 0 8px;
 }
 .markdown h4 {
-  font-size: 16.5px;
+  font-size: var(--fs-md);
   margin: 16px 0 6px;
 }
 .markdown p {
@@ -1818,7 +1837,9 @@ body.is-resizing .cm-editor {
   background: var(--surface-3);
   padding: 1px 5px;
   border-radius: 4px;
-  font-size: 0.9em;
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+  font-size: 0.875em; /* 內文 16px 時剛好 14px */
 }
 .markdown pre {
   background: var(--surface-2);
@@ -1871,7 +1892,7 @@ body.is-resizing .cm-editor {
 }
 .diagram-loading {
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--fs-sm);
 }
 .diagram-error,
 .diagram-plantuml-source {
@@ -1887,20 +1908,21 @@ body.is-resizing .cm-editor {
   background: var(--danger-soft);
   color: var(--danger);
   padding: 6px 10px;
-  font-weight: 600;
-  font-size: 15px;
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-sm);
 }
 .diagram-error-msg {
   padding: 6px 10px;
   font-family: var(--font-mono);
-  font-size: 14px;
+  font-variant-ligatures: none;
+  font-size: var(--fs-sm);
   white-space: pre-wrap;
   color: var(--danger);
 }
 .diagram-note {
   background: var(--surface-2);
   padding: 6px 10px;
-  font-size: 14px;
+  font-size: var(--fs-sm);
   color: var(--muted);
 }
 .diagram-error pre,
@@ -1949,7 +1971,7 @@ body.is-resizing .cm-editor {
 }
 .menu-note {
   padding: 8px 10px;
-  font-size: 14px;
+  font-size: var(--fs-sm);
   color: var(--muted);
   max-width: 220px;
 }
@@ -1961,11 +1983,11 @@ body.is-resizing .cm-editor {
   white-space: normal;
 }
 .meta-summary {
-  font-weight: 400;
+  font-weight: var(--fw-normal);
 }
 .menu-group {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
   color: var(--muted);
   padding: 8px 10px 2px;
 }
@@ -2013,7 +2035,8 @@ body.is-resizing .cm-editor {
 
 kbd {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-variant-ligatures: none;
+  font-size: var(--fs-xs);
   padding: 0 4px;
   border: 1px solid var(--border-strong);
   border-bottom-width: 2px;
@@ -2060,7 +2083,7 @@ kbd {
 
 .outline li.is-active > .link-btn {
   color: var(--accent);
-  font-weight: 650;
+  font-weight: var(--fw-bold);
 }
 .outline li {
   padding-left: 6px;
@@ -2162,7 +2185,7 @@ kbd {
 /* 側邊欄：類型小標籤 */
 .tree-spec-cat {
   flex: none;
-  font-size: 12px;
+  font-size: var(--fs-xs);
   line-height: 1;
   padding: 2px 5px;
   border-radius: 4px;
@@ -2188,4 +2211,19 @@ kbd {
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 10px;
+}
+
+/* 數字等寬，表格、版本、耗時上下才會對齊 */
+.table td,
+.mini-table td,
+.kv dd,
+.stat-num,
+.tree-spec-ver,
+.version-line,
+.version-time,
+.line-stats,
+.diff-table,
+.review-score,
+.step-meta {
+  font-variant-numeric: tabular-nums;
 }
