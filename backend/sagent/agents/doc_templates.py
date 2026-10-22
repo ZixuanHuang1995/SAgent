@@ -33,10 +33,10 @@ class Category:
 
 # 類型：這件事想得多清楚了。順序就是畫面上的順序
 CATEGORIES: list[Category] = [
-    Category("idea", "構想", "只有想法，還沒確定要不要做。整理問題、目標和可能的做法。"),
-    Category("feature", "功能", "已經確定要做這個功能。寫清楚要做什麼、規則和驗收條件。"),
-    Category("design", "技術設計", "已經有功能規格，要設計怎麼實作：架構、資料庫、API。"),
-    Category("change", "變更", "要修改既有系統的功能。說明改什麼、影響範圍和上線方式。"),
+    Category("idea", "Concept", "只有想法，還沒確定要不要做。整理問題、目標和可能的做法。"),
+    Category("feature", "Functionality", "已經確定要做這個功能。寫清楚要做什麼、規則和驗收條件。"),
+    Category("design", "Technical", "已經有功能規格，要設計怎麼實作：架構、資料庫、API。"),
+    Category("change", "Change", "要修改既有系統的功能。說明改什麼、影響範圍和上線方式。"),
 ]
 CATEGORY_KEYS = {c.key for c in CATEGORIES}
 STYLES = ("spec", "advice", "idea")

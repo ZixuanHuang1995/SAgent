@@ -178,12 +178,12 @@ sequenceDiagram
 
 | 類型 | key | 內建文件類型 |
 |---|---|---|
-| 構想 | `idea` | 構想提案 |
-| 功能 | `feature` | 功能規格書、使用案例規格、SDD 五節、UI/UX 設計建議 |
-| 技術設計 | `design` | 系統架構設計、資料庫設計、API 規格 |
-| 變更 | `change` | 變更需求說明 |
+| Concept | `idea` | 構想提案 |
+| Functionality | `feature` | 功能規格書、使用案例規格、SDD 五節、UI/UX 設計建議 |
+| Technical | `design` | 系統架構設計、資料庫設計、API 規格 |
+| Change | `change` | 變更需求說明 |
 
-類型由文件類型決定，`specs` 不另外存類型，舊資料不用升級。自訂範本沒寫 `category` 時歸到「功能」。
+類型由文件類型決定，`specs` 不另外存類型，舊資料不用升級。自訂範本沒寫 `category` 時歸到 Functionality。
 
 構想文件（`style: idea`）的想法還不成熟，需求常常只有兩三句。小模型為了填滿章節容易編造，所以規則不同：
 

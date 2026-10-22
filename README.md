@@ -63,7 +63,7 @@ uv run --project backend python scripts/seed_demo.py --data-dir data-demo-build
 ## 使用流程
 
 1. 建立專案。預設有「需求分析」「系統設計」「詳細設計」三個階段，可以改名、增減、調整順序。
-2. 新增 Spec：先選類型（構想、功能、技術設計、變更），再選這個類型的文件類型。內容來源可以選：
+2. 新增 Spec：先選類型（Concept、Functionality、Technical、Change），再選這個類型的文件類型。內容來源可以選：
    - 用 AI 撰寫：貼上需求，直接開始
    - 範本骨架：依文件類型產生空白章節
    - 空白文件、匯入 Markdown
@@ -92,10 +92,10 @@ uv run --project backend python scripts/seed_demo.py --data-dir data-demo-build
 
 | 類型 | 適合的狀況 | 文件類型 |
 |---|---|---|
-| 構想 | 只有想法，還沒確定要不要做 | 構想提案 |
-| 功能 | 已經確定要做這個功能 | 功能規格書、使用案例規格、SDD 功能規格、UI/UX 設計建議 |
-| 技術設計 | 已經有功能規格，要設計怎麼實作 | 系統架構設計、資料庫設計、API 規格 |
-| 變更 | 要修改既有系統的功能 | 變更需求說明 |
+| Concept | 只有想法，還沒確定要不要做 | 構想提案 |
+| Functionality | 已經確定要做這個功能 | 功能規格書、使用案例規格、SDD 功能規格、UI/UX 設計建議 |
+| Technical | 已經有功能規格，要設計怎麼實作 | 系統架構設計、資料庫設計、API 規格 |
+| Change | 要修改既有系統的功能 | 變更需求說明 |
 
 | 文件類型 | 主要章節 |
 |---|---|
@@ -115,7 +115,7 @@ uv run --project backend python scripts/seed_demo.py --data-dir data-demo-build
 
 - 不寫細節規格：沒有欄位、API、FR 編號需求。最多畫一張流程圖，章節也比較少，所以跑得比功能規格書快。
 - 只有「可能的做法」這一節可以提出需求沒寫的做法，會列 2～3 種做法比較優缺點。其他章節只整理需求裡有的內容，不清楚的地方標「待確認」。
-- 確定要做時，按文件上方的「轉成功能規格」：開新增 Spec 對話框，類型選好「功能」，需求欄帶入構想文件目前的內容。新的 Spec 會記錄來源，兩份文件上方都會顯示連結。
+- 確定要做時，按文件上方的「轉成功能規格」：開新增 Spec 對話框，類型選好 Functionality，需求欄帶入構想文件目前的內容。新的 Spec 會記錄來源，兩份文件上方都會顯示連結。
 
 ### UI/UX 設計建議
 
@@ -133,7 +133,7 @@ uv run --project backend python scripts/seed_demo.py --data-dir data-demo-build
 
 | 欄位 | 預設值 | 說明 |
 |---|---|---|
-| `category` | `feature` | 類型：`idea` 構想、`feature` 功能、`design` 技術設計、`change` 變更 |
+| `category` | `feature` | 類型：`idea` Concept、`feature` Functionality、`design` Technical、`change` Change |
 | `role` | 系統分析師 | 撰寫這種文件的角色，會放進提示詞 |
 | `style` | `spec` | 寫作和審查規則：`spec` 規格文件、`advice` 建議類文件（可以提出需求沒寫的做法）、`idea` 構想文件（不寫細節規格） |
 | `advice` | `false` | 舊寫法，`true` 等於 `style: advice` |

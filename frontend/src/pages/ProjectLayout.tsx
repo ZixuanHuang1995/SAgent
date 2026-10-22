@@ -213,8 +213,8 @@ function ProjectSidebar(props: {
                       <summary className="icon-btn" title="更多" aria-label={`「${phase.name}」的其他操作`}>
                         <Icon name="more" size={14} />
                       </summary>
-                      <div className="menu-list">
-                        <button onClick={() => setPhaseDialog(phase)}>改名稱／說明</button>
+                      <div className="menu-list menu-narrow">
+                        <button onClick={() => setPhaseDialog(phase)}>重新命名</button>
                         <button disabled={idx === 0} onClick={() => movePhase(phase, -1)}>
                           往上移
                         </button>
@@ -283,7 +283,7 @@ function ProjectSidebar(props: {
 function SpecLink({ projectId, spec }: { projectId: number; spec: Spec }) {
   const templates = useTemplates()
   const categories = useTemplateCategories()
-  // 「功能」是大多數，不標；其他類型（構想、技術設計、變更）在標題前加小標籤
+  // Functionality 是大多數，不標；其他類型（Concept、Technical、Change）在標題前加小標籤
   const category = templates.data?.find((t) => t.key === spec.doc_type)?.category
   const tag = category && category !== 'feature' ? categories.data?.find((c) => c.key === category)?.name : undefined
   return (

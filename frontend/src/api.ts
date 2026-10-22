@@ -135,7 +135,7 @@ export interface CompareItem {
   to_version: number | null
 }
 
-/** 類型：構想、功能、技術設計、變更。新增 Spec 時先選類型，再選文件類型 */
+/** 類型：Concept、Functionality、Technical、Change。新增 Spec 時先選類型，再選文件類型 */
 export interface TemplateCategory {
   key: string
   name: string

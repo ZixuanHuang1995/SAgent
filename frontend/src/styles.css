@@ -7,13 +7,13 @@
   /* Cascadia Mono 沒有連字。等寬字型沒有中文字，要指定中文字型，不然中文可能變成細明體 */
   --font-mono: 'Cascadia Mono', 'Cascadia Code', Consolas, 'SFMono-Regular', Menlo, 'Noto Sans TC', 'Microsoft JhengHei', monospace;
 
-  /* 字級：只用這幾種，都是整數（中文字型在小數字級容易糊）。中文最小 13px */
-  --fs-xs: 13px;
-  --fs-sm: 14px;
-  --fs-md: 16px;
-  --fs-lg: 18px;
-  --fs-xl: 22px;
-  --fs-2xl: 28px;
+  /* 字級：只用這幾種，都是整數（中文字型在小數字級容易糊）。中文最小 12px */
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 15px;
+  --fs-lg: 17px;
+  --fs-xl: 21px;
+  --fs-2xl: 27px;
   /* 字重：只用三種。思源黑體每種字重都有；備用的微軟正黑體只有 400、700，600 會顯示成粗體 */
   --fw-normal: 400;
   --fw-semibold: 600;
@@ -1839,7 +1839,7 @@ body.is-resizing .cm-editor {
   border-radius: 4px;
   font-family: var(--font-mono);
   font-variant-ligatures: none;
-  font-size: 0.875em; /* 內文 16px 時剛好 14px */
+  font-size: calc(1em - 2px); /* 比周圍文字小 2px，維持整數字級 */
 }
 .markdown pre {
   background: var(--surface-2);
@@ -2226,4 +2226,10 @@ kbd {
 .review-score,
 .step-meta {
   font-variant-numeric: tabular-nums;
+}
+
+/* 選項很短的選單（例如左側欄的階段選單），寬度跟著內容 */
+.menu-narrow {
+  min-width: 0;
+  white-space: nowrap;
 }

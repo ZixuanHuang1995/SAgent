@@ -81,7 +81,7 @@
 ### 前端
 
 - 顏色只用 `styles.css` 的 CSS 變數。深色模式靠 `data-theme` 和 `prefers-color-scheme`，新樣式在淺色、深色都要看得清楚。
-- 字級只用 `--fs-xs`～`--fs-2xl`（13、14、16、18、22、28px），不要用小數字級，中文最小 13px。字重只用 `--fw-normal`、`--fw-semibold`、`--fw-bold`。
+- 字級只用 `--fs-xs`～`--fs-2xl`（12、13、15、17、21、27px），不要用小數字級。字重只用 `--fw-normal`、`--fw-semibold`、`--fw-bold`。
 - 中文字型優先用思源黑體（`Noto Sans TC`，Windows 11 新版內建），沒有才用微軟正黑體。微軟正黑體只有 400 和 700，所以不要依賴 500 這類中間字重。
 - 等寬字型用 `var(--font-mono)`，並加 `font-variant-ligatures: none`，Mermaid 的 `-->` 才不會顯示成箭頭。
 - 呼叫 API 一律經過 `api.ts`，資料讀取用 `queries.ts` 的 hooks。
