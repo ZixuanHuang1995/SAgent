@@ -2,6 +2,7 @@ key: architecture
 name: 系統架構設計
 description: 說明系統由哪些元件組成、怎麼部署、用什麼技術，以及重要的設計決策。
 order: 3
+category: design
 sections:
   - heading: 設計目標與限制
     goal: 列出架構要達成的目標（效能、可用性、安全等）和已知的限制。

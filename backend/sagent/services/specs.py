@@ -226,6 +226,7 @@ def create_spec(
     content: str | None = None,
     source: str = "manual",
     message: str = "",
+    source_spec_id: int | None = None,
 ) -> Spec:
     title = title.strip()
     if not title:
@@ -233,7 +234,13 @@ def create_spec(
     phase = get_phase(s, phase_id)
     if phase.project_id != project.id:
         raise BadRequest("階段不屬於這個專案")
-    spec = Spec(project_id=project.id, phase_id=phase.id, title=title, doc_type=doc_type)
+    if source_spec_id is not None:
+        origin = s.get(Spec, source_spec_id)
+        if origin is None or origin.project_id != project.id:
+            raise BadRequest("來源 Spec 不屬於這個專案")
+    spec = Spec(
+        project_id=project.id, phase_id=phase.id, title=title, doc_type=doc_type, source_spec_id=source_spec_id
+    )
     s.add(spec)
     s.flush()
     if content is not None and content.strip():
@@ -262,6 +269,11 @@ def update_spec(s: Session, spec: Spec, **fields: Any) -> Spec:
     spec.updated_at = utcnow()
     s.flush()
     return spec
+
+
+def derived_specs(s: Session, spec: Spec) -> list[Spec]:
+    """從這份 Spec 轉出去的 Spec。"""
+    return list(s.scalars(select(Spec).where(Spec.source_spec_id == spec.id).order_by(Spec.id)))
 
 
 def set_archived(s: Session, spec: Spec, archived: bool) -> Spec:

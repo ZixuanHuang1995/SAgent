@@ -12,6 +12,7 @@ export const keys = {
   run: (runId: number) => ['run', runId] as const,
   baselines: (projectId: number) => ['baselines', projectId] as const,
   templates: ['templates'] as const,
+  templateCategories: ['template-categories'] as const,
   diagramKinds: ['diagram-kinds'] as const,
   models: ['models'] as const,
   settings: ['settings'] as const,
@@ -47,6 +48,9 @@ export const useBaselines = (projectId: number) =>
   useQuery({ queryKey: keys.baselines(projectId), queryFn: () => api.baselines(projectId) })
 
 export const useTemplates = () => useQuery({ queryKey: keys.templates, queryFn: api.templates, staleTime: 60_000 })
+
+export const useTemplateCategories = () =>
+  useQuery({ queryKey: keys.templateCategories, queryFn: api.templateCategories, staleTime: Infinity })
 
 export const useDiagramKinds = () =>
   useQuery({ queryKey: keys.diagramKinds, queryFn: api.diagramKinds, staleTime: Infinity })

@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..agents.diagram_kinds import KINDS
+from ..agents.doc_templates import CATEGORIES
 from ..agents.llm import ollama_list_models
 from ..app_state import AppState
 from ..db import utcnow
@@ -32,6 +33,12 @@ RUN_END_TEXT = {"succeeded": "完成", "failed": "失敗", "cancelled": "已取�
 @router.get("/templates")
 def list_templates(state: AppState = Depends(get_state)) -> list[dict[str, Any]]:
     return [t.to_dict() for t in state.templates().values()]
+
+
+@router.get("/template-categories")
+def list_template_categories() -> list[dict[str, str]]:
+    """類型：新增 Spec 時先選類型，再選這個類型的文件類型。"""
+    return [{"key": c.key, "name": c.name, "description": c.description} for c in CATEGORIES]
 
 
 @router.get("/diagram-kinds")

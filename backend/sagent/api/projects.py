@@ -168,6 +168,7 @@ def create_spec(project_id: int, body: SpecCreate, state: AppState = Depends(get
             content=content,
             source=source,
             message=message,
+            source_spec_id=body.source_spec_id,
         )
         return spec_detail(s, spec)
 

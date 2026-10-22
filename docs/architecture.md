@@ -47,7 +47,7 @@ erDiagram
 |---|---|
 | projects | 專案 |
 | phases | 功能階段，名稱自訂（例如「需求分析」「第二期」），可排序 |
-| specs | Spec 文件，記錄目前最新版本號 `head_version_no`、狀態、是否封存 |
+| specs | Spec 文件，記錄目前最新版本號 `head_version_no`、狀態、是否封存，以及從哪一份 Spec 轉過來的 `source_spec_id`（例如構想 → 功能規格） |
 | spec_versions | 每個版本的完整內容，以及跟前一版比較新增、刪除幾行。建立後不再修改，只有「標籤」可以改 |
 | baselines / baseline_items | 基準版本：某個時間點每份 Spec 用的是哪一版 |
 | agent_runs | AI 工作：需求、選項、大綱、審查結果、用量、結果版本 |
@@ -170,6 +170,34 @@ sequenceDiagram
 
 規格文件的提示詞沒有改變。提示詞寫在 `backend/sagent/agents/prompts.py`：`_SPEC_RULES` 和 `_ADVICE_RULES` 是兩組寫作規則，`advice_reviewer_system()` 是建議類文件的審查提示詞。
 
+範本用 `style` 指定規則：`spec`（預設）、`advice`、`idea`。舊的 `advice: true` 等於 `style: advice`。
+
+### 4.7 類型與構想文件
+
+新增 Spec 時先選「類型」，再選文件類型。類型是範本的 `category` 欄位，定義在 `doc_templates.py` 的 `CATEGORIES`：
+
+| 類型 | key | 內建文件類型 |
+|---|---|---|
+| 構想 | `idea` | 構想提案 |
+| 功能 | `feature` | 功能規格書、使用案例規格、SDD 五節、UI/UX 設計建議 |
+| 技術設計 | `design` | 系統架構設計、資料庫設計、API 規格 |
+| 變更 | `change` | 變更需求說明 |
+
+類型由文件類型決定，`specs` 不另外存類型，舊資料不用升級。自訂範本沒寫 `category` 時歸到「功能」。
+
+構想文件（`style: idea`）的想法還不成熟，需求常常只有兩三句。小模型為了填滿章節容易編造，所以規則不同：
+
+| 項目 | 構想文件 |
+|---|---|
+| 寫作規則 | 不寫細節規格（欄位、API、FR 編號需求）；資訊不夠就寫短、標「待確認」；只有目標寫明「可以提出需求沒寫的做法」的章節（「可能的做法」）才能提建議 |
+| Planner | 章節少、內容短，不清楚的地方多寫進 open_questions |
+| 圖 | 範本設 `max_diagrams: 1`，最多一張 |
+| 審查重點 | 問題有沒有講清楚、假設有沒有列出來、有沒有編造、有沒有寫成細節規格。不要求補上需求沒寫的細節 |
+
+寫作規則是 `_IDEA_RULES`，審查提示詞是 `idea_reviewer_system()`。
+
+構想確定要做時，前端的「轉成功能規格」會開新增 Spec 對話框，帶入構想文件目前的內容當需求，建立時傳 `source_spec_id`。來源 Spec 要在同一個專案。Spec 詳細資料會回傳 `source_spec`（來源）和 `derived_specs`（從這份轉出去的 Spec）。
+
 ## 5. API 一覽
 
 | 方法 | 路徑 | 說明 |
@@ -192,7 +220,7 @@ sequenceDiagram
 | GET/DELETE | `/api/baselines/{id}` | 基準版本內容 |
 | GET | `/api/projects/{id}/compare` | 比較基準版本 |
 | GET | `/api/projects/{id}/export` | 匯出 zip（最新版或某個基準版本） |
-| GET | `/api/agent/templates`、`/api/agent/models` | 文件範本、模型清單 |
+| GET | `/api/agent/templates`、`/api/agent/template-categories`、`/api/agent/models` | 文件範本、類型、模型清單 |
 | POST/GET | `/api/agent/runs` | 建立、查詢 AI 工作 |
 | GET | `/api/agent/runs/{id}` | AI 工作詳細內容 |
 | GET | `/api/agent/runs/{id}/events` | 即時進度（SSE） |

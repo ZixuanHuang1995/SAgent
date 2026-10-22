@@ -4,8 +4,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { api } from '../api'
-import { relativeTime, RUN_STATUS, SPEC_STATUS } from '../format'
-import { keys, useBaselines, useProjectTree, useRuns } from '../queries'
+import { CATEGORY_TONE, relativeTime, RUN_STATUS, SPEC_STATUS } from '../format'
+import { keys, useBaselines, useProjectTree, useRuns, useTemplateCategories, useTemplates } from '../queries'
 import { Badge, ConfirmDialog, Empty, errorText, Field, Modal, Skeleton, useToast } from '../components/ui'
 import { NewSpecDialog } from './ProjectLayout'
 import { Icon } from '../components/icons'
@@ -102,6 +102,7 @@ export function ProjectHome() {
               <thead>
                 <tr>
                   <th>標題</th>
+                  <th>類型</th>
                   <th>狀態</th>
                   <th>版本</th>
                   <th>更新</th>
@@ -112,6 +113,9 @@ export function ProjectHome() {
                   <tr key={s.id} className="clickable" onClick={() => navigate(`/p/${projectId}/s/${s.id}`)}>
                     <td>
                       <Link to={`/p/${projectId}/s/${s.id}`}>{s.title}</Link>
+                    </td>
+                    <td>
+                      <DocTypeCell docType={s.doc_type} />
                     </td>
                     <td>
                       <span className={`status-dot status-${s.status}`} /> {SPEC_STATUS[s.status]}
@@ -207,5 +211,18 @@ function EditProjectDialog(props: { projectId: number; initial: { name: string; 
         <textarea className="input textarea" rows={4} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
       </Field>
     </Modal>
+  )
+}
+
+function DocTypeCell({ docType }: { docType: string }) {
+  const templates = useTemplates()
+  const categories = useTemplateCategories()
+  const template = templates.data?.find((t) => t.key === docType)
+  const category = categories.data?.find((c) => c.key === template?.category)
+  return (
+    <span className="row gap-sm">
+      {category && <Badge tone={CATEGORY_TONE[category.key]}>{category.name}</Badge>}
+      <span className="muted small">{template?.name ?? docType}</span>
+    </span>
   )
 }

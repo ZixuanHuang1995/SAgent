@@ -49,6 +49,8 @@ class SpecPipeline:
     async def run(self, inp: RunInput) -> PipelineResult:
         if not inp.template.allow_diagrams:
             inp.options.diagrams = False  # 這種文件類型不畫圖（例如 UI/UX 設計建議）
+        if inp.template.max_diagrams is not None:
+            inp.options.max_diagrams = min(inp.options.max_diagrams, inp.template.max_diagrams)
         emit = self.emitter.emit
         await emit("phase", "planner", "Planner：規劃文件", {"phase": "plan"})
         plan = await self.planner.plan(inp)

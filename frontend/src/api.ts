@@ -39,8 +39,17 @@ export interface Spec {
   status: SpecStatus
   head_version_no: number
   archived: boolean
+  /** 從哪一份 Spec 轉過來的（例如構想 → 功能規格） */
+  source_spec_id: number | null
   created_at: string
   updated_at: string
+}
+
+export interface SpecLink {
+  id: number
+  title: string
+  doc_type: string
+  archived: boolean
 }
 
 export interface VersionMeta {
@@ -66,6 +75,8 @@ export interface SpecDetail extends Spec {
   content: string
   head: VersionMeta | null
   active_run_id: number | null
+  source_spec: SpecLink | null
+  derived_specs: SpecLink[]
 }
 
 export interface ProjectTree {
@@ -124,11 +135,21 @@ export interface CompareItem {
   to_version: number | null
 }
 
+/** 類型：構想、功能、技術設計、變更。新增 Spec 時先選類型，再選文件類型 */
+export interface TemplateCategory {
+  key: string
+  name: string
+  description: string
+}
+
 export interface Template {
   key: string
   name: string
   description: string
   builtin: boolean
+  category: string
+  /** 寫作規則：spec 規格文件、advice 建議類文件、idea 構想文件 */
+  style: 'spec' | 'advice' | 'idea'
   /** 建議類文件（例如 UI/UX 設計建議）：可以提出需求沒寫的做法 */
   advice: boolean
   /** false：這種文件不畫圖 */
@@ -327,7 +348,14 @@ export const api = {
   searchSpecs: (projectId: number, q: string) => request<Spec[]>('GET', `/api/projects/${projectId}/specs${qs({ q })}`),
   createSpec: (
     projectId: number,
-    body: { phase_id: number; title: string; doc_type: string; init: 'blank' | 'template' | 'content' | 'none'; content?: string },
+    body: {
+      phase_id: number
+      title: string
+      doc_type: string
+      init: 'blank' | 'template' | 'content' | 'none'
+      content?: string
+      source_spec_id?: number | null
+    },
   ) => request<SpecDetail>('POST', `/api/projects/${projectId}/specs`, body),
   spec: (id: number) => request<SpecDetail>('GET', `/api/specs/${id}`),
   updateSpec: (id: number, body: Partial<Pick<Spec, 'title' | 'phase_id' | 'status' | 'doc_type'>>) =>
@@ -364,6 +392,7 @@ export const api = {
 
   // AI 代理
   templates: () => request<Template[]>('GET', '/api/agent/templates'),
+  templateCategories: () => request<TemplateCategory[]>('GET', '/api/agent/template-categories'),
   diagramKinds: () => request<DiagramKind[]>('GET', '/api/agent/diagram-kinds'),
   models: () => request<{ provider: string; default_model: string; models: ModelInfo[] }>('GET', '/api/agent/models'),
   createRun: (body: { spec_id: number; mode: RunMode; requirement: string; doc_type?: string; options?: RunOptions }) =>

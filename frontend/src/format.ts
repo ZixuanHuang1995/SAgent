@@ -17,6 +17,14 @@ export const VERSION_SOURCE: Record<VersionMeta['source'], string> = {
   template: '範本',
 }
 
+/** 類型標籤的顏色（Badge 的 tone） */
+export const CATEGORY_TONE: Record<string, string> = {
+  idea: 'amber',
+  feature: 'blue',
+  design: 'violet',
+  change: 'green',
+}
+
 export const RUN_STATUS: Record<RunStatus, string> = {
   queued: '排隊中',
   running: '執行中',

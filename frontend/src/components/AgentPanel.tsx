@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api, type RunMode, type RunOptions, type SpecDetail, type UmlSyntax } from '../api'
 import { formatDuration, relativeTime, RUN_STATUS, runDuration, UML_SYNTAX } from '../format'
 import { useRunStream } from '../hooks/useRunStream'
-import { keys, useHealth, useModels, useRuns, useSettings, useTemplates } from '../queries'
+import { keys, useHealth, useModels, useRuns, useSettings, useTemplateCategories, useTemplates } from '../queries'
 import { Icon } from './icons'
 import { RunProgress } from './RunProgress'
 import { RunDetailModal } from './RunDetail'
@@ -139,6 +139,7 @@ function RunForm({ spec }: { spec: SpecDetail }) {
   const qc = useQueryClient()
   const toast = useToast()
   const templates = useTemplates()
+  const categories = useTemplateCategories()
   const models = useModels()
   const settings = useSettings()
   const health = useHealth()
@@ -259,11 +260,20 @@ function RunForm({ spec }: { spec: SpecDetail }) {
 
       <Field label="文件類型" hint={template?.description}>
         <select className="input" value={docType} onChange={(e) => setDocType(e.target.value)}>
-          {templates.data?.map((t) => (
-            <option key={t.key} value={t.key}>
-              {t.name}
-            </option>
-          ))}
+          {categories.data?.map((c) => {
+            const list = templates.data?.filter((t) => t.category === c.key) ?? []
+            return (
+              list.length > 0 && (
+                <optgroup key={c.key} label={c.name}>
+                  {list.map((t) => (
+                    <option key={t.key} value={t.key}>
+                      {t.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )
+            )
+          })}
         </select>
       </Field>
 

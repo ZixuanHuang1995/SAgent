@@ -64,6 +64,10 @@ class Spec(Base):
     # 最新版本號。0 表示還沒有任何版本（例如剛建立、等 AI 寫第一版）
     head_version_no: Mapped[int] = mapped_column(Integer, default=0)
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    # 從哪一份 Spec 轉過來的（例如構想 → 功能規格）。沒有就是 None
+    source_spec_id: Mapped[int | None] = mapped_column(
+        ForeignKey("specs.id", ondelete="SET NULL"), nullable=True, index=True, default=None
+    )
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow)
 

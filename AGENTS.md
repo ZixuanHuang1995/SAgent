@@ -86,7 +86,8 @@
 
 - 模型是在 CPU 上跑的 8B 左右小模型，又慢又容易出錯。改提示詞或流程前，先讀 `docs/architecture.md` 第 4.2 節「為了小模型做的設計」。
 - 不要用 LangChain 之類的框架，代理是自己實作的。
-- 文件分兩種：規格文件（只寫需求有的內容）和建議類文件（範本 `advice: true`，例如 UI/UX 設計建議，可以提出需求沒寫的做法）。兩種的寫作規則和審查提示詞不同，見 `docs/architecture.md` 第 4.6 節。改其中一種的提示詞時，不要動到另一種。
+- 文件的寫作規則有三種，由範本的 `style` 決定：`spec` 規格文件（只寫需求有的內容）、`advice` 建議類文件（例如 UI/UX 設計建議，可以提出需求沒寫的做法）、`idea` 構想文件（不寫細節規格，只有「可能的做法」一節可以提建議）。三種的寫作規則和審查提示詞不同，見 `docs/architecture.md` 第 4.6、4.7 節。改其中一種的提示詞時，不要動到其他種。
+- 新增 Spec 時先選類型（範本的 `category`：idea、feature、design、change），類型清單在 `doc_templates.py` 的 `CATEGORIES`。新增內建範本要寫 `category`。
 - 範本 `allow_diagrams: false` 表示不畫圖，`api/agent.py` 建立工作時和 `pipeline.py` 開始時都會強制關掉畫圖。
 - Mermaid 12 的 `usecase-beta` 沒有官方文件，語法是從套件的解析器反推、再用 `mermaid-validate.mjs` 驗證的。
 

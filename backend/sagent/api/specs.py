@@ -15,6 +15,7 @@ from ..schemas import (
     RestoreIn,
     SaveResult,
     SpecDetail,
+    SpecLink,
     SpecOut,
     SpecUpdate,
     VersionDetail,
@@ -31,12 +32,15 @@ router = APIRouter(prefix="/api/specs", tags=["specs"])
 def spec_detail(s: Session, spec: Spec) -> SpecDetail:
     head = spec_service.get_head(s, spec)
     run = spec_service.active_run_for_spec(s, spec.id)
+    origin = s.get(Spec, spec.source_spec_id) if spec.source_spec_id else None
     return SpecDetail.model_validate(
         {
             **SpecOut.model_validate(spec).model_dump(),
             "content": head.content if head else "",
             "head": VersionMeta.model_validate(head) if head else None,
             "active_run_id": run.id if run else None,
+            "source_spec": SpecLink.model_validate(origin) if origin else None,
+            "derived_specs": [SpecLink.model_validate(d) for d in spec_service.derived_specs(s, spec)],
         }
     )
 

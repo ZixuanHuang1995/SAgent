@@ -30,15 +30,28 @@ _ADVICE_RULES = [
     "需求沒提到的事實（數字、既有系統、使用者人數、調查結果）不要編造；必要的假設標註「（假設）」，不確定的地方標註「（待確認）」。",
     "只有這一節的目標或要點寫明要編號時才新增編號，格式照目標寫的（例如 UX-01）；其他章節提到時引用前面已經定義的編號，不要重新編號。",
 ]
+# 構想文件（範本 style: idea）：想法還不成熟，只整理，不寫細節規格。
+# 只有目標寫明「可以提出需求沒寫的做法」的章節（例如「可能的做法」）才能提建議
+_IDEA_RULES = [
+    "這是構想文件，想法還沒確定。整理需求裡的想法，不要寫細節規格：不寫欄位、API、畫面細節，也不要寫 FR、BR、AC 這類編號需求。",
+    "需求沒提到的事實（數字、既有系統、使用者人數、調查結果）不要編造。資訊不夠的章節就寫短一點，不清楚的地方標註「（待確認）」，必要的假設標註「（假設）」。",
+    "只有章節目標寫明「可以提出需求沒寫的做法」時，才能提出需求沒寫的做法，並用「建議…」的寫法、寫出理由。其他章節只整理需求裡有的內容。",
+]
+
+
+def _style_rules(template: DocTemplate) -> list[str]:
+    if template.idea:
+        return _IDEA_RULES
+    return _ADVICE_RULES if template.advice else _SPEC_RULES
 
 
 def _rules(template: DocTemplate, *extra: str) -> str:
-    rules = [*_COMMON_RULES, *(_ADVICE_RULES if template.advice else _SPEC_RULES), *extra]
+    rules = [*_COMMON_RULES, *_style_rules(template), *extra]
     return "寫作規則：\n" + "\n".join(f"{i}. {r}" for i, r in enumerate(rules, start=1))
 
 
 def _doc_noun(template: DocTemplate) -> str:
-    return f"「{template.name}」文件" if template.advice else "系統分析文件"
+    return f"「{template.name}」文件" if template.advice or template.idea else "系統分析文件"
 
 
 def _with_role(prefix: str, template: DocTemplate) -> str:
@@ -142,11 +155,14 @@ def planner_messages(inp: RunInput) -> list[dict[str, str]]:
         else "4. 這次不畫圖，每個章節的 diagrams 都給空陣列。"
     )
     tpl = inp.template
-    advice_rule = (
-        "\n8. 這是建議文件：key_points 寫這一節要給的具體建議方向，要跟需求裡的使用者、工作或資料有關。"
-        if tpl.advice
-        else ""
-    )
+    advice_rule = ""
+    if tpl.advice:
+        advice_rule = "\n8. 這是建議文件：key_points 寫這一節要給的具體建議方向，要跟需求裡的使用者、工作或資料有關。"
+    elif tpl.idea:
+        advice_rule = (
+            "\n8. 這是構想文件：章節少一點、內容短一點，不要規劃欄位、API、畫面細節這類細節規格的章節。"
+            "想法還不清楚的地方，多寫進 open_questions。"
+        )
     system = f"""你是{_with_role("資深", tpl)}，現在要「規劃」一份{_doc_noun(tpl)}的大綱。你只負責規劃，不用寫內文。
 
 規劃規則：
@@ -464,6 +480,29 @@ def advice_reviewer_system(template: DocTemplate) -> str:
 9. 使用繁體中文。只輸出 JSON，不要縮排和多餘的空白。"""
 
 
+def idea_reviewer_system(template: DocTemplate) -> str:
+    """構想文件的審查：重點是問題講清楚、假設列出來、沒有編造，而且沒有寫成細節規格。"""
+    return f"""你是嚴格但務實的審查員，{_with_role("熟悉", template)}的工作。這是一份構想文件，想法還沒確定，請對照「需求內容」和「文件大綱」審查「文件草稿」。
+
+檢查重點：
+1. 要解決的問題、影響的對象有沒有講清楚。
+2. 需求裡的每一項重點，文件有沒有寫到。漏掉的也當成問題，section_id 寫應該補在哪一節。
+3. 有沒有編造需求沒提到的事實（數字、既有系統、使用者人數、調查結果），又沒有標註（假設）。
+4. 構想成立需要的假設、還不清楚的地方，有沒有列出來。
+5. 有沒有寫成細節規格（欄位、API、FR 編號需求）。構想文件不需要這些，寫了算問題。
+6. 目標寫明可以提出做法的章節（例如「可能的做法」）提出需求沒寫的做法是正常的，不算編造；但要寫出優缺點和理由。
+
+規則：
+1. 只提出會影響構想是否清楚、正確的問題，不要挑剔用字和文筆。最多列 6 個最重要的問題。
+2. 每個問題寫 section_id（例如 S2）、severity、problem（問題是什麼）、suggestion（具體怎麼改）。
+3. severity：high 是跟需求矛盾、編造事實或漏掉重要需求；medium 是問題沒講清楚、假設沒列出來或寫成細節規格；low 是小建議。
+4. 沒有明顯問題時 issues 給空陣列，不要硬找問題。
+5. 構想文件本來就比較短，不要要求補上需求沒寫的細節、條件或數字。
+6. 需求內容裡的條列編號（1、2、3…）只是順序，不要拿來對照。
+7. summary 用一兩句話總結文件品質；score 是 1 到 10 分。
+8. 使用繁體中文。只輸出 JSON，不要縮排和多餘的空白。"""
+
+
 def reviewer_messages(
     inp: RunInput, plan: Plan, draft_text: str, check_notes: list[str], partial: bool = False
 ) -> list[dict[str, str]]:
@@ -490,7 +529,12 @@ def reviewer_messages(
 {draft_text}
 
 請輸出審查結果 JSON。"""
-    system = advice_reviewer_system(inp.template) if inp.template.advice else REVIEWER_SYSTEM
+    if inp.template.idea:
+        system = idea_reviewer_system(inp.template)
+    elif inp.template.advice:
+        system = advice_reviewer_system(inp.template)
+    else:
+        system = REVIEWER_SYSTEM
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 

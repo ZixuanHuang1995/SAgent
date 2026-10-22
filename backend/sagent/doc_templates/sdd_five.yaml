@@ -2,6 +2,7 @@ key: sdd_five
 name: SDD 功能規格（五節體例）
 description: 依 Requirement → Decision → Constraint → Rule → Verification 五節撰寫，適合 AI 輔助開發流程使用。
 order: 6
+category: feature
 sections:
   - heading: Requirement 需求
     goal: 說明要做什麼、為什麼要做、誰會使用。逐條列出需求，編號 R-01、R-02…。

@@ -2,6 +2,7 @@ key: use_case
 name: 使用案例規格
 description: 用使用案例描述角色和系統的互動，包含主要流程、替代流程和例外流程。
 order: 2
+category: feature
 sections:
   - heading: 概述
     goal: 說明這組使用案例的目的和範圍。

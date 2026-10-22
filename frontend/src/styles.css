@@ -2119,3 +2119,73 @@ kbd {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* 新增 Spec：類型卡片 */
+.mt-0 {
+  margin-top: 0;
+}
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+.category-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px 14px;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.category-card:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+.category-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.category-card:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.category-card-desc {
+  line-height: 1.5;
+}
+
+/* 側邊欄：類型小標籤 */
+.tree-spec-cat {
+  flex: none;
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  color: var(--text-2);
+}
+.tree-spec-cat.cat-idea {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.tree-spec-cat.cat-design {
+  background: var(--planner-soft);
+  color: var(--planner);
+}
+.tree-spec-cat.cat-change {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+/* Spec 頁：來源和轉出的 Spec */
+.spec-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}

@@ -78,6 +78,8 @@ class SpecCreate(BaseModel):
     # 內容來源：blank 空白、template 依範本骨架、content 使用 content 欄位（例如匯入）
     init: Literal["blank", "template", "content", "none"] = "template"
     content: str | None = None
+    # 從哪一份 Spec 轉過來的（例如構想 → 功能規格），要在同一個專案
+    source_spec_id: int | None = None
 
 
 class SpecUpdate(BaseModel):
@@ -96,6 +98,7 @@ class SpecOut(ORMModel):
     status: str
     head_version_no: int
     archived: bool
+    source_spec_id: int | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -118,10 +121,20 @@ class VersionDetail(VersionMeta):
     content: str
 
 
+class SpecLink(ORMModel):
+    id: int
+    title: str
+    doc_type: str
+    archived: bool
+
+
 class SpecDetail(SpecOut):
     content: str
     head: VersionMeta | None
     active_run_id: int | None
+    # 來源 Spec，以及從這份 Spec 轉出去的 Spec
+    source_spec: SpecLink | None = None
+    derived_specs: list[SpecLink] = []
 
 
 class ContentSave(BaseModel):

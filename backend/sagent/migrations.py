@@ -51,5 +51,16 @@ def _add_version_line_stats(engine: Engine) -> None:
                 previous = content
 
 
+def _add_spec_source(engine: Engine) -> None:
+    """specs 加上 source_spec_id（從哪一份 Spec 轉過來的）。"""
+    with engine.begin() as conn:
+        if "source_spec_id" not in _columns(conn, "specs"):
+            conn.execute(
+                text("ALTER TABLE specs ADD COLUMN source_spec_id INTEGER REFERENCES specs(id) ON DELETE SET NULL")
+            )
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_specs_source_spec_id ON specs (source_spec_id)"))
+
+
 def migrate(engine: Engine) -> None:
     _add_version_line_stats(engine)
+    _add_spec_source(engine)

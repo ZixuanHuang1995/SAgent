@@ -2,8 +2,9 @@ key: uiux_advice
 name: UI/UX 設計建議
 description: 依需求提出畫面和操作上的建議，每條建議都寫出理由和優先順序。這種文件不畫圖。
 order: 7
+category: feature
 role: UI/UX 設計師
-advice: true
+style: advice
 allow_diagrams: false
 sections:
   - heading: 使用者與使用情境

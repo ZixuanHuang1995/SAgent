@@ -301,3 +301,39 @@ def test_spec_doc_keeps_spec_rules():
     writer = [c["messages"][0]["content"] for c in llm.calls if ":section:" in c["purpose"]]
     assert all(s.startswith("你是系統分析師") and "只根據需求內容撰寫" in s for s in writer)
     assert not any("這是建議文件" in s for s in writer)
+
+
+def test_template_categories_and_styles(tmp_path):
+    templates = load_templates()
+    assert templates["idea_proposal"].category == "idea" and templates["idea_proposal"].idea
+    assert templates["change_request"].category == "change"
+    assert templates["api_spec"].category == "design"
+    assert templates["functional_spec"].category == "feature" and templates["functional_spec"].style == "spec"
+    # 預設範本還是功能規格書
+    assert next(iter(templates)) == "functional_spec"
+    # 自訂範本：舊寫法 advice: true 仍然有效；沒寫或寫錯類型歸到「功能」
+    (tmp_path / "old.yaml").write_text(
+        "key: old\nname: 舊範本\nadvice: true\ncategory: nope\nsections:\n  - heading: 一\n", encoding="utf-8"
+    )
+    old = load_templates(tmp_path)["old"]
+    assert old.advice and old.style == "advice" and old.category == "feature"
+    assert old.max_diagrams is None
+
+
+def test_idea_doc_uses_idea_rules_and_one_diagram():
+    llm = FakeLLM()
+    inp = make_input(template="idea_proposal", diagrams=True, max_diagrams=4)
+    result, _ = run(llm, inp)
+    assert inp.options.max_diagrams == 1
+    assert len(extract_diagrams(result.markdown)) <= 1
+
+    planner_system = llm.calls[0]["messages"][0]["content"]
+    assert "「構想提案」文件" in planner_system and "這是構想文件" in planner_system
+    writer = [c["messages"][0]["content"] for c in llm.calls if ":section:" in c["purpose"]]
+    assert writer and all("這是構想文件" in s and "只根據需求內容撰寫" not in s for s in writer)
+    reviewer = [c["messages"][0]["content"] for c in llm.calls if c["purpose"].startswith("reviewer")]
+    assert reviewer and all("這是一份構想文件" in s for s in reviewer)
+    # 可能的做法這一節的目標允許提出建議
+    user = next(c["messages"][1]["content"] for c in llm.calls if "第 4 節：可能的做法" in c["messages"][1]["content"])
+    assert "可以提出需求沒寫的做法" in user
+    assert "FR-" not in result.markdown

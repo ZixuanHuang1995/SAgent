@@ -190,3 +190,49 @@ def test_migration_backfills_line_stats(cfg, client, project):
     engine.dispose()
     assert all(r[1] is not None and r[2] is not None for r in rows)
     assert tuple(rows[-1]) == (3, 2, 1)
+
+
+def test_spec_source_link(client, project):
+    pid = project["project"]["id"]
+    idea = _create_spec(client, project, title="點餐構想", doc_type="idea_proposal")
+    feature = _create_spec(client, project, title="點餐功能", source_spec_id=idea["id"], init="none")
+    assert feature["source_spec_id"] == idea["id"]
+    assert feature["source_spec"]["title"] == "點餐構想"
+    detail = client.get(f"/api/specs/{idea['id']}").json()
+    assert [d["id"] for d in detail["derived_specs"]] == [feature["id"]]
+    assert detail["source_spec"] is None
+
+    other = client.post("/api/projects", json={"name": "別的專案"}).json()
+    resp = client.post(
+        f"/api/projects/{other['id']}/specs",
+        json={"phase_id": other["phases"][0]["id"], "title": "x", "source_spec_id": idea["id"]},
+    )
+    assert resp.status_code == 400
+    assert client.get(f"/api/projects/{pid}/specs").status_code == 200
+
+
+def test_migration_adds_source_spec_id(tmp_path):
+    """舊資料庫的 specs 沒有 source_spec_id：啟動時要補上。"""
+    from sqlalchemy import create_engine, text
+
+    from sagent.migrations import migrate
+
+    engine = create_engine(f"sqlite:///{(tmp_path / 'old.db').as_posix()}")
+    with engine.begin() as conn:
+        conn.execute(text("CREATE TABLE specs (id INTEGER PRIMARY KEY, title TEXT)"))
+        conn.execute(text("CREATE TABLE spec_versions (id INTEGER PRIMARY KEY, spec_id INTEGER, version_no INTEGER, content TEXT)"))
+        conn.execute(text("INSERT INTO specs (id, title) VALUES (1, '舊文件')"))
+    migrate(engine)
+    migrate(engine)  # 重複執行不會出錯
+    with engine.begin() as conn:
+        row = conn.execute(text("SELECT source_spec_id FROM specs WHERE id = 1")).one()
+    engine.dispose()
+    assert row[0] is None
+
+
+def test_template_categories_api(client):
+    cats = client.get("/api/agent/template-categories").json()
+    assert [c["key"] for c in cats] == ["idea", "feature", "design", "change"]
+    templates = {t["key"]: t for t in client.get("/api/agent/templates").json()}
+    assert templates["idea_proposal"]["category"] == "idea"
+    assert templates["idea_proposal"]["style"] == "idea"

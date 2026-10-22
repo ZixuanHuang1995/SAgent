@@ -2,6 +2,7 @@ key: functional_spec
 name: 功能規格書
 description: 說明一個功能要做什麼、怎麼運作、有哪些規則，以及怎麼驗收。
 order: 1
+category: feature
 sections:
   - heading: 目的與範圍
     goal: 說明這個功能要解決什麼問題，範圍包含什麼、不包含什麼。

@@ -2,6 +2,7 @@ key: api_spec
 name: API 規格
 description: 說明 API 的端點、參數、回應格式、錯誤碼和呼叫流程。
 order: 5
+category: design
 sections:
   - heading: 概述
     goal: 說明 API 的用途、使用對象、版本和 Base URL。

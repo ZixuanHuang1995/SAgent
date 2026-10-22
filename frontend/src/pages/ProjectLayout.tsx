@@ -6,9 +6,9 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'reac
 import { QuickSwitcher } from '../components/QuickSwitcher'
 import { useMediaQuery, usePersistent } from '../hooks/layout'
 import { api, type Phase, type Spec } from '../api'
-import { SPEC_STATUS } from '../format'
-import { keys, useProjectTree, useTemplates } from '../queries'
-import { ConfirmDialog, Empty, errorText, Field, Modal, Skeleton, Spinner, useToast } from '../components/ui'
+import { CATEGORY_TONE, SPEC_STATUS } from '../format'
+import { keys, useProjectTree, useTemplateCategories, useTemplates } from '../queries'
+import { Badge, ConfirmDialog, Empty, errorText, Field, Modal, Skeleton, Spinner, useToast } from '../components/ui'
 import { Icon, type IconName } from '../components/icons'
 
 const PROJECT_NAV: { to: string; icon: IconName; label: string }[] = [
@@ -281,39 +281,68 @@ function ProjectSidebar(props: {
 }
 
 function SpecLink({ projectId, spec }: { projectId: number; spec: Spec }) {
+  const templates = useTemplates()
+  const categories = useTemplateCategories()
+  // 「功能」是大多數，不標；其他類型（構想、技術設計、變更）在標題前加小標籤
+  const category = templates.data?.find((t) => t.key === spec.doc_type)?.category
+  const tag = category && category !== 'feature' ? categories.data?.find((c) => c.key === category)?.name : undefined
   return (
     <NavLink to={`/p/${projectId}/s/${spec.id}`} className="tree-spec" title={spec.title}>
       <span className={`status-dot status-${spec.status}`} title={SPEC_STATUS[spec.status]} />
+      {tag && <span className={`tree-spec-cat cat-${category}`}>{tag}</span>}
       <span className="tree-spec-title">{spec.title}</span>
       <span className="tree-spec-ver">{spec.head_version_no > 0 ? `v${spec.head_version_no}` : '—'}</span>
     </NavLink>
   )
 }
 
-export function NewSpecDialog(props: { projectId: number; phases: Phase[]; phaseId: number | null; onClose: () => void }) {
+/** 從另一份 Spec 轉過來時（例如構想 → 功能規格）帶入的內容 */
+export interface NewSpecPreset {
+  category: string
+  title: string
+  requirement: string
+  source: { id: number; title: string }
+}
+
+export function NewSpecDialog(props: {
+  projectId: number
+  phases: Phase[]
+  phaseId: number | null
+  preset?: NewSpecPreset
+  onClose: () => void
+}) {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const toast = useToast()
   const templates = useTemplates()
-  const [title, setTitle] = useState('')
+  const categories = useTemplateCategories()
+  const preset = props.preset
+  // 第一步選類型，第二步填其他欄位。從其他 Spec 轉過來時直接到第二步
+  const [category, setCategory] = useState<string | null>(preset?.category ?? null)
+  const [title, setTitle] = useState(preset?.title ?? '')
   const [phaseId, setPhaseId] = useState(props.phaseId ?? props.phases[0]?.id)
-  const [docType, setDocType] = useState('functional_spec')
+  const [docType, setDocType] = useState('')
   const [init, setInit] = useState<'template' | 'blank' | 'content' | 'ai'>('ai')
   const [content, setContent] = useState('')
-  const [requirement, setRequirement] = useState('')
+  const [requirement, setRequirement] = useState(preset?.requirement ?? '')
+
+  const inCategory = (templates.data ?? []).filter((t) => t.category === category)
+  // 換類型時，文件類型改成這個類型的第一個
+  const template = inCategory.find((t) => t.key === docType) ?? inCategory[0]
 
   const create = useMutation({
     mutationFn: async () => {
       const spec = await api.createSpec(props.projectId, {
         phase_id: phaseId!,
         title,
-        doc_type: docType,
+        doc_type: template!.key,
         init: init === 'ai' ? 'none' : init,
         content: init === 'content' ? content : undefined,
+        source_spec_id: preset?.source.id ?? null,
       })
       if (init === 'ai') {
         try {
-          await api.createRun({ spec_id: spec.id, mode: 'draft', requirement, doc_type: docType })
+          await api.createRun({ spec_id: spec.id, mode: 'draft', requirement, doc_type: template!.key })
         } catch (e) {
           toast(`Spec 已建立，但 AI 工作沒有啟動：${errorText(e)}`, 'error')
         }
@@ -323,22 +352,65 @@ export function NewSpecDialog(props: { projectId: number; phases: Phase[]; phase
     onSuccess: (spec) => {
       qc.invalidateQueries({ queryKey: ['tree', props.projectId] })
       qc.invalidateQueries({ queryKey: keys.projects })
+      if (preset) qc.invalidateQueries({ queryKey: keys.spec(preset.source.id) })
       props.onClose()
       navigate(`/p/${props.projectId}/s/${spec.id}`)
     },
     onError: (e) => toast(errorText(e), 'error'),
   })
 
-  const template = templates.data?.find((t) => t.key === docType)
-  const ready = title.trim() && phaseId && (init !== 'ai' || requirement.trim())
+  const ready = title.trim() && phaseId && template && (init !== 'ai' || requirement.trim())
+  const current = categories.data?.find((c) => c.key === category)
+
+  if (!category) {
+    return (
+      <Modal
+        title="新增 Spec：先選類型"
+        onClose={props.onClose}
+        wide
+        footer={
+          <button className="btn" onClick={props.onClose}>
+            取消
+          </button>
+        }
+      >
+        <p className="muted small mt-0">不同類型的文件，章節和寫法不一樣。選最接近你現在狀況的一種。</p>
+        {categories.isLoading && <Spinner />}
+        <div className="category-grid">
+          {categories.data?.map((c) => {
+            const names = (templates.data ?? []).filter((t) => t.category === c.key).map((t) => t.name)
+            return (
+              <button key={c.key} type="button" className="category-card" disabled={names.length === 0} onClick={() => setCategory(c.key)}>
+                <span className="category-card-name">
+                  <Badge tone={CATEGORY_TONE[c.key]}>{c.name}</Badge>
+                </span>
+                <span className="category-card-desc">{c.description}</span>
+                <span className="category-card-docs muted small">{names.length ? names.join('、') : '沒有這個類型的文件範本'}</span>
+              </button>
+            )
+          })}
+        </div>
+      </Modal>
+    )
+  }
 
   return (
     <Modal
-      title="新增 Spec"
+      title={
+        <>
+          新增 Spec <Badge tone={CATEGORY_TONE[category]}>{current?.name ?? category}</Badge>
+        </>
+      }
       onClose={props.onClose}
       wide
       footer={
         <>
+          {!preset && (
+            <button className="btn" onClick={() => setCategory(null)}>
+              ← 換類型
+            </button>
+          )}
+          <span className="spacer" />
           <button className="btn" onClick={props.onClose}>
             取消
           </button>
@@ -348,6 +420,11 @@ export function NewSpecDialog(props: { projectId: number; phases: Phase[]; phase
         </>
       }
     >
+      {preset && (
+        <p className="muted small mt-0">
+          從「{preset.source.title}」轉過來。需求內容已經帶入那份文件目前的內容，新的 Spec 會記錄來源。
+        </p>
+      )}
       <div className="form-row">
         <Field label="標題">
           <input className="input" autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="例如：請假申請功能" />
@@ -363,8 +440,8 @@ export function NewSpecDialog(props: { projectId: number; phases: Phase[]; phase
         </Field>
       </div>
       <Field label="文件類型" hint={template?.description}>
-        <select className="input" value={docType} onChange={(e) => setDocType(e.target.value)}>
-          {templates.data?.map((t) => (
+        <select className="input" value={template?.key ?? ''} onChange={(e) => setDocType(e.target.value)}>
+          {inCategory.map((t) => (
             <option key={t.key} value={t.key}>
               {t.name}
             </option>
@@ -388,7 +465,14 @@ export function NewSpecDialog(props: { projectId: number; phases: Phase[]; phase
         </div>
       </Field>
       {init === 'ai' && (
-        <Field label="需求內容" hint="可以貼會議紀錄、客戶需求、條列重點。AI 會依「文件類型」的章節規劃並撰寫。">
+        <Field
+          label="需求內容"
+          hint={
+            category === 'idea'
+              ? '寫下你的想法就好，幾句話也可以：想解決什麼問題、給誰用、大概想怎麼做。AI 會整理成構想提案，不清楚的地方列成待確認事項。'
+              : '可以貼會議紀錄、客戶需求、條列重點。AI 會依「文件類型」的章節規劃並撰寫。'
+          }
+        >
           <textarea className="input textarea" rows={8} value={requirement} onChange={(e) => setRequirement(e.target.value)} />
         </Field>
       )}

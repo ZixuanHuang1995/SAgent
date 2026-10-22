@@ -11,8 +11,9 @@ import { MarkdownView } from '../components/MarkdownView'
 import { VersionPanel } from '../components/VersionPanel'
 import { Badge, ConfirmDialog, Empty, errorText, Skeleton, Spinner, Splitter, useToast } from '../components/ui'
 import { useElementWidth, useMediaQuery, usePersistent, usePersistentNumber } from '../hooks/layout'
-import { extractOutline, slugify, SPEC_STATUS, VERSION_SOURCE } from '../format'
-import { keys, useDiagramKinds, useHealth, useProjectTree, useSpec, useTemplates } from '../queries'
+import { CATEGORY_TONE, extractOutline, slugify, SPEC_STATUS, VERSION_SOURCE } from '../format'
+import { keys, useDiagramKinds, useHealth, useProjectTree, useSpec, useTemplateCategories, useTemplates } from '../queries'
+import { NewSpecDialog } from './ProjectLayout'
 import { Icon, type IconName } from '../components/icons'
 
 type ViewMode = 'edit' | 'split' | 'preview'
@@ -53,6 +54,7 @@ export function SpecPage() {
   const spec = useSpec(specId)
   const tree = useProjectTree(projectId)
   const templates = useTemplates()
+  const categories = useTemplateCategories()
   const qc = useQueryClient()
   const toast = useToast()
 
@@ -65,6 +67,8 @@ export function SpecPage() {
   const [saving, setSaving] = useState(false)
   const [conflict, setConflict] = useState<string | null>(null)
   const [diff, setDiff] = useState<{ from?: number; to?: number } | null>(null)
+  // 構想 → 功能規格：開新增 Spec 對話框，帶入這份文件的內容
+  const [converting, setConverting] = useState(false)
   const [savedMode, setMode] = usePersistent<ViewMode>('sagent:view', window.innerWidth > 1280 ? 'split' : 'preview')
   const [tab, setTab] = usePersistent<PanelTab>('sagent:panel', 'agent')
   const [panelOpen, setPanelOpen] = useState(true)
@@ -192,6 +196,7 @@ export function SpecPage() {
   const outline = useMemo(() => extractOutline(content), [content])
   const phases = tree.data?.phases ?? []
   const template = templates.data?.find((t) => t.key === data?.doc_type)
+  const category = categories.data?.find((c) => c.key === template?.category)
 
   const updateMeta = async (body: { title?: string; phase_id?: number; status?: SpecStatus }) => {
     try {
@@ -391,7 +396,9 @@ export function SpecPage() {
         <div className="spec-meta-row">
           <details className="menu">
             <summary className="btn btn-sm meta-summary" title="修改階段、狀態">
-              <span className="muted">屬性</span> {phases.find((p) => p.id === data.phase_id)?.name ?? ''}・{template?.name ?? data.doc_type} ▾
+              <span className="muted">屬性</span> {phases.find((p) => p.id === data.phase_id)?.name ?? ''}・
+              {category ? `${category.name}・` : ''}
+              {template?.name ?? data.doc_type} ▾
             </summary>
             <div className="menu-list props-menu">
               <label className="field">
@@ -416,11 +423,48 @@ export function SpecPage() {
               </label>
               <div className="field">
                 <span className="field-label">文件類型</span>
-                <span>{template?.name ?? data.doc_type}</span>
+                <span>
+                  {category && <Badge tone={CATEGORY_TONE[category.key]}>{category.name}</Badge>} {template?.name ?? data.doc_type}
+                </span>
                 <span className="field-hint">建立後不能改。AI 撰寫時會照這個類型的範本規劃章節。</span>
               </div>
             </div>
           </details>
+          {(data.source_spec || data.derived_specs.length > 0) && (
+            <span className="spec-links small">
+              {data.source_spec && (
+                <span>
+                  <span className="muted">來源：</span>
+                  <Link to={`/p/${projectId}/s/${data.source_spec.id}`}>{data.source_spec.title}</Link>
+                </span>
+              )}
+              {data.derived_specs.length > 0 && (
+                <span>
+                  <span className="muted">已轉成：</span>
+                  {data.derived_specs.map((d, i) => (
+                    <span key={d.id}>
+                      {i > 0 && '、'}
+                      <Link to={`/p/${projectId}/s/${d.id}`}>{d.title}</Link>
+                    </span>
+                  ))}
+                </span>
+              )}
+            </span>
+          )}
+          {template?.category === 'idea' && !data.archived && (
+            <button
+              className="btn btn-sm"
+              disabled={data.head_version_no === 0 || !!data.active_run_id}
+              title={
+                data.head_version_no === 0
+                  ? '構想文件還沒有內容'
+                  : '確定要做之後，用這份構想的內容當需求，建立一份功能規格（會另外建立新的 Spec，這份構想保留不動）'
+              }
+              onClick={() => setConverting(true)}
+            >
+              轉成功能規格
+            </button>
+          )}
           <span className="spacer" />
           {!data.archived && diagramKinds.data && (
             <details className="menu">
@@ -628,6 +672,20 @@ export function SpecPage() {
       </div>
 
       {diff && <DiffModal specId={specId} from={diff.from} to={diff.to} onClose={() => setDiff(null)} />}
+      {converting && (
+        <NewSpecDialog
+          projectId={projectId}
+          phases={phases}
+          phaseId={data.phase_id}
+          preset={{
+            category: 'feature',
+            title: data.title.replace(/構想(提案)?/g, '').trim() || data.title,
+            requirement: data.content,
+            source: { id: data.id, title: data.title },
+          }}
+          onClose={() => setConverting(false)}
+        />
+      )}
       {archiving && (
         <ConfirmDialog
           title="封存 Spec"
