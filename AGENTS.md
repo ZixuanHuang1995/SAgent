@@ -22,6 +22,7 @@
 | 後端 lint | `cd backend; uv run ruff check sagent tests ../scripts` |
 | 前端型別檢查 | `cd frontend; npm run typecheck` |
 | 前端打包 | `cd frontend; npm run build`（會先跑型別檢查） |
+| 重新產生示範資料（真模型，7～8 小時） | `uv run --project backend python scripts/seed_demo.py --data-dir data-demo-build`，確認後改名成 `data-demo` |
 | 用真模型跑一次 AI 流程 | `uv run --project backend python scripts/run_pipeline.py --requirement-file 需求.txt --out 輸出.md` |
 
 ## 改完程式要做的檢查
@@ -108,7 +109,7 @@
 - 這台沒有 GPU，Ollama 只能用 CPU。不要隨便跑真模型。
 - 這台沒有 Java，PlantUML 還沒設定。
 - 這是地端系統，資料不能送到外部服務（例如公開的 PlantUML 伺服器）。
-- `data/` 是使用者的正式資料，不要刪改。測試和示範用暫存目錄或 `data-demo/`。
+- `data/` 是使用者的正式資料，不要刪改。測試和示範用暫存目錄或 `data-demo/`。`data-demo/` 是 `scripts/seed_demo.py` 用真模型產生的，花了好幾個小時，不要隨便覆蓋；畫面上測試新增的資料不影響。
 - 8765 埠常被使用者自己開的 SAgent 占用，預覽用 8766。
 - `index.html` 回應設定為 no-cache，`assets/` 檔名有雜湊。前端更新後，使用者第一次開頁面可能要按 Ctrl+F5。
 

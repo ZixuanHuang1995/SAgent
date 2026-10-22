@@ -52,6 +52,14 @@ uv run --project backend sagent serve
 
 `--data-dir` 讓示範資料跟正式資料分開。
 
+`data-demo/` 的示範資料是用 `scripts/seed_demo.py` 產生的：一個完整的「設備報修系統」專案，四種類型、九種文件類型都有，AI 撰寫的部分是真的地端模型（qwen3.6:35b-a3b）寫的。也包含構想轉功能規格、AI 修訂、手動編輯、版本標籤、還原、封存、兩個基準版本。要重新產生：
+
+```powershell
+uv run --project backend python scripts/seed_demo.py --data-dir data-demo-build
+```
+
+在 CPU 上大約要 7～8 小時。中途停掉再跑一次，會從沒做完的地方繼續。產生完確認沒問題，再把 `data-demo-build` 改名成 `data-demo`。加 `--fake` 可以用假模型幾十秒跑完，只檢查流程。
+
 ## 使用流程
 
 1. 建立專案。預設有「需求分析」「系統設計」「詳細設計」三個階段，可以改名、增減、調整順序。
