@@ -209,7 +209,7 @@ function ProjectSidebar(props: {
                     >
                       <Icon name="plus" size={14} />
                     </button>
-                    <details className="menu">
+                    <details className="menu menu-float">
                       <summary className="icon-btn" title="更多" aria-label={`「${phase.name}」的其他操作`}>
                         <Icon name="more" size={14} />
                       </summary>
