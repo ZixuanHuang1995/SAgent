@@ -93,9 +93,11 @@
 
 - 模型是在 CPU 上跑的 8B 左右小模型，又慢又容易出錯。改提示詞或流程前，先讀 `docs/architecture.md` 第 4.2 節「為了小模型做的設計」。
 - 不要用 LangChain 之類的框架，代理是自己實作的。
-- 文件的寫作規則有五種，由範本的 `style` 決定：`spec` 規格文件（只寫需求有的內容）、`advice` 建議類文件（例如 UI/UX 設計建議，可以提出需求沒寫的做法）、`idea` 構想文件（不寫細節規格，只有「可能的做法」一節可以提建議）、`algorithm` 演算法設計文件（問題的事實照需求，解法、虛擬碼由 AI 設計）、`experiment` 實驗設計文件（評估對象和判斷標準照需求，實驗方法由 AI 設計，不能寫實驗結果）。每種的寫作規則不同，見 `docs/architecture.md` 第 4.6、4.7、4.9 節。改其中一種的寫作規則時，不要動到其他種。
+- 文件的寫作規則有六種，由範本的 `style` 決定：`spec` 規格文件（只寫需求有的內容）、`advice` 建議類文件（例如 UI/UX 設計建議，可以提出需求沒寫的做法）、`idea` 構想文件（不寫細節規格，有使用者故事和粗略的驗收條件，只有「可能的做法」一節可以提建議）、`decision` 技術決策文件（限制和評估標準照需求，方案可以由 AI 提出，不能編造數字）、`algorithm` 演算法設計文件（問題的事實照需求，解法、虛擬碼由 AI 設計）、`experiment` 實驗設計文件（評估對象和判斷標準照需求，實驗方法由 AI 設計，不能寫實驗結果）。每種的寫作規則不同，見 `docs/architecture.md` 第 4.6、4.7、4.9 節。改其中一種的寫作規則時，不要動到其他種。
 - Reviewer 只找格式、邏輯錯誤（交給 Writer 修）和需要人工覆核的地方（只列給使用者），不評論完整度、不打分數。格式問題盡量用程式檢查。各種文件共用審查提示詞 `reviewer_system()`，見 `docs/architecture.md` 第 4.8 節。
-- 新增 Spec 時先選類型（範本的 `category`：idea、feature、design、algorithm、change），類型清單在 `doc_templates.py` 的 `CATEGORIES`。新增內建範本要寫 `category`。
+- 新增 Spec 時先選類型（範本的 `category`：idea、feature、design、algorithm、change），類型清單在 `doc_templates.py` 的 `CATEGORIES`。新增內建範本要寫 `category`。實驗設計屬於 Technical（驗證技術決策用），不是 Algorithm。同一類型裡範本照 `order` 排，第一個是新增時的預設。
+- 範本章節要編號時寫 `ids: FR`，不要把「編號 FR-01」寫在 `goal` 裡（舊寫法還認得，但內建範本不要用）。結構重要的範本設 `fixed_sections: true`，章節名稱、順序、目標由程式照範本套回去。見 `docs/architecture.md` 第 4.10 節。
+- 改了範本的章節，`scripts/demo_content/` 對應的內容檔也要跟著改，再跑 `check_demo_content.py`；章節固定的範本，內容檔少一節就會失敗。
 - 編輯器「插入圖表」選單的骨架在 `services/diagram_snippets.py`，跟 AI 的圖表種類分開。只想讓選單多一種圖時加在這裡，不要加進 `diagram_kinds.py` 的 `KINDS`（會寫進 Planner 的提示詞，種類越多小模型越容易選錯）。
 - 範本 `allow_diagrams: false` 表示不畫圖，`api/agent.py` 建立工作時和 `pipeline.py` 開始時都會強制關掉畫圖。
 - Mermaid 12 的 `usecase-beta` 沒有官方文件，語法是從套件的解析器反推、再用 `mermaid-validate.mjs` 驗證的。

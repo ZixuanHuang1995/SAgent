@@ -520,6 +520,9 @@ select.input {
   background: var(--surface-3);
   color: var(--text-2);
 }
+.badge-category {
+  font-weight: var(--fw-bold);
+}
 .badge-blue {
   background: var(--info-soft);
   color: var(--writer);
@@ -1124,7 +1127,11 @@ details.card[open] > summary::before {
   flex-direction: column;
   align-items: center;
   gap: 4px;
+  min-height: 100%;
   padding: 10px 0;
+}
+.rail-expand {
+  margin-top: auto;
 }
 .rail-btn {
   width: 34px;
@@ -1164,14 +1171,6 @@ details.card[open] > summary::before {
   inset: 0;
   z-index: 35;
   background: rgba(10, 14, 22, 0.35);
-}
-.sidebar-nav-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.sidebar-nav-row > a {
-  flex: 1;
 }
 .sidebar-inner {
   display: flex;
@@ -1280,6 +1279,9 @@ details.card[open] > summary::before {
   margin-top: 10px;
   border-top: 1px solid var(--border);
   align-items: center;
+}
+.sidebar-collapse {
+  margin-left: auto;
 }
 
 .workspace-main {
@@ -2324,6 +2326,7 @@ kbd {
 .tree-spec-cat {
   flex: none;
   font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
   line-height: 1;
   padding: 2px 5px;
   border-radius: 4px;

@@ -176,13 +176,15 @@ export function SettingsPage() {
             <details key={t.key} className="template-item">
               <summary>
                 <strong>{t.name}</strong> <span className="muted small">{t.key}</span> {!t.builtin && <Badge tone="violet">自訂</Badge>}{' '}
-                {t.advice && <Badge tone="blue">建議類</Badge>} {!t.allow_diagrams && <Badge>不畫圖</Badge>}
+                {t.advice && <Badge tone="blue">建議類</Badge>} {t.fixed_sections && <Badge>固定章節</Badge>}{' '}
+                {!t.allow_diagrams && <Badge>不畫圖</Badge>}
               </summary>
               <p className="muted small">{t.description}</p>
               <ol className="small">
                 {t.sections.map((s) => (
                   <li key={s.heading}>
                     <b>{s.heading}</b>：{s.goal}
+                    {s.ids && <span className="muted">（編號 {s.ids}-01）</span>}
                     {s.diagrams.length > 0 && <span className="muted">（圖：{s.diagrams.map((d) => KIND_NAMES[d] ?? d).join('、')}）</span>}
                   </li>
                 ))}

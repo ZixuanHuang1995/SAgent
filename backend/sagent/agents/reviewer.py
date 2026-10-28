@@ -80,6 +80,11 @@ def undefined_ids(draft: Draft) -> dict[str, list[str]]:
     return result
 
 
+def has_item_ids(body: str, prefix: str) -> bool:
+    """這一節有沒有定義範本指定的編號（例如功能需求一節要有 FR-01）。"""
+    return any(d.split("-")[0] == prefix for d in _ID_DEF_RE.findall(_without_code(body)))
+
+
 def static_checks(plan: Plan, draft: Draft) -> list[Issue]:
     issues: list[Issue] = []
     undefined = undefined_ids(draft)
@@ -102,6 +107,17 @@ def static_checks(plan: Plan, draft: Draft) -> list[Issue]:
                         diagram_index=idx,
                     )
                 )
+        if sec_plan is not None and sec_plan.ids and not has_item_ids(sec.body, sec_plan.ids):
+            p = sec_plan.ids
+            issues.append(
+                Issue(
+                    sec.id,
+                    "medium",
+                    f"這一節的項目要用 {p}-01、{p}-02… 編號，但沒有找到",
+                    f"每個項目的開頭（條列開頭或表格第一欄）加上編號 {p}-01、{p}-02…",
+                    source="check",
+                )
+            )
         for problem in table_problems(sec.body):
             issues.append(Issue(sec.id, "medium", problem, "補齊或合併欄位，讓每一列的欄位數一致", source="check"))
         if sec.id in undefined:

@@ -10,9 +10,9 @@ import { DiffModal } from '../components/DiffView'
 import { MarkdownEditor, type EditorHandle } from '../components/Editor'
 import { MarkdownView } from '../components/MarkdownView'
 import { VersionPanel } from '../components/VersionPanel'
-import { Badge, ConfirmDialog, Empty, errorText, Skeleton, Spinner, Splitter, useToast } from '../components/ui'
+import { Badge, CategoryBadge, ConfirmDialog, Empty, errorText, Skeleton, Spinner, Splitter, useToast } from '../components/ui'
 import { useElementWidth, useMediaQuery, usePersistent, usePersistentNumber } from '../hooks/layout'
-import { CATEGORY_TONE, extractOutline, slugify, SPEC_STATUS, VERSION_SOURCE } from '../format'
+import { extractOutline, slugify, SPEC_STATUS, VERSION_SOURCE } from '../format'
 import { keys, useProjectTree, useSpec, useTemplateCategories, useTemplates } from '../queries'
 import { NewSpecDialog } from './ProjectLayout'
 import { Icon, type IconName } from '../components/icons'
@@ -427,7 +427,7 @@ export function SpecPage() {
               <div className="field">
                 <span className="field-label">文件類型</span>
                 <span>
-                  {category && <Badge tone={CATEGORY_TONE[category.key]}>{category.name}</Badge>} {template?.name ?? data.doc_type}
+                  {category && <CategoryBadge category={category.key}>{category.name}</CategoryBadge>} {template?.name ?? data.doc_type}
                 </span>
                 <span className="field-hint">建立後不能改。AI 撰寫時會照這個類型的範本規劃章節。</span>
               </div>

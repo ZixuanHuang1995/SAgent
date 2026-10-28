@@ -314,7 +314,13 @@ def test_template_categories_and_styles(tmp_path):
     templates = load_templates()
     assert templates["idea_proposal"].category == "idea" and templates["idea_proposal"].idea
     assert templates["change_request"].category == "change"
+    assert templates["change_record"].category == "change" and not templates["change_record"].allow_diagrams
     assert templates["api_spec"].category == "design"
+    assert templates["tech_decision"].category == "design" and templates["tech_decision"].decision
+    # Technical 類型裡，技術決策排在架構設計前面
+    design = [k for k, t in templates.items() if t.category == "design"]
+    assert design[:2] == ["tech_decision", "architecture"]
+    assert "use_case" in templates and templates["use_case"].sections[-1].heading == "驗證方式"
     assert templates["functional_spec"].category == "feature" and templates["functional_spec"].style == "spec"
     # 預設範本還是功能規格書
     assert next(iter(templates)) == "functional_spec"
@@ -338,12 +344,125 @@ def test_idea_doc_uses_idea_rules_and_one_diagram():
     assert "「構想提案」文件" in planner_system and "這是構想文件" in planner_system
     writer = [c["messages"][0]["content"] for c in llm.calls if ":section:" in c["purpose"]]
     assert writer and all("這是構想文件" in s and "只根據需求內容撰寫" not in s for s in writer)
+    assert all("身為〈角色〉" in s for s in writer)
     reviewer = [c["messages"][0]["content"] for c in llm.calls if c["purpose"].startswith("reviewer")]
     assert reviewer and all("這是構想文件" in s and "不要要求補上細節" in s for s in reviewer)
-    # 可能的做法這一節的目標允許提出建議
-    user = next(c["messages"][1]["content"] for c in llm.calls if "第 4 節：可能的做法" in c["messages"][1]["content"])
+    assert all("使用者故事（US 編號）" in s for s in reviewer)
+    # 章節固定：假模型只規劃了前 6 節，後面 2 節照範本補上
+    headings = [s.heading for s in parse_markdown(result.markdown).sections]
+    assert headings[:8] == [
+        f"{i}. {h}"
+        for i, h in enumerate(
+            ["背景與問題", "目標使用者與情境", "構想說明", "使用者故事", "驗收條件", "可能的做法", "假設與風險", "下一步"],
+            start=1,
+        )
+    ]
+    # 使用者故事、驗收條件照範本的 ids 編號
+    users = [c["messages"][1]["content"] for c in llm.calls if ":section:" in c["purpose"]]
+    assert any("第 4 節：使用者故事" in u and "編號：這一節的項目用 US-01" in u for u in users)
+    assert any("第 5 節：驗收條件" in u and "編號：這一節的項目用 AC-01" in u for u in users)
+    assert "- US-01：" in result.markdown and "- AC-01：" in result.markdown
+    # 可能的做法這一節的目標允許提出建議（章節固定時用範本的目標，不會被 Planner 改掉）
+    user = next(u for u in users if "第 6 節：可能的做法" in u)
     assert "可以提出需求沒寫的做法" in user
     assert "FR-" not in result.markdown
+
+
+def test_fixed_sections_follow_template():
+    tpl = load_templates()["sdd_five"]
+    assert tpl.fixed_sections and tpl.to_dict()["fixed_sections"] is True
+    headings = [s.heading for s in tpl.sections]
+    inp = make_input(template="sdd_five")
+    # Planner 改了名稱、換了順序、少了一節、多了一節
+    data = {
+        "summary": "s",
+        "open_questions": [],
+        "sections": [
+            {"heading": "Rule 規則", "goal": "g", "key_points": ["規則要點"], "diagrams": []},
+            {"heading": "1. Requirement 需求說明", "goal": "改過的目標", "key_points": ["需求要點"], "diagrams": []},
+            {"heading": "名詞定義", "goal": "g", "key_points": ["多出來的"], "diagrams": []},
+            {"heading": "Verification 驗證", "goal": "g", "key_points": [], "diagrams": []},
+        ],
+    }
+    plan = Planner.build_plan(inp, data)
+    assert [s.heading for s in plan.sections] == headings
+    assert [s.ids for s in plan.sections] == ["R", "D", "C", "RL", "V"]
+    # 目標用範本的，要點用 Planner 的；Planner 沒寫的章節沒有要點
+    assert plan.sections[0].goal == tpl.sections[0].goal and plan.sections[0].key_points == ["需求要點"]
+    assert plan.sections[3].key_points == ["規則要點"] and plan.sections[1].key_points == []
+    # 不固定的範本照 Planner 的章節，對得上範本的章節才有 ids
+    free = Planner.build_plan(
+        make_input(),
+        {
+            "summary": "s",
+            "sections": [
+                {"heading": "功能需求說明", "goal": "g", "key_points": [], "diagrams": []},
+                {"heading": "名詞定義", "goal": "g", "key_points": [], "diagrams": []},
+                {"heading": "其他", "goal": "列出項目，編號 OT-01、OT-02…", "key_points": [], "diagrams": []},
+            ],
+        },
+    )
+    assert [(s.heading, s.ids) for s in free.sections] == [("功能需求說明", "FR"), ("名詞定義", ""), ("其他", "OT")]
+
+
+def test_fixed_sections_schema_and_revise_keeps_sections():
+    from sagent.agents.prompts import PLAN_SCHEMA, plan_schema
+
+    tpl = load_templates()["change_record"]
+    schema = plan_schema(tpl)
+    secs = schema["properties"]["sections"]
+    assert secs["items"]["properties"]["heading"]["enum"] == [s.heading for s in tpl.sections]
+    assert secs["minItems"] == secs["maxItems"] == len(tpl.sections)
+    assert plan_schema(load_templates()["functional_spec"]) is PLAN_SCHEMA
+    # 修訂：章節固定的文件不刪範本裡的章節，其他章節可以刪
+    inp = make_input(mode="revise", template="change_record")
+    existing = [("E1", "變更摘要", "a"), ("E2", "差異對照", "b"), ("E3", "補充說明", "c")]
+    data = {
+        "summary": "s",
+        "changes": [
+            {"section_id": "E1", "action": "remove", "instruction": ""},
+            {"section_id": "E2", "action": "update", "instruction": "補上一筆"},
+            {"section_id": "E3", "action": "remove", "instruction": ""},
+        ],
+        "new_sections": [],
+        "open_questions": [],
+    }
+    plan = Planner.build_revise_plan(inp, existing, data)
+    assert [(s.heading, s.action, s.ids) for s in plan.sections] == [
+        ("變更摘要", "keep", ""),
+        ("差異對照", "update", "CH"),
+    ]
+
+
+def test_numbering_line_and_missing_ids_check():
+    templates = load_templates()
+    # 編號寫在範本的 ids；舊寫法（寫在目標裡）的自訂範本也認得
+    assert templates["functional_spec"].section_for("功能需求").ids == "FR"
+    assert "編號" not in templates["functional_spec"].section_for("功能需求").goal
+    assert "編號 FR-01、FR-02…" in templates["functional_spec"].skeleton("t")
+    plan = Plan(
+        title="t",
+        summary="",
+        sections=[SectionPlan(id="S1", heading="功能需求", ids="FR"), SectionPlan(id="S2", heading="說明")],
+    )
+    long = "使用者可以登入系統並查詢自己的訂單紀錄，訂單送出後系統要通知倉庫出貨並記錄時間。"
+    draft = Draft(
+        sections=[
+            SectionDraft(id="S1", heading="功能需求", body=f"- {long}"),
+            SectionDraft(id="S2", heading="說明", body=long),
+        ]
+    )
+    issues = static_checks(plan, draft)
+    assert [(i.section_id, i.severity) for i in issues] == [("S1", "medium")]
+    assert "FR-01" in issues[0].problem
+    draft.sections[0].body = f"| 編號 | 需求 |\n|---|---|\n| FR-01 | {long} |"
+    assert static_checks(plan, draft) == []
+    # Writer 的提示：有 ids 的章節寫「編號：…FR-01」，沒有的寫「不新增編號」
+    llm = FakeLLM()
+    run(llm, make_input(max_revisions=0))
+    users = [c["messages"][1]["content"] for c in llm.calls if ":section:" in c["purpose"]]
+    assert any("第 4 節：功能需求" in u and "編號：這一節的項目用 FR-01" in u for u in users)
+    assert any("第 1 節：目的與範圍" in u and "編號：這一節不新增編號" in u for u in users)
 
 
 def test_algorithm_doc_uses_algorithm_rules_and_keeps_pseudocode():
@@ -361,6 +480,7 @@ def test_algorithm_doc_uses_algorithm_rules_and_keeps_pseudocode():
     assert not any("只根據需求內容撰寫" in s or "這是建議文件" in s for s in writer)
     reviewer = [c["messages"][0]["content"] for c in llm.calls if c["purpose"].startswith("reviewer")]
     assert reviewer and all("這是演算法設計文件" in s and "不算編造" in s for s in reviewer)
+    assert all("設計策略" in s for s in writer)
     # 虛擬碼是 ```text 區塊，不是圖，Writer 整理內文時要保留
     assert "```text\nfunction solve(input)" in result.markdown
     assert all(b.lang == "mermaid" for b in extract_diagrams(result.markdown))
@@ -368,7 +488,7 @@ def test_algorithm_doc_uses_algorithm_rules_and_keeps_pseudocode():
 
 def test_experiment_doc_uses_experiment_rules():
     templates = load_templates()
-    assert templates["experiment_design"].category == "algorithm" and templates["experiment_design"].experiment
+    assert templates["experiment_design"].category == "design" and templates["experiment_design"].experiment
     llm = FakeLLM()
     inp = make_input(template="experiment_design", diagrams=True, max_diagrams=4)
     result, _ = run(llm, inp)
@@ -383,6 +503,26 @@ def test_experiment_doc_uses_experiment_rules():
     assert reviewer and all("這是實驗設計文件" in s and "不算編造" in s for s in reviewer)
     # 研究假設、指標照章節目標編號
     assert "H-02" in result.markdown and "M-03" in result.markdown
+
+
+def test_decision_doc_uses_decision_rules():
+    llm = FakeLLM()
+    inp = make_input(template="tech_decision", diagrams=True, max_diagrams=4)
+    result, _ = run(llm, inp)
+    assert inp.options.max_diagrams == 2
+
+    planner_system = llm.calls[0]["messages"][0]["content"]
+    assert "「技術決策」文件" in planner_system and "這是技術決策文件" in planner_system
+    writer = [c["messages"][0]["content"] for c in llm.calls if ":section:" in c["purpose"]]
+    assert writer and all(s.startswith("你是軟體架構師") and "方案可以由你提出" in s for s in writer)
+    assert all("不要編造效能、成本、時間這類數字" in s for s in writer)
+    assert not any("只根據需求內容撰寫" in s or "這是建議文件" in s for s in writer)
+    reviewer = [c["messages"][0]["content"] for c in llm.calls if c["purpose"].startswith("reviewer")]
+    assert reviewer and all("這是技術決策文件" in s and "不算編造" in s for s in reviewer)
+    # 限制與評估標準照章節目標編號
+    assert "C-02" in result.markdown
+    # 只有建議方案畫圖
+    assert len(extract_diagrams(result.markdown)) == 1
 
 
 def _draft(*bodies: str) -> tuple[Plan, Draft]:

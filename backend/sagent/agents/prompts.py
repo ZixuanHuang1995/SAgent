@@ -18,34 +18,43 @@ _COMMON_RULES = [
     "使用繁體中文（台灣用語），技術名詞可以保留英文。",
     "句子簡單直白，一句只講一件事，不要寫空泛的形容詞。",
     "多用條列和 Markdown 表格。小標題用 ###。",
+    # 哪一節要編號由範本章節的 ids 決定，寫在每一節的「編號：」那一行
+    "只有章節的「編號」指定了格式時，才為這一節的項目新增編號，照指定的格式從 01 開始依序編。其他章節提到這些項目時，引用前面已經定義的編號，不要重新編號，也不要發明新的編號種類。",
 ]
 _SPEC_RULES = [
     "只根據需求內容撰寫。需求沒提到的細節不要編造；必要的假設標註「（假設）」，不確定的地方標註「（待確認）」。",
-    "編號格式：功能需求 FR-01、業務規則 BR-01、非功能需求 NFR-01、驗收條件 AC-01。只有這一節的目標或要點寫明要編號時才新增編號；其他章節提到這些項目時，引用前面已經定義的編號，不要重新編號，也不要發明新的編號種類。",
 ]
 # 建議類文件（範本 advice: true）：可以提出需求沒寫的做法，但需求沒有的事實不能編造
 _ADVICE_RULES = [
     "這是建議文件，可以提出需求沒有寫的做法。每條建議要具體，看了就知道怎麼做，並寫出理由：對應哪個需求、哪類使用者或哪個常見問題。",
     "用「建議…」的寫法，不要寫成「系統必須…」。",
     "需求沒提到的事實（數字、既有系統、使用者人數、調查結果）不要編造；必要的假設標註「（假設）」，不確定的地方標註「（待確認）」。",
-    "只有這一節的目標或要點寫明要編號時才新增編號，格式照目標寫的（例如 UX-01）；其他章節提到時引用前面已經定義的編號，不要重新編號。",
 ]
 # 構想文件（範本 style: idea）：想法還不成熟，只整理，不寫細節規格。
 # 只有目標寫明「可以提出需求沒寫的做法」的章節（例如「可能的做法」）才能提建議
 _IDEA_RULES = [
-    "這是構想文件，想法還沒確定。整理需求裡的想法，不要寫細節規格：不寫欄位、API、畫面細節，也不要寫 FR、BR、AC 這類編號需求。",
+    "這是構想文件，想法還沒確定。整理需求裡的想法，不要寫細節規格：不寫欄位、API、畫面細節，也不要寫 FR、BR 這類編號需求。",
     "需求沒提到的事實（數字、既有系統、使用者人數、調查結果）不要編造。資訊不夠的章節就寫短一點，不清楚的地方標註「（待確認）」，必要的假設標註「（假設）」。",
     "只有章節目標寫明「可以提出需求沒寫的做法」時，才能提出需求沒寫的做法，並用「建議…」的寫法、寫出理由。其他章節只整理需求裡有的內容。",
+    "使用者故事寫成「身為〈角色〉，我想要〈做什麼〉，以便〈得到什麼〉」。驗收條件只寫使用者看得到的結果（怎樣算成功），不寫欄位、錯誤碼和畫面細節。",
+]
+
+
+# 技術決策文件（範本 style: decision）：要做的決定、限制和評估標準照需求，方案可以由撰寫者提出
+_DECISION_RULES = [
+    "這是技術決策文件。要做的決定、限制條件和評估標準要根據需求；需求沒寫的不要編造，必要的假設標註「（假設）」，不確定的地方標註「（待確認）」。",
+    "方案可以由你提出，不用等需求寫明；需求已經列出的方案一定要放進比較。每個方案都要寫做法、優點和缺點。",
+    "比較要對照評估標準，用「較好」「普通」「較差」這類定性的寫法並說明理由。沒有實測資料，不要編造效能、成本、時間這類數字；要實測才能判斷的地方標註「（待確認）」，並寫要怎麼驗證。",
+    "建議方案要寫理由，理由要跟比較的結果對得上。",
 ]
 
 
 # 演算法設計文件（範本 style: algorithm）：問題的事實（輸入、限制、效能要求）照需求，解法由撰寫者設計
 _ALGORITHM_RULES = [
     "這是演算法設計文件。問題的輸入、輸出、限制條件和效能要求要根據需求；需求沒寫的數字不要編造，必要的假設標註「（假設）」，不確定的地方標註「（待確認）」。",
-    "解題方法、資料結構和虛擬碼由你設計，不用等需求寫明。寫清楚每個步驟做什麼、為什麼這樣做；有多種做法時說明選用的理由。",
+    "解題方法、資料結構和虛擬碼由你設計，不用等需求寫明。先說明採用哪一種設計策略（例如暴力法、分治法、貪婪法、動態規劃、回溯法、圖形搜尋）和理由，再寫每個步驟做什麼、為什麼這樣做；有多種做法時說明選用的理由。",
     "虛擬碼放在 ```text 程式碼區塊，用 function、for、if、return 這類簡單的英文關鍵字，註解用繁體中文。不要寫特定程式語言的完整程式。",
     "複雜度用大 O 表示，並說明 n 代表什麼。文字說明、虛擬碼和複雜度分析要互相對得上。",
-    "只有這一節的目標或要點寫明要編號時才新增編號，格式照目標寫的（例如 TC-01）；其他章節提到時引用前面已經定義的編號，不要重新編號。",
 ]
 
 
@@ -55,13 +64,14 @@ _EXPERIMENT_RULES = [
     "研究假設、指標、分組方式、實驗步驟和分析方法由你設計，不用等需求寫明。寫清楚為什麼這樣設計，以及怎麼避免結果被其他因素影響（例如隨機分組、控制條件）。",
     "每個假設都要寫比較的對象、用哪個指標判斷，以及怎樣算成立。每個指標都要寫定義和計算方式。",
     "統計方法要配合資料的型態和樣本數，並說明理由。實驗還沒做，不要寫出實驗結果，也不要編造數據。",
-    "只有這一節的目標或要點寫明要編號時才新增編號，格式照目標寫的（例如 H-01、M-01）；其他章節提到時引用前面已經定義的編號，不要重新編號。",
 ]
 
 
 def _style_rules(template: DocTemplate) -> list[str]:
     if template.idea:
         return _IDEA_RULES
+    if template.decision:
+        return _DECISION_RULES
     if template.algorithm:
         return _ALGORITHM_RULES
     if template.experiment:
@@ -134,6 +144,20 @@ PLAN_SCHEMA = {
     "required": ["title", "summary", "sections", "open_questions"],
 }
 
+def plan_schema(template: DocTemplate) -> dict:
+    """章節固定的範本：章節名稱只能從範本選，數量跟範本一樣。"""
+    if not template.fixed_sections:
+        return PLAN_SCHEMA
+    headings = [s.heading for s in template.sections]
+    section = PLAN_SCHEMA["properties"]["sections"]
+    items = {
+        **section["items"],
+        "properties": {**section["items"]["properties"], "heading": {"type": "string", "enum": headings}},
+    }
+    sections = {**section, "items": items, "minItems": len(headings), "maxItems": len(headings)}
+    return {**PLAN_SCHEMA, "properties": {**PLAN_SCHEMA["properties"], "sections": sections}}
+
+
 REVISE_PLAN_SCHEMA = {
     "type": "object",
     "properties": {
@@ -184,12 +208,17 @@ def planner_messages(inp: RunInput) -> list[dict[str, str]]:
         advice_rule = "\n8. 這是建議文件：key_points 寫這一節要給的具體建議方向，要跟需求裡的使用者、工作或資料有關。"
     elif tpl.idea:
         advice_rule = (
-            "\n8. 這是構想文件：章節少一點、內容短一點，不要規劃欄位、API、畫面細節這類細節規格的章節。"
-            "想法還不清楚的地方，多寫進 open_questions。"
+            f"\n8. 這是構想文件：{'內容' if tpl.fixed_sections else '章節少一點、內容'}短一點，"
+            "不要規劃欄位、API、畫面細節這類細節規格的內容。想法還不清楚的地方，多寫進 open_questions。"
+        )
+    elif tpl.decision:
+        advice_rule = (
+            "\n8. 這是技術決策文件：key_points 寫這一節具體的內容（限制、評估標準、方案名稱、比較重點），"
+            "需求沒寫的限制條件和評估標準寫進 open_questions。"
         )
     elif tpl.algorithm:
         advice_rule = (
-            "\n8. 這是演算法設計文件：key_points 寫這一節具體的設計內容（資料結構、步驟、複雜度、測試重點），"
+            "\n8. 這是演算法設計文件：key_points 寫這一節具體的設計內容（設計策略、資料結構、步驟、複雜度、測試重點），"
             "需求沒寫的限制條件和效能數字寫進 open_questions。"
         )
     elif tpl.experiment:
@@ -197,10 +226,15 @@ def planner_messages(inp: RunInput) -> list[dict[str, str]]:
             "\n8. 這是實驗設計文件：key_points 寫這一節具體的設計內容（假設、指標、分組、步驟、分析方法），"
             "需求沒寫的人數、期間和判斷標準寫進 open_questions。"
         )
+    section_rule = (
+        "1. 章節是固定的：照「建議章節」的名稱和順序，每一節都要有，不能刪除、新增或改名。"
+        if tpl.fixed_sections
+        else f"1. 參考「建議章節」，依照需求內容調整：跟需求無關的章節可以刪除，缺少的可以新增。章節數量 4 到 {opts.max_sections} 個。"
+    )
     system = f"""你是{_with_role("資深", tpl)}，現在要「規劃」一份{_doc_noun(tpl)}的大綱。你只負責規劃，不用寫內文。
 
 規劃規則：
-1. 參考「建議章節」，依照需求內容調整：跟需求無關的章節可以刪除，缺少的可以新增。章節數量 4 到 {opts.max_sections} 個。
+{section_rule}
 2. heading 只寫章節名稱，不要加編號。不要規劃「待確認事項」章節，系統會自動加。
 3. 每個章節寫 goal（這一節要寫什麼，一句話）和 key_points（2 到 4 個具體要點，每個要點一句短句，盡量使用需求裡的名詞）。
 {diagram_rule}
@@ -239,6 +273,11 @@ def revise_planner_messages(inp: RunInput, existing: list[tuple[str, str, str]])
         if opts.diagrams and opts.max_diagrams > 0
         else "這次不畫圖，diagrams 都給空陣列。"
     )
+    fixed_rule = (
+        "\n8. 這種文件的章節是固定的：不要刪除章節；修訂需求沒有明確要求，也不要新增章節。"
+        if inp.template.fixed_sections
+        else ""
+    )
     system = f"""你是{_with_role("資深", inp.template)}，現在要「規劃如何修訂」一份既有的{_doc_noun(inp.template)}。你只負責規劃，不用寫內文。
 
 規劃規則：
@@ -248,7 +287,7 @@ def revise_planner_messages(inp: RunInput, existing: list[tuple[str, str, str]])
 4. 要新增的章節放在 new_sections：after 寫要放在哪個 section_id 後面（放最後寫 END），heading 不要加編號。{diagram_rule}
 5. 修訂需求中不清楚的地方寫進 open_questions。
 6. summary 用一句話說明這次修訂的重點。
-7. 使用繁體中文。只輸出 JSON，不要縮排和多餘的空白。"""
+7. 使用繁體中文。只輸出 JSON，不要縮排和多餘的空白。{fixed_rule}"""
     listing = "\n".join(
         f"[{sid}] {heading}\n摘要：{_section_digest(body)}" for sid, heading, body in existing
     )
@@ -299,6 +338,13 @@ def _writer_context(inp: RunInput, plan: Plan) -> str:
 {_outline(plan)}"""
 
 
+def _numbering(sec: SectionPlan) -> str:
+    """每一節的「編號：」那一行。哪一節要編號由範本章節的 ids 決定，不靠模型讀目標。"""
+    if sec.ids:
+        return f"編號：這一節的項目用 {sec.ids}-01、{sec.ids}-02… 編號"
+    return "編號：這一節不新增編號，提到其他章節的項目時引用已經定義的編號"
+
+
 def section_messages(
     inp: RunInput, plan: Plan, sec: SectionPlan, number: int, known_items: list[str]
 ) -> list[dict[str, str]]:
@@ -316,6 +362,7 @@ def section_messages(
 ## 現在要寫的章節
 第 {number} 節：{sec.heading}
 目標：{sec.goal}
+{_numbering(sec)}
 要點：
 {points}{extra}
 
@@ -336,6 +383,7 @@ def update_system(template: DocTemplate) -> str:
 
 
 def update_section_messages(inp: RunInput, plan: Plan, sec: SectionPlan) -> list[dict[str, str]]:
+    numbering = f"\n{_numbering(sec)}" if sec.ids else ""
     user = f"""## 文件資訊
 {_doc_info(inp)}
 
@@ -351,7 +399,7 @@ def update_section_messages(inp: RunInput, plan: Plan, sec: SectionPlan) -> list
 （原本內容結束）
 
 ## 修改說明
-{sec.instruction}
+{sec.instruction}{numbering}
 
 請輸出修改後「{sec.heading}」這一節的完整內文。"""
     return [{"role": "system", "content": update_system(inp.template)}, {"role": "user", "content": user}]
@@ -376,10 +424,11 @@ def revise_section_messages(
         f"- （{i.severity}）問題：{i.problem}" + (f"；建議：{i.suggestion}" if i.suggestion else "")
         for i in issues
     )
+    numbering = f"\n{_numbering(sec)}" if sec.ids else ""
     user = f"""{_writer_context(inp, plan)}
 
 ## 要修改的章節：{sec.heading}
-目標：{sec.goal}
+目標：{sec.goal}{numbering}
 （目前內容開始）
 {body_with_markers.strip()}
 （目前內容結束）
@@ -491,7 +540,13 @@ _REVIEW_STYLE_NOTE = {
     ),
     "idea": (
         "這是構想文件：想法還沒確定，內容本來就不完整，不要要求補上細節。"
-        "寫成細節規格（欄位、API、FR 編號需求）算格式錯誤。「可能的做法」這類章節提出需求沒寫的做法是正常的，不算錯誤。"
+        "寫成細節規格（欄位、API、FR 編號需求）算格式錯誤；使用者故事（US 編號）和只寫「怎樣算成功」的驗收條件（AC 編號）是正常的，不算錯誤。"
+        "「可能的做法」這類章節提出需求沒寫的做法是正常的，不算錯誤。"
+    ),
+    "decision": (
+        "這是技術決策文件：需求沒列的方案是撰寫者提出的，不算編造，也不用列人工覆核。"
+        "比較結果跟方案的優缺點對不上、建議方案的理由跟比較結果矛盾，算邏輯錯誤；寫出沒有根據的效能、成本、時間數字也算錯誤。"
+        "需求沒提到的限制條件或評估標準，列為人工覆核。"
     ),
     "algorithm": (
         "這是演算法設計文件：解題方法、資料結構和虛擬碼是撰寫者設計的，不算編造，也不用列人工覆核。"
@@ -539,7 +594,9 @@ def reviewer_system(template: DocTemplate) -> str:
 def reviewer_messages(
     inp: RunInput, plan: Plan, draft_text: str, check_notes: list[str], partial: bool = False
 ) -> list[dict[str, str]]:
-    outline = "\n".join(f"[{s.id}] {s.heading}" for s in plan.sections)
+    outline = "\n".join(
+        f"[{s.id}] {s.heading}" + (f"（定義 {s.ids} 編號）" if s.ids else "") for s in plan.sections
+    )
     checks = "\n".join(f"- {n}" for n in check_notes) if check_notes else "- 沒有發現格式問題"
     draft_title = (
         "## 修改過的章節\n（其他章節上一輪已經審查過，這次只審查下面這些章節，section_id 只能用這些章節的編號）"

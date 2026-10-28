@@ -158,19 +158,17 @@ class FakeLLM:
         number = int(m.group(1)) if m else 1
         points = re.findall(r"^- (.+)$", _between(prompt, "要點：", "請輸出"), re.M)
         bullet = "\n".join(f"- {p}" for p in points[:4]) or "- 依需求內容撰寫"
+        # 「編號：」那一行指定了格式就照著用，沒有指定就不編號
+        prefix = re.search(r"^編號：這一節的項目用 ([A-Z]{1,4})-01", prompt, re.M)
         if idea:
-            # 構想文件不寫編號需求，只整理想法
-            return f"{heading}說明如下。\n\n{bullet}\n- 細節還要跟需求提出人確認（待確認）。\n"
+            # 構想文件不寫細節規格，只整理想法；使用者故事、驗收條件照指定的格式編號
+            items = f"- {prefix.group(1)}-01：{heading}的第一項\n" if prefix else ""
+            return f"{heading}說明如下。\n\n{items}{bullet}\n- 細節還要跟需求提出人確認（待確認）。\n"
         if algorithm and "```text" in _between(prompt, "目標：", "\n"):
             # 演算法設計文件的虛擬碼章節
             code = "function solve(input)\n  for each item in input\n    if item is valid\n      return item\n  return none"
             return f"{heading}如下。\n\n```text\n{code}\n```\n\n{bullet}\n"
-        # 目標寫了「編號 UX-01」這類格式就照著用；建議文件的其他章節不編號
-        prefix = re.search(r"編號 ([A-Z]{1,4})-01", _between(prompt, "目標：", "\n"))
-        if prefix:
-            item_id = f"{prefix.group(1)}-{number:02d}"
-        else:
-            item_id = "—" if advice else f"FR-{number:02d}"
+        item_id = f"{prefix.group(1)}-{number:02d}" if prefix else "—"
         text = f"建議{heading}保持簡單，常用操作放在明顯的位置" if advice else f"系統要提供{heading}相關功能"
         return (
             f"{heading}說明如下。\n\n{bullet}\n\n"

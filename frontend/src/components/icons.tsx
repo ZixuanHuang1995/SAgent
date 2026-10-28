@@ -34,6 +34,7 @@ const PATHS: Record<string, ReactNode> = {
   list: <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />,
   menu: <path d="M4 6h16M4 12h16M4 18h16" />,
   collapse: <path d="m11 17-5-5 5-5M18 17l-5-5 5-5" />,
+  expand: <path d="m13 17 5-5-5-5M6 17l5-5-5-5" />,
   'panel-close': (
     <>
       <rect x="3" y="3" width="18" height="18" rx="2" />

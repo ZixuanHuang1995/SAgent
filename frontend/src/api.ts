@@ -151,13 +151,16 @@ export interface Template {
   description: string
   builtin: boolean
   category: string
-  /** 寫作規則：spec 規格文件、advice 建議類文件、idea 構想文件、algorithm 演算法設計文件、experiment 實驗設計文件 */
-  style: 'spec' | 'advice' | 'idea' | 'algorithm' | 'experiment'
+  /** 寫作規則：spec 規格文件、advice 建議類文件、idea 構想文件、decision 技術決策文件、algorithm 演算法設計文件、experiment 實驗設計文件 */
+  style: 'spec' | 'advice' | 'idea' | 'decision' | 'algorithm' | 'experiment'
   /** 建議類文件（例如 UI/UX 設計建議）：可以提出需求沒寫的做法 */
   advice: boolean
   /** false：這種文件不畫圖 */
   allow_diagrams: boolean
-  sections: { heading: string; goal: string; diagrams: string[] }[]
+  /** true：章節固定，AI 撰寫時不刪、不加、不改名 */
+  fixed_sections: boolean
+  /** ids：這一節的項目用什麼編號（例如 FR），空字串表示不編號 */
+  sections: { heading: string; goal: string; diagrams: string[]; ids: string }[]
 }
 
 /** 「插入圖表」選單的一種圖 */

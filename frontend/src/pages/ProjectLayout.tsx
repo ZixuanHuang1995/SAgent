@@ -6,9 +6,9 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'reac
 import { QuickSwitcher } from '../components/QuickSwitcher'
 import { useMediaQuery, usePersistent } from '../hooks/layout'
 import { api, type Phase, type Spec } from '../api'
-import { CATEGORY_TONE, SPEC_STATUS } from '../format'
+import { SPEC_STATUS } from '../format'
 import { keys, useProjectTree, useTemplateCategories, useTemplates } from '../queries'
-import { Badge, ConfirmDialog, Empty, errorText, Field, Modal, Skeleton, Spinner, useToast } from '../components/ui'
+import { CategoryBadge, ConfirmDialog, Empty, errorText, Field, Modal, Skeleton, Spinner, useToast } from '../components/ui'
 import { Icon, type IconName } from '../components/icons'
 
 const PROJECT_NAV: { to: string; icon: IconName; label: string }[] = [
@@ -77,14 +77,22 @@ export function ProjectLayout() {
           />
         ) : (
           <nav className="sidebar-rail">
-            <button className="icon-btn rail-btn" title="展開側欄" aria-label="展開側欄" onClick={expand}>
-              <Icon name="menu" size={18} />
-            </button>
+            {/* 窄螢幕的選單按鈕放最上面；寬螢幕的展開按鈕放底部，跟展開時的收合按鈕同一個位置 */}
+            {narrow && (
+              <button className="icon-btn rail-btn" title="展開側欄" aria-label="展開側欄" onClick={expand}>
+                <Icon name="menu" size={18} />
+              </button>
+            )}
             {PROJECT_NAV.map((n) => (
               <NavLink key={n.to} end={n.to === ''} to={`/p/${projectId}${n.to}`} className="rail-btn" title={n.label} aria-label={n.label}>
                 <Icon name={n.icon} size={18} />
               </NavLink>
             ))}
+            {!narrow && (
+              <button className="icon-btn rail-btn rail-expand" title="展開側欄" aria-label="展開側欄" onClick={expand}>
+                <Icon name="expand" size={18} />
+              </button>
+            )}
           </nav>
         )}
       </aside>
@@ -154,17 +162,10 @@ function ProjectSidebar(props: {
   return (
     <div className="sidebar-inner">
       <nav className="sidebar-nav">
-        {PROJECT_NAV.map((n, i) => (
-          <div key={n.to} className="sidebar-nav-row">
-            <NavLink end={n.to === ''} to={`/p/${projectId}${n.to}`}>
-              <Icon name={n.icon} /> {n.label}
-            </NavLink>
-            {i === 0 && (
-              <button className="icon-btn" title="收合側欄" aria-label="收合側欄" onClick={props.onCollapse}>
-                <Icon name="collapse" />
-              </button>
-            )}
-          </div>
+        {PROJECT_NAV.map((n) => (
+          <NavLink key={n.to} end={n.to === ''} to={`/p/${projectId}${n.to}`}>
+            <Icon name={n.icon} /> {n.label}
+          </NavLink>
         ))}
       </nav>
 
@@ -251,6 +252,10 @@ function ProjectSidebar(props: {
         </button>
         <button className="link-btn small muted-link" onClick={props.onOpenSwitcher} title="快速切換到其他 Spec">
           <kbd>Ctrl</kbd>+<kbd>K</kbd> 快速切換
+        </button>
+        {/* 放在底部右邊，不佔上面選項的寬度；收合後的展開按鈕也在底部 */}
+        <button className="icon-btn sidebar-collapse" title="收合側欄" aria-label="收合側欄" onClick={props.onCollapse}>
+          <Icon name="collapse" />
         </button>
       </div>
 
@@ -382,7 +387,7 @@ export function NewSpecDialog(props: {
             return (
               <button key={c.key} type="button" className="category-card" disabled={names.length === 0} onClick={() => setCategory(c.key)}>
                 <span className="category-card-name">
-                  <Badge tone={CATEGORY_TONE[c.key]}>{c.name}</Badge>
+                  <CategoryBadge category={c.key}>{c.name}</CategoryBadge>
                 </span>
                 <span className="category-card-desc">{c.description}</span>
                 <span className="category-card-docs muted small">{names.length ? names.join('、') : '沒有這個類型的文件範本'}</span>
@@ -398,7 +403,7 @@ export function NewSpecDialog(props: {
     <Modal
       title={
         <>
-          新增 Spec <Badge tone={CATEGORY_TONE[category]}>{current?.name ?? category}</Badge>
+          新增 Spec <CategoryBadge category={category}>{current?.name ?? category}</CategoryBadge>
         </>
       }
       onClose={props.onClose}
@@ -469,7 +474,9 @@ export function NewSpecDialog(props: {
           label="需求內容"
           hint={
             category === 'idea'
-              ? '寫下你的想法就好，幾句話也可以：想解決什麼問題、給誰用、大概想怎麼做。AI 會整理成構想提案，不清楚的地方列成待確認事項。'
+              ? '寫下你的想法就好，幾句話也可以：想解決什麼問題、給誰用、大概想怎麼做。AI 會整理成構想提案，包含使用者故事和怎樣算成功，不清楚的地方列成待確認事項。'
+              : template?.style === 'decision'
+                ? '寫清楚要做什麼決定、有哪些限制、用什麼標準比較，已經想到的方案也可以列出來（例如：「搜尋功能要用資料庫全文檢索還是另外架搜尋引擎，三個月內上線，只有兩個人維護」）。AI 會補充方案、做比較表並提出建議。'
               : template?.style === 'experiment'
                 ? '寫清楚要評估的工具或做法、想知道的事、可以參與的人和時間、怎樣算成功（例如：「評估 AI 程式碼審查工具，三個團隊參加 8 週，PR 前置時間要縮短 20% 以上」）。AI 會設計假設、指標、分組、流程和分析方法。'
                 : category === 'algorithm'

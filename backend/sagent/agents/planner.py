@@ -12,7 +12,8 @@ from typing import Any
 from ..services.markdown_doc import normalize_heading, parse_markdown, strip_heading_number
 from .base import AgentBase
 from .diagram_kinds import KINDS, resolve_syntax
-from .prompts import PLAN_SCHEMA, REVISE_PLAN_SCHEMA, planner_messages, revise_planner_messages
+from .doc_templates import DocTemplate, ids_from_goal, same_heading
+from .prompts import REVISE_PLAN_SCHEMA, plan_schema, planner_messages, revise_planner_messages
 from .textutil import clean_list, normalize_sid
 from .types import OPEN_QUESTIONS_HEADING, DiagramPlan, PipelineOptions, Plan, RunInput, SectionPlan
 
@@ -53,6 +54,48 @@ def _assign_ids(sections: list[SectionPlan]) -> None:
         sec.id = f"S{i}"
 
 
+def _attach_item_ids(tpl: DocTemplate, sections: list[SectionPlan]) -> None:
+    """每一節要用的編號：對應得到範本章節就用範本的 ids，對應不到就看目標裡有沒有寫。"""
+    for sec in sections:
+        if sec.action == "keep" or sec.ids:
+            continue
+        t = tpl.section_for(sec.heading)
+        sec.ids = t.ids if t is not None else ids_from_goal(sec.goal)
+
+
+def _fit_template(tpl: DocTemplate, planned: list[SectionPlan]) -> list[SectionPlan]:
+    """章節固定的範本：章節名稱、順序和目標照範本，只用 Planner 給的要點和圖。
+
+    先配對名稱完全一樣的，再配對互相包含的；Planner 多出來的章節不用，缺少的章節照樣寫。
+    """
+    unused = list(planned)
+    matched: dict[int, SectionPlan] = {}
+    for loose in (False, True):
+        for i, t in enumerate(tpl.sections):
+            if i in matched:
+                continue
+            key = normalize_heading(t.heading)
+            for p in unused:
+                if (same_heading(p.heading, t.heading) if loose else normalize_heading(p.heading) == key):
+                    matched[i] = p
+                    unused.remove(p)
+                    break
+    fitted = []
+    for i, t in enumerate(tpl.sections):
+        p = matched.get(i)
+        fitted.append(
+            SectionPlan(
+                id="",
+                heading=t.heading,
+                goal=t.goal,
+                key_points=p.key_points if p else [],
+                diagrams=p.diagrams if p else [],
+                ids=t.ids,
+            )
+        )
+    return fitted
+
+
 def fallback_plan(inp: RunInput) -> Plan:
     """模型給不出可用的大綱時，直接用範本的章節。"""
     opts = inp.options
@@ -72,6 +115,7 @@ def fallback_plan(inp: RunInput) -> Plan:
             ]
             if opts.diagrams
             else [],
+            ids=t.ids,
         )
         for t in inp.template.sections
     ]
@@ -92,7 +136,9 @@ class Planner(AgentBase):
 
     async def _plan_draft(self, inp: RunInput) -> Plan:
         async with self.step("plan", "規劃文件大綱") as info:
-            data = await self.chat_json("plan", planner_messages(inp), PLAN_SCHEMA, max_tokens=2500)
+            data = await self.chat_json(
+                "plan", planner_messages(inp), plan_schema(inp.template), max_tokens=2500
+            )
             plan = self.build_plan(inp, data) if data else None
             if plan is None:
                 await self.log("模型沒有產生可用的大綱，改用範本章節", "warn")
@@ -105,6 +151,7 @@ class Planner(AgentBase):
     @staticmethod
     def build_plan(inp: RunInput, data: dict[str, Any]) -> Plan | None:
         opts = inp.options
+        tpl = inp.template
         sections: list[SectionPlan] = []
         seen: set[str] = set()
         for raw in data.get("sections") or []:
@@ -124,15 +171,18 @@ class Planner(AgentBase):
                     diagrams=_diagrams(raw.get("diagrams"), opts),
                 )
             )
-            if len(sections) >= opts.max_sections:
+            if not tpl.fixed_sections and len(sections) >= opts.max_sections:
                 break
         if len(sections) < 2:
             return None
+        if tpl.fixed_sections:
+            sections = _fit_template(tpl, sections)
+        _attach_item_ids(tpl, sections)
         _limit_diagrams(sections, opts)
         _assign_ids(sections)
         return Plan(
             title=inp.spec_title,
-            summary=str(data.get("summary", "")).strip()[:500] or inp.template.description,
+            summary=str(data.get("summary", "")).strip()[:500] or tpl.description,
             sections=sections,
             open_questions=clean_list(data.get("open_questions"), limit=15),
         )
@@ -194,9 +244,11 @@ class Planner(AgentBase):
                 )
                 for _sid, heading, body in existing
             ]
+            _attach_item_ids(inp.template, sections)
             _assign_ids(sections)
             return Plan(title=inp.spec_title, summary="依修訂需求更新文件", sections=sections, fallback=True)
 
+        headings = {sid: heading for sid, heading, _b in existing}
         changes: dict[str, tuple[str, str]] = {}
         for raw in data.get("changes") or []:
             if not isinstance(raw, dict):
@@ -205,6 +257,12 @@ class Planner(AgentBase):
             action = str(raw.get("action", "")).strip().lower()
             if sid is None or action not in ("update", "remove"):
                 continue
+            if (
+                action == "remove"
+                and inp.template.fixed_sections
+                and inp.template.section_for(headings[sid]) is not None
+            ):
+                continue  # 章節固定的文件，不刪範本裡的章節
             changes[sid] = (action, str(raw.get("instruction", "")).strip()[:600])
 
         new_after: dict[str, list[SectionPlan]] = defaultdict(list)
@@ -249,6 +307,7 @@ class Planner(AgentBase):
             sections.extend(new_after.pop(sid, []))
         for rest in new_after.values():
             sections.extend(rest)
+        _attach_item_ids(inp.template, sections)
         _limit_diagrams(sections, opts)
         _assign_ids(sections)
         return Plan(

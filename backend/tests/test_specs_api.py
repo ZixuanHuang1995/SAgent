@@ -238,5 +238,7 @@ def test_template_categories_api(client):
     assert templates["idea_proposal"]["style"] == "idea"
     assert templates["algorithm_design"]["category"] == "algorithm"
     assert templates["algorithm_design"]["style"] == "algorithm"
-    assert templates["experiment_design"]["category"] == "algorithm"
+    assert templates["experiment_design"]["category"] == "design"
     assert templates["experiment_design"]["style"] == "experiment"
+    assert templates["tech_decision"]["category"] == "design"
+    assert templates["tech_decision"]["style"] == "decision"

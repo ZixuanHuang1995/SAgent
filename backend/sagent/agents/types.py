@@ -55,6 +55,8 @@ class SectionPlan:
     action: SectionAction = "write"
     source_body: str = ""
     instruction: str = ""
+    # 這一節定義的項目用什麼編號（例如 FR），來自範本章節的 ids
+    ids: str = ""
 
 
 @dataclass
@@ -86,6 +88,7 @@ class Plan:
                     "key_points": s.key_points,
                     "action": s.action,
                     "instruction": s.instruction,
+                    "ids": s.ids,
                     "diagrams": [asdict(d) for d in s.diagrams],
                 }
                 for s in self.sections

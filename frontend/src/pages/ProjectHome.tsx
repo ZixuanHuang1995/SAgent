@@ -4,9 +4,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { api } from '../api'
-import { CATEGORY_TONE, relativeTime, RUN_STATUS, SPEC_STATUS } from '../format'
+import { relativeTime, RUN_STATUS, SPEC_STATUS } from '../format'
 import { keys, useBaselines, useProjectTree, useRuns, useTemplateCategories, useTemplates } from '../queries'
-import { Badge, ConfirmDialog, Empty, errorText, Field, Modal, Skeleton, useToast } from '../components/ui'
+import { Badge, CategoryBadge, ConfirmDialog, Empty, errorText, Field, Modal, Skeleton, useToast } from '../components/ui'
 import { NewSpecDialog } from './ProjectLayout'
 import { Icon } from '../components/icons'
 
@@ -221,7 +221,7 @@ function DocTypeCell({ docType }: { docType: string }) {
   const category = categories.data?.find((c) => c.key === template?.category)
   return (
     <span className="row gap-sm">
-      {category && <Badge tone={CATEGORY_TONE[category.key]}>{category.name}</Badge>}
+      {category && <CategoryBadge category={category.key}>{category.name}</CategoryBadge>}
       <span className="muted small">{template?.name ?? docType}</span>
     </span>
   )

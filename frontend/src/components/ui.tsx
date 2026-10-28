@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { CATEGORY_TONE } from '../format'
 
 // ---------------------------------------------------------------------------
 // 對話框
@@ -198,6 +199,11 @@ export function Badge({ children, tone = 'neutral', title }: { children: ReactNo
       {children}
     </span>
   )
+}
+
+/** 類型標籤（Idea、Functionality…）：依類型上色、粗體 */
+export function CategoryBadge({ category, children }: { category: string; children: ReactNode }) {
+  return <span className={`badge badge-${CATEGORY_TONE[category] ?? 'neutral'} badge-category`}>{children}</span>
 }
 
 export function Field(props: { label: string; hint?: ReactNode; children: ReactNode }) {
