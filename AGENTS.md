@@ -5,7 +5,7 @@
 ## 專案概要
 
 - SAgent：用網頁撰寫、管理系統分析文件（Spec），由本機 Ollama 模型協助撰寫。
-- 後端 `backend/`：Python 3.11 以上、FastAPI、SQLAlchemy、SQLite。用 uv 管理套件。
+- 後端 `backend/`：Python 3.11 以上、FastAPI、SQLAlchemy、SQLite。用 uv 管理套件，沒有 uv 時用 `backend\.venv`（見「環境注意事項」）。
 - 前端 `frontend/`：React 19、Vite 8、TypeScript、TanStack Query、CodeMirror、Mermaid 12。
 - 前端打包到 `frontend/dist`，由後端直接提供。執行時不需要 Node.js。
 - Git repo：https://github.com/ZixuanHuang1995/SAgent ，主分支 `main`。使用者沒要求前，不要 commit 或 push。
@@ -22,7 +22,9 @@
 | 後端 lint | `cd backend; uv run ruff check sagent tests ../scripts` |
 | 前端型別檢查 | `cd frontend; npm run typecheck` |
 | 前端打包 | `cd frontend; npm run build`（會先跑型別檢查） |
-| 重新產生示範資料（真模型，7～8 小時） | `uv run --project backend python scripts/seed_demo.py --data-dir data-demo-build`，確認後改名成 `data-demo` |
+| 檢查示範資料內容檔 | `uv run --project backend python scripts/check_demo_content.py scripts/demo_content`（可加 `--only FIX --keys idea,feature`） |
+| 重新產生示範資料（腳本模型，約 2 分鐘） | `uv run --project backend python scripts/seed_demo.py --data-dir data-demo-build --script scripts/demo_content`，確認後改名成 `data-demo`。內容檔格式見 `DEMO_DATA_PLAN.md` |
+| 重新產生示範資料（真模型，約 29～34 小時） | 上一行去掉 `--script …`。四個情境的需求內容在 `scripts/demo_scenarios.py`，模型預設讀 `data/sagent.db` 的設定 |
 | 用真模型跑一次 AI 流程 | `uv run --project backend python scripts/run_pipeline.py --requirement-file 需求.txt --out 輸出.md` |
 
 ## 改完程式要做的檢查
@@ -90,9 +92,9 @@
 
 - 模型是在 CPU 上跑的 8B 左右小模型，又慢又容易出錯。改提示詞或流程前，先讀 `docs/architecture.md` 第 4.2 節「為了小模型做的設計」。
 - 不要用 LangChain 之類的框架，代理是自己實作的。
-- 文件的寫作規則有三種，由範本的 `style` 決定：`spec` 規格文件（只寫需求有的內容）、`advice` 建議類文件（例如 UI/UX 設計建議，可以提出需求沒寫的做法）、`idea` 構想文件（不寫細節規格，只有「可能的做法」一節可以提建議）。三種的寫作規則不同，見 `docs/architecture.md` 第 4.6、4.7 節。改其中一種的寫作規則時，不要動到其他種。
-- Reviewer 只找格式、邏輯錯誤（交給 Writer 修）和需要人工覆核的地方（只列給使用者），不評論完整度、不打分數。格式問題盡量用程式檢查。三種文件共用審查提示詞 `reviewer_system()`，見 `docs/architecture.md` 第 4.8 節。
-- 新增 Spec 時先選類型（範本的 `category`：idea、feature、design、change），類型清單在 `doc_templates.py` 的 `CATEGORIES`。新增內建範本要寫 `category`。
+- 文件的寫作規則有五種，由範本的 `style` 決定：`spec` 規格文件（只寫需求有的內容）、`advice` 建議類文件（例如 UI/UX 設計建議，可以提出需求沒寫的做法）、`idea` 構想文件（不寫細節規格，只有「可能的做法」一節可以提建議）、`algorithm` 演算法設計文件（問題的事實照需求，解法、虛擬碼由 AI 設計）、`experiment` 實驗設計文件（評估對象和判斷標準照需求，實驗方法由 AI 設計，不能寫實驗結果）。每種的寫作規則不同，見 `docs/architecture.md` 第 4.6、4.7、4.9 節。改其中一種的寫作規則時，不要動到其他種。
+- Reviewer 只找格式、邏輯錯誤（交給 Writer 修）和需要人工覆核的地方（只列給使用者），不評論完整度、不打分數。格式問題盡量用程式檢查。各種文件共用審查提示詞 `reviewer_system()`，見 `docs/architecture.md` 第 4.8 節。
+- 新增 Spec 時先選類型（範本的 `category`：idea、feature、design、algorithm、change），類型清單在 `doc_templates.py` 的 `CATEGORIES`。新增內建範本要寫 `category`。
 - 範本 `allow_diagrams: false` 表示不畫圖，`api/agent.py` 建立工作時和 `pipeline.py` 開始時都會強制關掉畫圖。
 - Mermaid 12 的 `usecase-beta` 沒有官方文件，語法是從套件的解析器反推、再用 `mermaid-validate.mjs` 驗證的。
 
@@ -113,8 +115,10 @@
 - 這台沒有 GPU，Ollama 只能用 CPU。不要隨便跑真模型。
 - 這台沒有 Java，PlantUML 還沒設定。
 - 這是地端系統，資料不能送到外部服務（例如公開的 PlantUML 伺服器）。
-- `data/` 是使用者的正式資料，不要刪改。測試和示範用暫存目錄或 `data-demo/`。`data-demo/` 是 `scripts/seed_demo.py` 用真模型產生的，花了好幾個小時，不要隨便覆蓋；畫面上測試新增的資料不影響。
+- `data/` 是使用者的正式資料，不要刪改。測試和示範用暫存目錄或 `data-demo/`。`data-demo/` 是 `scripts/seed_demo.py --script` 用 `scripts/demo_content/` 的內容檔產生的（文字由 AI 子代理撰寫，不是地端模型的產出），不要隨便覆蓋；畫面上測試新增的資料不影響。
+- `agents/zh.py` 會把「峰」「群」改成「峯」「羣」，示範內容檔要避開這兩個字，不然 `check_demo_content.py` 會當成簡體字。
 - 8765 埠常被使用者自己開的 SAgent 占用，預覽用 8766。
+- 這台的 uv 可能不在（2026-10-28 被移除過）。`start.ps1` 和 `.claude/launch.json`（透過 `start.ps1`）沒有 uv 時會改用 `backend\.venv`。其他指令沒有 uv 時：`uv run --project backend python` 換成 `backend\.venv\Scripts\python.exe`，`backend` 目錄裡的 `uv run pytest`、`uv run ruff` 換成 `.\.venv\Scripts\pytest.exe`、`.\.venv\Scripts\ruff.exe`。`.venv` 是 uv 建的，底層 Python 在 `%APPDATA%\uv\python\`，那個資料夾不能刪。
 - `index.html` 回應設定為 no-cache，`assets/` 檔名有雜湊。前端更新後，使用者第一次開頁面可能要按 Ctrl+F5。
 
 ## 文件維護

@@ -1,0 +1,140 @@
+{
+ "plan": {
+  "title": "會議室預約 API",
+  "summary": "說明會議室與訪客預約系統的 REST API：驗證與權限、端點、請求回應格式、呼叫流程、錯誤碼和注意事項。",
+  "sections": [
+   {
+    "heading": "概述",
+    "goal": "說明 API 的用途、版本、Base URL 和使用對象。",
+    "key_points": [
+     "Base URL /api/v1",
+     "JSON、ISO 8601"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "驗證與授權",
+    "goal": "說明 token 和三種權限。",
+    "key_points": [
+     "Azure AD token",
+     "AD Group",
+     "停權回 403"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "端點清單",
+    "goal": "用表格列出所有端點。",
+    "key_points": [
+     "員工、櫃台、管理三類",
+     "API-01 到 API-21"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "預約端點說明",
+    "goal": "說明查詢會議室、建立預約和會議室報到的請求和回應。",
+    "key_points": [
+     "API-01",
+     "API-02",
+     "API-05"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "訪客與櫃台端點說明",
+    "goal": "說明登記訪客、查詢、報到、發卡和離開。",
+    "key_points": [
+     "API-07",
+     "API-10",
+     "API-12 到 API-14"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "管理端點說明",
+    "goal": "說明強制取消、解除停權和月報表。",
+    "key_points": [
+     "API-18",
+     "API-19",
+     "API-20"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "呼叫流程",
+    "goal": "說明櫃台辦理訪客報到、發卡和離開的呼叫順序。",
+    "key_points": [
+     "發卡失敗回 502",
+     "改用人工陪同"
+    ],
+    "diagrams": [
+     {
+      "kind": "sequence",
+      "title": "櫃台訪客報到呼叫順序圖",
+      "description": "報到、發卡、門禁逾時處理和離開"
+     }
+    ]
+   },
+   {
+    "heading": "錯誤碼",
+    "goal": "用表格列出錯誤碼和處理建議。",
+    "key_points": [
+     "400、403、404、409、502"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "限制與注意事項",
+    "goal": "說明分頁、時間、重複呼叫和流量。",
+    "key_points": [
+     "page_size 最大 100",
+     "UTC+8",
+     "發卡防重複"
+    ],
+    "diagrams": []
+   }
+  ],
+  "open_questions": [
+   "分頁的預設 page_size 是多少。",
+   "是否要限制 API 的呼叫頻率。",
+   "建立預約是否需要防止重複送出的機制。",
+   "受訪人未在時限內確認現場登記的訪客時，改成拒絕入場的 API 要怎麼設計。"
+  ]
+ },
+ "sections": [
+  "本文件說明會議室與訪客預約系統的後端 REST API，給前端開發使用。\n\n| 項目 | 內容 |\n|---|---|\n| 版本 | v1 |\n| Base URL | /api/v1 |\n| 格式 | 請求和回應都用 JSON |\n| 時間 | ISO 8601，時區 UTC+8，例如 2026-11-02T14:00:00+08:00 |\n| 使用對象 | 員工、櫃台人員、總務管理員。訪客不呼叫 API |\n\n分頁的列表用 page 和 page_size，詳見最後一節。",
+  "前端用 Azure AD 取得 access token，每次呼叫 API 時放在標頭：\n\n```\nAuthorization: Bearer <access token>\n```\n\n後端依 AD Group判斷權限，共三種：\n\n| 權限 | AD Group | 可以做的事 |\n|---|---|---|\n| 員工 | 員工 | 查詢空的會議室、管理自己的預約、報到、登記和取消自己的訪客 |\n| 櫃台 | 櫃台人員 | 查詢訪客、現場登記、報到、發卡、離開和還卡 |\n| 管理 | 總務管理員 | 維護和停用會議室、強制取消預約、解除停權、報表 |\n\n權限不足回 403。正在停權中的員工建立預約也回 403，訊息要寫停權到哪一天。",
+  "| 編號 | 方法 | 路徑 | 說明 | 權限 |\n|---|---|---|---|---|\n| API-01 | GET | /rooms/available | 查詢某時段可用的會議室，可依樓層、人數篩選 | 員工 |\n| API-02 | POST | /bookings | 建立預約 | 員工 |\n| API-03 | PUT | /bookings/{booking_no} | 修改自己的預約 | 員工 |\n| API-04 | POST | /bookings/{booking_no}/cancel | 取消自己的預約 | 員工 |\n| API-05 | POST | /rooms/checkin | 掃會議室 QR Code 報到 | 員工 |\n| API-06 | GET | /bookings/mine | 查詢自己的預約 | 員工 |\n| API-07 | POST | /visitors | 登記訪客 | 員工 |\n| API-08 | POST | /visitors/{visitor_no}/cancel | 取消自己登記的訪客 | 員工 |\n| API-09 | GET | /visitors/today | 查詢今天的訪客，可依狀態篩選 | 櫃台 |\n| API-10 | GET | /visitors/by-qr/{qr_code} | 用 QR Code 代碼查詢訪客 | 櫃台 |\n| API-11 | POST | /visitors/walk-in | 現場登記訪客 | 櫃台 |\n| API-12 | POST | /visitors/{visitor_no}/checkin | 訪客報到 | 櫃台 |\n| API-13 | POST | /visitors/{visitor_no}/card | 發臨時卡，或記錄人工陪同 | 櫃台 |\n| API-14 | POST | /visitors/{visitor_no}/checkout | 辦理離開和還卡 | 櫃台 |\n| API-15 | POST | /rooms | 新增會議室 | 管理 |\n| API-16 | PUT | /rooms/{room_id} | 修改會議室 | 管理 |\n| API-17 | POST | /rooms/{room_id}/disable | 停用會議室 | 管理 |\n| API-18 | POST | /bookings/{booking_no}/force-cancel | 強制取消預約 | 管理 |\n| API-19 | POST | /employees/{employee_no}/suspension/release | 解除預約停權 | 管理 |\n| API-20 | GET | /reports/monthly | 查詢月報表 | 管理 |\n| API-21 | GET | /reports/monthly/export | 匯出月報表 Excel | 管理 |",
+  "### API-01 查詢可用會議室\n\n| 參數 | 位置 | 必填 | 說明 |\n|---|---|---|---|\n| start | query | 是 | 開始時間 |\n| end | query | 是 | 結束時間 |\n| floor | query | 否 | 樓層 |\n| capacity | query | 否 | 最少容納人數 |\n\n回應欄位：\n\n| 欄位 | 說明 |\n|---|---|\n| room_id | 會議室編號 |\n| name | 會議室名稱 |\n| floor | 樓層 |\n| room_type | 類型 |\n| capacity | 容納人數 |\n\n```json\n[\n  {\"room_id\": 3, \"name\": \"5F 中型會議室 A\", \"floor\": 5, \"room_type\": \"中型\", \"capacity\": 8}\n]\n```\n\n### API-02 建立預約\n\n| 參數 | 位置 | 必填 | 說明 |\n|---|---|---|---|\n| room_id | body | 是 | 會議室編號 |\n| subject | body | 是 | 會議主題，2～50 字 |\n| attendee_count | body | 是 | 參加人數，不能超過容納人數 |\n| start_at | body | 是 | 開始時間，以 30 分鐘為單位 |\n| end_at | body | 是 | 結束時間，單次最長 4 小時 |\n\n```json\n{\n  \"room_id\": 3,\n  \"subject\": \"11 月專案進度會議\",\n  \"attendee_count\": 6,\n  \"start_at\": \"2026-11-02T14:00:00+08:00\",\n  \"end_at\": \"2026-11-02T15:30:00+08:00\"\n}\n```\n\n成功回 201：\n\n| 欄位 | 說明 |\n|---|---|\n| booking_no | 預約編號，例如 M202610080001 |\n| status | 狀態，建立後為「已預約」 |\n\n```json\n{\"booking_no\": \"M202610080001\", \"status\": \"已預約\"}\n```\n\n### API-05 掃會議室 QR Code 報到\n\n| 參數 | 位置 | 必填 | 說明 |\n|---|---|---|---|\n| qr_code | body | 是 | 會議室門口 QR Code 的代碼 |\n\n系統找出這間會議室目前可以報到的預約（開始前 10 分鐘到開始後 15 分鐘）。找不到代碼回 404；沒有可報到的預約回 409。\n\n```json\n{\"booking_no\": \"M202610080001\", \"status\": \"使用中\", \"checkin_at\": \"2026-11-02T13:55:12+08:00\"}\n```",
+  "### API-07 登記訪客\n\n| 參數 | 位置 | 必填 | 說明 |\n|---|---|---|---|\n| name | body | 是 | 姓名 |\n| company | body | 是 | 公司 |\n| phone | body | 是 | 手機，10 碼數字 |\n| email | body | 是 | Email，事先登記必填 |\n| purpose | body | 是 | 來訪事由：洽公、面試、廠商會議、其他 |\n| planned_arrive_at | body | 是 | 預定到達時間 |\n| planned_leave_at | body | 是 | 預定離開時間 |\n| need_card | body | 是 | 是否需要臨時卡 |\n| booking_no | body | 否 | 關聯的預約編號；一筆預約最多 10 位訪客 |\n\n受訪人是呼叫的員工本人。成功回 201，並寄出含 QR Code 的 Email 給訪客。\n\n```json\n{\"visitor_no\": \"V202610080001\", \"status\": \"已登記\"}\n```\n\n### API-10 用 QR Code 代碼查詢訪客\n\n路徑參數 qr_code 是訪客 Email 裡的代碼。找不到或已經失效（不是來訪當天）回 404。\n\n| 欄位 | 說明 |\n|---|---|\n| visitor_no | 訪客編號 |\n| name | 姓名 |\n| company | 公司 |\n| host_name | 受訪人姓名 |\n| need_card | 是否需要臨時卡 |\n| status | 狀態 |\n\n### API-12 訪客報到\n\n不需要請求內容。成功後訪客改成「已報到」，並通知受訪人。訪客狀態不是「已登記」時回 409。\n\n```json\n{\"visitor_no\": \"V202610080001\", \"status\": \"已報到\", \"checkin_at\": \"2026-11-02T09:12:30+08:00\"}\n```\n\n### API-13 發臨時卡\n\n| 參數 | 位置 | 必填 | 說明 |\n|---|---|---|---|\n| card_no | body | 否 | 要發的卡號，例如 C05；人工陪同時不填 |\n| manual_escort | body | 否 | true 表示改用人工陪同，不發卡（假設用同一個端點記錄） |\n\n後端會呼叫門禁系統開通受訪人所在樓層。門禁系統 10 秒沒有回應或回傳錯誤時回 502，櫃台改用人工陪同。同一位訪客已經有使用中的臨時卡時回 409。\n\n```json\n{\"card_no\": \"C05\", \"floor\": 5, \"status\": \"使用中\"}\n```\n\n### API-14 辦理離開和還卡\n\n不需要請求內容。後端呼叫門禁系統停用這張卡，卡片改回「可用」，訪客改成「已離開」並記錄離開時間。",
+  "### API-18 強制取消預約\n\n| 參數 | 位置 | 必填 | 說明 |\n|---|---|---|---|\n| reason | body | 是 | 強制取消的原因，會通知預約人 |\n\n```json\n{\"reason\": \"會議室設備維修\"}\n```\n\n成功後預約改成「已取消」，並通知預約人。預約已經是「已取消」、「已釋放」或「已結束」時回 409。\n\n### API-19 解除預約停權\n\n路徑參數 employee_no 是被停權的員工工號，不需要請求內容。員工目前沒有停權時回 409。\n\n### API-20 查詢月報表\n\n| 參數 | 位置 | 必填 | 說明 |\n|---|---|---|---|\n| month | query | 是 | 月份，例如 2026-10 |\n\n回應欄位：\n\n| 欄位 | 說明 |\n|---|---|\n| rooms[].name | 會議室名稱 |\n| rooms[].usage_hours | 有報到的使用時數 |\n| rooms[].auto_release_count | 自動釋放次數 |\n| visitor_count | 訪客人數 |\n\n```json\n{\n  \"month\": \"2026-10\",\n  \"rooms\": [{\"name\": \"5F 中型會議室 A\", \"usage_hours\": 42.5, \"auto_release_count\": 3}],\n  \"visitor_count\": 612\n}\n```\n\n### 其他端點\n\nAPI-03、API-04、API-06、API-08、API-09、API-11、API-15、API-16、API-17、API-21 的請求欄位和 API-02、API-07 相同，或只需要路徑參數，詳細欄位在開發時依資料庫設計補齊（待確認）。API-21 回傳 Excel 檔，其他回應和錯誤的格式如本文件其他章節所述。",
+  "下圖是櫃台人員為事先登記的訪客辦理報到、發臨時卡和離開的呼叫順序。發卡遇到門禁系統沒有回應時，櫃台改用人工陪同，再用同一個發卡端點記錄。",
+  "錯誤回應的格式如下：\n\n```json\n{\"code\": \"TIME_CONFLICT\", \"message\": \"這個時段已有其他預約\"}\n```\n\n| HTTP 狀態碼 | 錯誤碼 | 說明 | 處理建議 |\n|---|---|---|---|\n| 400 | VALIDATION_FAILED | 欄位不符合規則，例如超過 4 小時、超過容納人數 | 依訊息修正欄位後重送 |\n| 403 | FORBIDDEN | 權限不足 | 確認使用者的 AD Group |\n| 403 | BOOKING_SUSPENDED | 員工停權中，訊息會寫停權到哪一天 | 告知使用者停權結束日，或請總務管理員解除 |\n| 404 | NOT_FOUND | 找不到資料 | 確認編號是否正確 |\n| 404 | QR_CODE_INVALID | QR Code 代碼找不到或已失效 | 請訪客提供當天有效的 QR Code，或由櫃台現場登記 |\n| 409 | TIME_CONFLICT | 時段和其他預約重疊 | 改選其他時段或會議室 |\n| 409 | INVALID_STATE | 目前的狀態不允許這個操作 | 重新查詢最新狀態 |\n| 409 | CARD_ALREADY_ISSUED | 訪客已經有使用中的臨時卡 | 不要重複發卡 |\n| 502 | ACCESS_CONTROL_ERROR | 門禁系統 10 秒沒有回應或回傳錯誤 | 櫃台改用人工陪同 |",
+  "### 分頁\n\n列表類的 API 用 page（從 1 開始）和 page_size，page_size 最大 100。預設的 page_size 沒有規定（待確認）。\n\n### 時間\n\n所有時間都用 ISO 8601，時區是 UTC+8，請求和回應都一樣。\n\n### 重複呼叫\n\n- 重複報到、重複取消等狀態已經改變的操作，第二次會回 409。\n- 發臨時卡有防重複：同一位訪客已經有使用中的卡，再發卡回 409。\n- 建立預約沒有冪等金鑰機制（待確認）；前端送出後要避免連按。\n\n### 流量限制\n\n需求沒有說明流量限制（待確認）。系統預計約 200 位使用者，忙碌時段同時上線約 40 人。"
+ ],
+ "diagrams": [
+  "sequenceDiagram\n    actor C as 櫃台人員\n    participant F as 櫃台前端\n    participant A as 預約 API\n    participant G as 門禁系統\n    C->>F: 掃訪客 QR Code\n    F->>A: GET 訪客 by-qr\n    A-->>F: 訪客資料\n    C->>F: 按報到\n    F->>A: POST 報到\n    A-->>F: 已報到\n    C->>F: 選擇臨時卡\n    F->>A: POST 發卡\n    A->>G: 開通受訪人樓層\n    alt 門禁系統成功\n        G-->>A: 開卡成功\n        A-->>F: 200 使用中\n    else 10 秒沒有回應或回傳錯誤\n        A-->>F: 502 門禁錯誤\n        F->>A: POST 發卡 人工陪同\n        A-->>F: 已記錄人工陪同\n    end\n    C->>F: 按離開\n    F->>A: POST 離開\n    A->>G: 停用卡片\n    A-->>F: 已離開"
+ ],
+ "review": {
+  "issues": [],
+  "review_points": [
+   {
+    "section_id": "S5",
+    "item": "發卡端點用 manual_escort 參數記錄人工陪同。",
+    "reason": "需求沒有說明人工陪同怎麼記錄，這是設計上的假設，請櫃台和資訊部確認。"
+   },
+   {
+    "section_id": "S6",
+    "item": "月報表的欄位和範例數字。",
+    "reason": "需求只說報表有使用率、自動釋放次數和訪客人數，欄位是推測的，範例數字僅供說明。"
+   },
+   {
+    "section_id": "S4",
+    "item": "端點的欄位名稱和範例。",
+    "reason": "需求沒有規定欄位名稱，請前端和後端開發團隊確認命名。"
+   }
+  ],
+  "summary": "API 涵蓋需求列出的員工、櫃台和管理員功能，欄位命名和部分端點細節需要開發團隊確認。"
+ }
+}

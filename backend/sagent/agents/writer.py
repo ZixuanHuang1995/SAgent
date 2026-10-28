@@ -90,8 +90,10 @@ class Writer(AgentBase):
                 step,
                 section_messages(inp, plan, sec, number, known_items),
                 temperature=inp.options.temperature,
-                max_tokens=2500,
+                max_tokens=4000,
             )
+            if result.truncated:
+                await self.log(f"第 {number} 節超過長度上限，內容可能不完整", "warn", section_id=sec.id)
             body = clean_section_body(result.text, sec.heading, keep_diagrams=False)
             if not body:
                 await self.log(f"第 {number} 節沒有產生內容", "warn", section_id=sec.id)

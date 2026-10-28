@@ -283,7 +283,7 @@ function ProjectSidebar(props: {
 function SpecLink({ projectId, spec }: { projectId: number; spec: Spec }) {
   const templates = useTemplates()
   const categories = useTemplateCategories()
-  // Functionality 是大多數，不標；其他類型（Concept、Technical、Change）在標題前加小標籤
+  // Functionality 是大多數，不標；其他類型（Concept、Technical、Algorithm、Change）在標題前加小標籤
   const category = templates.data?.find((t) => t.key === spec.doc_type)?.category
   const tag = category && category !== 'feature' ? categories.data?.find((c) => c.key === category)?.name : undefined
   return (
@@ -470,7 +470,11 @@ export function NewSpecDialog(props: {
           hint={
             category === 'idea'
               ? '寫下你的想法就好，幾句話也可以：想解決什麼問題、給誰用、大概想怎麼做。AI 會整理成構想提案，不清楚的地方列成待確認事項。'
-              : '可以貼會議紀錄、客戶需求、條列重點。AI 會依「文件類型」的章節規劃並撰寫。'
+              : template?.style === 'experiment'
+                ? '寫清楚要評估的工具或做法、想知道的事、可以參與的人和時間、怎樣算成功（例如：「評估 AI 程式碼審查工具，三個團隊參加 8 週，PR 前置時間要縮短 20% 以上」）。AI 會設計假設、指標、分組、流程和分析方法。'
+                : category === 'algorithm'
+                ? '寫清楚要解決的問題、輸入和輸出、限制條件和效能要求（例如：「解 9×9 數獨，題目用 81 個字元表示，0 是空格，每題要在 1 秒內解完」）。AI 會設計解法、寫虛擬碼、分析複雜度並列出測試案例。'
+                :'可以貼會議紀錄、客戶需求、條列重點。AI 會依「文件類型」的章節規劃並撰寫。'
           }
         >
           <textarea className="input textarea" rows={8} value={requirement} onChange={(e) => setRequirement(e.target.value)} />

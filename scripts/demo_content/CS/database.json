@@ -1,0 +1,127 @@
+{
+ "plan": {
+  "title": "客服系統資料庫",
+  "summary": "說明客服工單系統的資料模型、資料表、索引和資料生命週期。資料庫用 SQL Server 2019，刪除一律用軟刪除。",
+  "sections": [
+   {
+    "heading": "設計說明",
+    "goal": "說明資料庫用途、命名規則和編號規則。",
+    "key_points": [
+     "SQL Server 2019",
+     "軟刪除",
+     "工單編號 T + 年月日 + 4 碼流水號",
+     "知識庫編號 KB + 5 碼流水號"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "資料模型",
+    "goal": "說明實體和關聯。",
+    "key_points": [
+     "工單為中心",
+     "往來紀錄、附件、分派與升級、狀態歷程"
+    ],
+    "diagrams": [
+     {
+      "kind": "er",
+      "title": "客服系統實體關聯圖",
+      "description": "工單、客戶、往來紀錄、附件、知識庫等實體的關聯"
+     }
+    ]
+   },
+   {
+    "heading": "資料表定義",
+    "goal": "每張資料表用表格說明欄位。",
+    "key_points": [
+     "12 張資料表",
+     "工單含 SLA 時間",
+     "驗證碼不存明碼"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "索引與限制",
+    "goal": "列出主鍵、外來鍵、唯一鍵和索引。",
+    "key_points": [
+     "Email 唯一",
+     "Message-ID 避免重複建立工單",
+     "全文檢索索引"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "資料生命週期",
+    "goal": "說明資料的建立、更新、封存和刪除。",
+    "key_points": [
+     "工單保存 5 年",
+     "附件 2 年後封存",
+     "軟刪除",
+     "知識庫文章狀態"
+    ],
+    "diagrams": [
+     {
+      "kind": "state",
+      "title": "知識庫文章狀態圖",
+      "description": "草稿、待審核、已發布、已下架"
+     }
+    ]
+   },
+   {
+    "heading": "資料移轉與備份",
+    "goal": "說明初始資料、移轉和備份。",
+    "key_points": [
+     "AD 每天同步",
+     "筆記匯入成知識庫草稿",
+     "舊信不轉成工單",
+     "每晚完整備份保留 30 天"
+    ],
+    "diagrams": []
+   }
+  ],
+  "open_questions": [
+   "工單保存 5 年之後，要刪除還是匿名化？",
+   "首次回覆逾期和解決逾期要不要分開記錄？目前只有一個「是否逾期」欄位。",
+   "已下架的知識庫文章可不可以重新發布？",
+   "附件封存區放在哪裡？NAS 的備份方式是什麼？",
+   "匯入的知識庫草稿，作者和分類要怎麼填？"
+  ]
+ },
+ "sections": [
+  "這份文件說明客服工單系統的資料庫設計。資料庫用公司現有的 SQL Server 2019，存放工單、往來紀錄、附件路徑、分派與升級紀錄、狀態歷程、知識庫文章和通知紀錄。\n\n### 命名規則\n\n- 資料表和欄位名稱用英文小寫加底線，例如 ticket_message。\n- 主鍵用「資料表名稱加 _id」；工單和知識庫文章用編號當主鍵。\n- 時間欄位用 datetime2，名稱以 _at 結尾。\n- 所有資料表的刪除都用軟刪除，用 is_deleted 欄位標記，不真的刪掉資料。\n- 欄位長度是依需求推測的設計值（假設），開發前要和資訊部確認。\n\n### 編號規則\n\n| 編號 | 規則 | 範例 |\n|---|---|---|\n| 工單編號 | T + 年月日 + 4 碼流水號 | T202610080001 |\n| 知識庫文章編號 | KB + 5 碼流水號 | KB00012 |\n\n### 資料來源\n\n- 內部人員資料每天從 AD 同步。\n- 產品類別和國定假日清單由客服組長維護。\n- 其他資料由系統在處理工單和知識庫時產生。",
+  "資料模型以「工單」為中心。客戶提出工單，工單有多筆往來紀錄，往來紀錄可以有附件；每次分派、改派、升級和狀態改變都另外記錄。知識庫文章和工單沒有直接關聯，通知紀錄可以對應到工單。\n\n| 實體 | 說明 |\n|---|---|\n| STAFF_USER | 內部人員，從 AD 同步 |\n| CUSTOMER | 客戶，用 Email 辨識同一位 |\n| VERIFY_CODE | 客戶查詢進度用的驗證碼 |\n| PRODUCT_CATEGORY | 產品類別，由客服組長維護 |\n| TICKET | 工單，含 SLA 時間 |\n| TICKET_MESSAGE | 往來紀錄：客戶來信、客服回覆、內部備註 |\n| ATTACHMENT | 附件 |\n| TICKET_ACTION | 分派、改派、升級紀錄 |\n| STATUS_HISTORY | 狀態歷程 |\n| HOLIDAY | 國定假日，計算 SLA 用 |\n| KB_ARTICLE | 知識庫文章 |\n| NOTIFICATION_LOG | 通知紀錄 |\n\n關聯如下圖。圖上只列主鍵、外來鍵和少數重要欄位，完整欄位見資料表定義。",
+  "共 12 張資料表。長度欄的「無」表示該型別不需要長度，max 表示 nvarchar(max)。\n\n### staff_user 內部人員\n\n| 欄位名稱 | 型別 | 長度 | 必填 | 預設值 | 說明 |\n|---|---|---|---|---|---|\n| staff_id | nvarchar | 20 | 是 | 無 | 工號，主鍵 |\n| name | nvarchar | 50 | 是 | 無 | 姓名 |\n| department | nvarchar | 50 | 否 | 無 | 部門 |\n| email | nvarchar | 100 | 是 | 無 | Email |\n| role | nvarchar | 20 | 是 | 無 | 角色：客服人員、客服組長、技術支援、客服主管 |\n| synced_at | datetime2 | 無 | 是 | 無 | 最近一次從 AD 同步的時間 |\n| is_deleted | bit | 無 | 是 | 0 | 軟刪除 |\n\n### customer 客戶\n\n| 欄位名稱 | 型別 | 長度 | 必填 | 預設值 | 說明 |\n|---|---|---|---|---|---|\n| customer_id | bigint | 無 | 是 | 自動編號 | 主鍵 |\n| name | nvarchar | 50 | 是 | 無 | 姓名 |\n| email | nvarchar | 100 | 是 | 無 | Email，用來辨識同一位客戶 |\n| phone | nvarchar | 30 | 否 | 無 | 電話 |\n| company_name | nvarchar | 100 | 否 | 無 | 公司名稱 |\n| created_at | datetime2 | 無 | 是 | 目前時間 | 建立時間 |\n| is_deleted | bit | 無 | 是 | 0 | 軟刪除 |\n\n### verify_code 查詢驗證碼\n\n| 欄位名稱 | 型別 | 長度 | 必填 | 預設值 | 說明 |\n|---|---|---|---|---|---|\n| code_id | bigint | 無 | 是 | 自動編號 | 主鍵 |\n| ticket_no | nvarchar | 13 | 是 | 無 | 工單編號 |\n| email | nvarchar | 100 | 是 | 無 | 驗證碼寄送的 Email |\n| code_hash | nvarchar | 100 | 是 | 無 | 驗證碼的雜湊值，不存明碼 |\n| expires_at | datetime2 | 無 | 是 | 無 | 到期時間 |\n| fail_count | int | 無 | 是 | 0 | 輸錯次數 |\n| created_at | datetime2 | 無 | 是 | 目前時間 | 建立時間 |\n\n### product_category 產品類別\n\n| 欄位名稱 | 型別 | 長度 | 必填 | 預設值 | 說明 |\n|---|---|---|---|---|---|\n| category_id | int | 無 | 是 | 自動編號 | 主鍵 |\n| name | nvarchar | 50 | 是 | 無 | 產品類別名稱，由客服組長維護 |\n| is_deleted | bit | 無 | 是 | 0 | 軟刪除，停用的類別不再出現在選單 |\n\n### ticket 工單\n\n工單同時存 SLA 需要的時間，不另外拆表。\n\n| 欄位名稱 | 型別 | 長度 | 必填 | 預設值 | 說明 |\n|---|---|---|---|---|---|\n| ticket_no | nvarchar | 13 | 是 | 無 | 工單編號，主鍵，例如 T202610080001 |\n| customer_id | bigint | 無 | 是 | 無 | 客戶，外來鍵 |\n| channel | nvarchar | 20 | 是 | 無 | 進線管道：網頁表單、Email |\n| category_id | int | 無 | 否 | 無 | 產品類別，Email 進線時先空白，由客服組長分派時補上 |\n| issue_type | nvarchar | 20 | 是 | 無 | 問題類型 |\n| subject | nvarchar | 100 | 是 | 無 | 主旨 |\n| description | nvarchar | max | 是 | 無 | 問題說明 |\n| priority | nvarchar | 10 | 是 | 一般 | 優先順序：一般、高、緊急 |\n| status | nvarchar | 20 | 是 | 新建 | 狀態：新建、已分派、處理中、待客戶回覆、已解決、已結案 |\n| assignee_id | nvarchar | 20 | 否 | 無 | 處理人，外來鍵，指向內部人員 |\n| related_ticket_no | nvarchar | 13 | 否 | 無 | 關聯工單，例如已結案後客戶再來信所建立的新工單 |\n| created_at | datetime2 | 無 | 是 | 目前時間 | 建立時間 |\n| first_reply_at | datetime2 | 無 | 否 | 無 | 首次回覆時間 |\n| resolved_at | datetime2 | 無 | 否 | 無 | 解決時間 |\n| closed_at | datetime2 | 無 | 否 | 無 | 結案時間 |\n| close_reason | nvarchar | 20 | 否 | 無 | 結案原因：已解決、客戶未回覆、已合併 |\n| first_reply_due_at | datetime2 | 無 | 否 | 無 | 首次回覆到期時間 |\n| resolve_due_at | datetime2 | 無 | 否 | 無 | 解決到期時間 |\n| paused_minutes | int | 無 | 是 | 0 | 待客戶回覆等暫停計時的累計分鐘數 |\n| is_overdue | bit | 無 | 是 | 0 | 是否逾期 |\n| is_deleted | bit | 無 | 是 | 0 | 軟刪除 |\n\n### ticket_message 往來紀錄\n\n| 欄位名稱 | 型別 | 長度 | 必填 | 預設值 | 說明 |\n|---|---|---|---|---|---|\n| message_id | bigint | 無 | 是 | 自動編號 | 主鍵 |\n| ticket_no | nvarchar | 13 | 是 | 無 | 工單編號，外來鍵 |\n| msg_type | nvarchar | 20 | 是 | 無 | 類型：客戶來信、客服回覆、內部備註 |\n| content | nvarchar | max | 是 | 無 | 內容；內部備註客戶看不到 |\n| sender | nvarchar | 100 | 是 | 無 | 寄件人：客戶 Email 或內部人員工號 |\n| sent_at | datetime2 | 無 | 是 | 目前時間 | 時間 |\n| email_message_id | nvarchar | 300 | 否 | 無 | Email 進線的原始信件 Message-ID，避免同一封信建立兩次 |\n\n### attachment 附件\n\n| 欄位名稱 | 型別 | 長度 | 必填 | 預設值 | 說明 |\n|---|---|---|---|---|---|\n| attachment_id | bigint | 無 | 是 | 自動編號 | 主鍵 |\n| message_id | bigint | 無 | 是 | 無 | 所屬往來紀錄，外來鍵；每筆最多 3 個附件 |\n| file_path | nvarchar | 300 | 是 | 無 | 檔案在 NAS 的路徑 |\n| file_name | nvarchar | 200 | 是 | 無 | 檔名 |\n| file_size | bigint | 無 | 是 | 無 | 檔案大小（位元組） |\n| uploaded_by | nvarchar | 100 | 是 | 無 | 上傳者：客戶 Email 或內部人員工號 |\n| is_archived | bit | 無 | 是 | 0 | 是否已移到封存區 |\n| is_deleted | bit | 無 | 是 | 0 | 軟刪除 |\n\n### ticket_action 分派與升級紀錄\n\n| 欄位名稱 | 型別 | 長度 | 必填 | 預設值 | 說明 |\n|---|---|---|---|---|---|\n| action_id | bigint | 無 | 是 | 自動編號 | 主鍵 |\n| ticket_no | nvarchar | 13 | 是 | 無 | 工單編號，外來鍵 |\n| action_type | nvarchar | 10 | 是 | 無 | 類型：分派、改派、升級 |\n| target_id | nvarchar | 20 | 是 | 無 | 對象：被分派或被升級的內部人員工號 |\n| operator_id | nvarchar | 20 | 是 | 無 | 操作人工號 |\n| acted_at | datetime2 | 無 | 是 | 目前時間 | 操作時間 |\n| reason | nvarchar | 500 | 否 | 無 | 原因，升級時必填 |\n\n### status_history 狀態歷程\n\n| 欄位名稱 | 型別 | 長度 | 必填 | 預設值 | 說明 |\n|---|---|---|---|---|---|\n| history_id | bigint | 無 | 是 | 自動編號 | 主鍵 |\n| ticket_no | nvarchar | 13 | 是 | 無 | 工單編號，外來鍵 |\n| from_status | nvarchar | 20 | 否 | 無 | 改變前的狀態，建立工單時為空 |\n| to_status | nvarchar | 20 | 是 | 無 | 改變後的狀態 |\n| operator_id | nvarchar | 20 | 是 | 無 | 操作人；自動結案記為系統 |\n| changed_at | datetime2 | 無 | 是 | 目前時間 | 改變時間 |\n| note | nvarchar | 500 | 否 | 無 | 備註 |\n\n### holiday 國定假日\n\n| 欄位名稱 | 型別 | 長度 | 必填 | 預設值 | 說明 |\n|---|---|---|---|---|---|\n| holiday_date | date | 無 | 是 | 無 | 日期，主鍵 |\n| name | nvarchar | 50 | 是 | 無 | 假日名稱 |\n\n### kb_article 知識庫文章\n\n| 欄位名稱 | 型別 | 長度 | 必填 | 預設值 | 說明 |\n|---|---|---|---|---|---|\n| article_no | nvarchar | 7 | 是 | 無 | 文章編號，主鍵，例如 KB00012 |\n| title | nvarchar | 200 | 是 | 無 | 標題 |\n| content | nvarchar | max | 是 | 無 | 內容 |\n| category | nvarchar | 50 | 是 | 無 | 分類 |\n| visibility | nvarchar | 10 | 是 | 內部 | 公開範圍：內部、公開 |\n| status | nvarchar | 10 | 是 | 草稿 | 狀態：草稿、待審核、已發布、已下架 |\n| author_id | nvarchar | 20 | 是 | 無 | 作者工號 |\n| reviewer_id | nvarchar | 20 | 否 | 無 | 審核人工號 |\n| published_at | datetime2 | 無 | 否 | 無 | 發布時間 |\n| view_count | int | 無 | 是 | 0 | 瀏覽次數 |\n| is_deleted | bit | 無 | 是 | 0 | 軟刪除 |\n\n### notification_log 通知紀錄\n\n| 欄位名稱 | 型別 | 長度 | 必填 | 預設值 | 說明 |\n|---|---|---|---|---|---|\n| notify_id | bigint | 無 | 是 | 自動編號 | 主鍵 |\n| ticket_no | nvarchar | 13 | 否 | 無 | 相關工單（假設，需求沒有列這個欄位） |\n| target | nvarchar | 100 | 是 | 無 | 通知對象：Email 或 Teams 頻道 |\n| channel | nvarchar | 10 | 是 | 無 | 管道：Email、Teams |\n| content_summary | nvarchar | 500 | 是 | 無 | 內容摘要 |\n| result | nvarchar | 10 | 是 | 無 | 發送結果：成功、失敗 |\n| sent_at | datetime2 | 無 | 是 | 目前時間 | 發送時間 |",
+  "### 主鍵與外來鍵\n\n每張資料表都有主鍵。外來鍵如下：\n\n| 資料表 | 欄位 | 參照 |\n|---|---|---|\n| ticket | customer_id | customer.customer_id |\n| ticket | category_id | product_category.category_id |\n| ticket | assignee_id | staff_user.staff_id |\n| ticket | related_ticket_no | ticket.ticket_no |\n| ticket_message | ticket_no | ticket.ticket_no |\n| attachment | message_id | ticket_message.message_id |\n| ticket_action | ticket_no | ticket.ticket_no |\n| status_history | ticket_no | ticket.ticket_no |\n| kb_article | author_id、reviewer_id | staff_user.staff_id |\n\n### 唯一鍵與索引\n\n| 資料表 | 類型 | 欄位 | 建立原因 |\n|---|---|---|---|\n| customer | 唯一鍵 | email | 用 Email 辨識同一位客戶 |\n| ticket_message | 唯一索引（排除空值） | email_message_id | 同一封來信不會建立兩次 |\n| ticket | 索引 | assignee_id、status | 查詢「我的工單」 |\n| ticket | 索引 | status、first_reply_due_at | 背景排程檢查首次回覆到期和逾期 |\n| ticket | 索引 | status、resolve_due_at | 背景排程檢查解決到期 |\n| ticket | 索引 | category_id、channel、created_at | 月報表依產品類別和進線管道統計 |\n| ticket | 索引 | customer_id | 查詢同一位客戶的工單 |\n| ticket_message | 索引 | ticket_no、sent_at | 依時間顯示往來紀錄 |\n| verify_code | 索引 | ticket_no、email、expires_at | 查詢進度時檢查驗證碼 |\n| status_history | 索引 | ticket_no、changed_at | 查看工單的狀態歷程 |\n| kb_article | 全文檢索索引 | title、content | 知識庫搜尋，用 SQL Server 全文檢索 |\n| kb_article | 索引 | status、visibility | 客戶查公開文章時只找已發布的公開文章 |\n\n### 資料限制\n\n- ticket 的 priority、status、channel 用檢查限制（CHECK），只能放需求列出的值。\n- 客戶看不到 msg_type 是「內部備註」的紀錄，查詢客戶用的資料時要排除這一類。\n- 每筆往來紀錄最多 3 個附件，由應用程式檢查。",
+  "### 工單\n\n- 建立：客戶用網頁表單送出，或 Email 進線，建立工單和第一筆往來紀錄。\n- 更新：每次狀態改變，寫一筆 status_history；每次分派、改派、升級，寫一筆 ticket_action。\n- 結案：結案時記錄 closed_at 和 close_reason。\n- 保存：工單資料保存 5 年。保存期限到了怎麼處理（刪除或匿名化）需求沒有說明（待確認）。\n- 刪除：一律軟刪除。\n\n### 附件\n\n- 附件放在 NAS，資料庫只存路徑。\n- 2 年後移到封存區，並把 is_archived 設為 1。\n- 軟刪除。\n\n### 往來紀錄、分派與升級紀錄、狀態歷程\n\n這些紀錄建立後不修改，跟著工單保存 5 年。\n\n### 驗證碼\n\n驗證碼有到期時間，輸錯會累計次數。到期的驗證碼什麼時候清掉，需求沒有說明（待確認）。\n\n### 知識庫文章\n\n文章有四種狀態，轉換如下圖。公開範圍分「內部」和「公開」，客戶只能查「已發布」且「公開」的文章。\n\n| 狀態 | 說明 |\n|---|---|\n| 草稿 | 客服人員撰寫中 |\n| 待審核 | 作者送審，等客服組長審核 |\n| 已發布 | 客服組長審核通過，記錄審核人和發布時間 |\n| 已下架 | 客服組長下架，不再顯示 |",
+  "### 初始資料\n\n- 內部人員：每天從 AD 同步工號、姓名、部門、Email 和角色。\n- 產品類別和國定假日：由客服組長在系統內建立和維護；國定假日清單每年維護一次。\n- 知識庫：上線前把客服人員筆記裡的常見問題整理後，匯入成知識庫草稿，上線後再由客服人員補完並送審。匯入文章的作者和分類怎麼填，需求沒有說明（待確認）。\n\n### 資料移轉\n\n共用信箱的舊信不轉成工單，只保留在郵件伺服器。系統上線後只處理新進來的信件。\n\n### 備份與還原\n\n- 每天晚上做資料庫完整備份，備份保留 30 天。\n- 還原演練的頻率需求沒有說明（待確認）。\n- 附件放在 NAS，備份方式要和資訊部確認（待確認）。"
+ ],
+ "diagrams": [
+  "erDiagram\n    STAFF_USER ||--o{ TICKET : \"負責處理\"\n    CUSTOMER ||--o{ TICKET : \"提出\"\n    PRODUCT_CATEGORY ||--o{ TICKET : \"分類\"\n    TICKET ||--o{ TICKET_MESSAGE : \"包含\"\n    TICKET_MESSAGE ||--o{ ATTACHMENT : \"附有\"\n    TICKET ||--o{ TICKET_ACTION : \"分派與升級\"\n    TICKET ||--o{ STATUS_HISTORY : \"狀態歷程\"\n    TICKET ||--o{ VERIFY_CODE : \"查詢驗證\"\n    TICKET ||--o{ NOTIFICATION_LOG : \"通知\"\n    STAFF_USER ||--o{ KB_ARTICLE : \"撰寫\"\n    STAFF_USER {\n        string staff_id PK \"工號\"\n        string name \"姓名\"\n        string role \"角色\"\n    }\n    CUSTOMER {\n        int customer_id PK \"客戶編號\"\n        string name \"姓名\"\n        string email \"Email\"\n    }\n    PRODUCT_CATEGORY {\n        int category_id PK \"類別編號\"\n        string name \"類別名稱\"\n    }\n    TICKET {\n        string ticket_no PK \"工單編號\"\n        int customer_id FK \"客戶\"\n        string assignee_id FK \"處理人\"\n        string status \"狀態\"\n        string priority \"優先順序\"\n        datetime first_reply_due_at \"首次回覆到期\"\n    }\n    TICKET_MESSAGE {\n        int message_id PK \"紀錄編號\"\n        string ticket_no FK \"工單編號\"\n        string msg_type \"類型\"\n    }\n    ATTACHMENT {\n        int attachment_id PK \"附件編號\"\n        int message_id FK \"往來紀錄\"\n        string file_path \"檔案路徑\"\n    }\n    TICKET_ACTION {\n        int action_id PK \"紀錄編號\"\n        string ticket_no FK \"工單編號\"\n        string action_type \"分派或升級\"\n    }\n    STATUS_HISTORY {\n        int history_id PK \"紀錄編號\"\n        string ticket_no FK \"工單編號\"\n        string to_status \"改變後狀態\"\n    }\n    VERIFY_CODE {\n        int code_id PK \"驗證碼編號\"\n        string ticket_no FK \"工單編號\"\n        datetime expires_at \"到期時間\"\n    }\n    NOTIFICATION_LOG {\n        int notify_id PK \"通知編號\"\n        string channel \"管道\"\n        string result \"發送結果\"\n    }\n    KB_ARTICLE {\n        string article_no PK \"文章編號\"\n        string title \"標題\"\n        string status \"狀態\"\n        string author_id FK \"作者\"\n    }\n    HOLIDAY {\n        date holiday_date PK \"日期\"\n        string name \"假日名稱\"\n    }",
+  "stateDiagram-v2\n    state \"草稿\" as Draft\n    state \"待審核\" as Pending\n    state \"已發布\" as Published\n    state \"已下架\" as Offline\n    [*] --> Draft : 作者新增文章\n    Draft --> Pending : 送審\n    Pending --> Published : 客服組長審核通過\n    Pending --> Draft : 退回修改\n    Published --> Offline : 客服組長下架"
+ ],
+ "review": {
+  "issues": [],
+  "review_points": [
+   {
+    "section_id": "S1",
+    "item": "欄位長度和型別（例如 nvarchar(100)、nvarchar(300)）",
+    "reason": "需求只指定了編號規則，沒有給各欄位的長度，文件寫的是設計值，需要資訊部確認。"
+   },
+   {
+    "section_id": "S3",
+    "item": "notification_log 的 ticket_no 欄位",
+    "reason": "需求的通知紀錄只有對象、管道、內容摘要、發送結果，沒有工單編號，這是文件為了查詢方便加的，需要確認。"
+   },
+   {
+    "section_id": "S3",
+    "item": "ticket 的 SLA 時間放在工單資料表，is_overdue 只有一個欄位",
+    "reason": "需求只說每張工單記錄到期時間和是否逾期，沒有說首次回覆和解決要不要分開記逾期。"
+   },
+   {
+    "section_id": "S5",
+    "item": "知識庫「待審核退回草稿」的轉換",
+    "reason": "需求只說客服組長審核後發布，沒有說審核不通過怎麼處理，退回是文件補充的，需要客服中心決定。"
+   }
+  ],
+  "summary": "資料表涵蓋需求列出的全部資料；欄位長度、逾期欄位的拆法和幾個補充欄位需要確認。"
+ }
+}

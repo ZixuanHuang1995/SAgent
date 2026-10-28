@@ -39,6 +39,9 @@ class ProjectOut(ORMModel):
     spec_count: int = 0
     # 各階段和底下的 Spec 數量（不含封存），依階段順序排列，首頁卡片用
     phases: list[PhaseSummary] = []
+    # 執行中、排隊中的 AI 工作數量，首頁卡片用
+    running_runs: int = 0
+    queued_runs: int = 0
 
 
 class PhaseCreate(BaseModel):

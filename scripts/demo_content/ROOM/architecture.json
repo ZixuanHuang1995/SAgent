@@ -1,0 +1,144 @@
+{
+ "plan": {
+  "title": "會議室預約系統架構",
+  "summary": "說明會議室與訪客預約系統的元件、主要流程、部署方式、技術選型、安全設計和重要的設計決策。",
+  "sections": [
+   {
+    "heading": "設計目標與限制",
+    "goal": "列出可用性、容量、稽核等目標，以及部署、技術和門禁系統的限制。",
+    "key_points": [
+     "可用性 99%",
+     "忙碌時段約 40 人同時上線",
+     "只能部署在內部機房"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "系統環境",
+    "goal": "說明系統和使用者、外部系統之間的關係。",
+    "key_points": [
+     "員工、櫃台、總務管理員、訪客",
+     "Azure AD、門禁、SMTP、Teams"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "元件設計",
+    "goal": "列出系統內部的元件、職責和對外介面。",
+    "key_points": [
+     "Web 前端、REST API、服務層",
+     "門禁介接、通知、背景排程"
+    ],
+    "diagrams": [
+     {
+      "kind": "component",
+      "title": "系統元件圖",
+      "description": "前端、後端元件、資料庫和外部系統的關係"
+     }
+    ]
+   },
+   {
+    "heading": "主要流程",
+    "goal": "說明櫃台辦理訪客報到並發卡時，元件之間怎麼互動。",
+    "key_points": [
+     "報到",
+     "呼叫門禁系統開卡",
+     "門禁沒有回應的處理"
+    ],
+    "diagrams": [
+     {
+      "kind": "sequence",
+      "title": "訪客報到與發卡循序圖",
+      "description": "櫃台報到、發卡，以及門禁系統逾時的處理"
+     }
+    ]
+   },
+   {
+    "heading": "部署架構",
+    "goal": "說明執行環境、網路區域和連線方式。",
+    "key_points": [
+     "應用程式 VM 和資料區",
+     "公司既有系統",
+     "Teams 對外連線"
+    ],
+    "diagrams": [
+     {
+      "kind": "deployment",
+      "title": "部署架構圖",
+      "description": "內部機房的主機、資料庫和外部連線"
+     }
+    ]
+   },
+   {
+    "heading": "技術選型",
+    "goal": "用表格列出使用的技術和選擇原因。",
+    "key_points": [
+     "C# .NET 8、Vue 3",
+     "SQL Server 2019"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "安全設計",
+    "goal": "說明驗證、授權、資料保護和稽核紀錄。",
+    "key_points": [
+     "Azure AD 和 AD Group",
+     "QR Code 只放隨機代碼",
+     "稽核紀錄保存 3 年"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "設計決策",
+    "goal": "列出重要設計決策的背景、選項和原因。",
+    "key_points": [
+     "規則集中",
+     "每分鐘排程",
+     "門禁 10 秒逾時"
+    ],
+    "diagrams": []
+   }
+  ],
+  "open_questions": [
+   "Teams Incoming Webhook 需要連到 Microsoft 365，請資訊安全組確認是否允許這條對外連線。",
+   "應用程式 VM 要幾台、是否要做高可用，請資訊部確認。",
+   "背景排程在多台主機時要怎麼避免重複執行。"
+  ]
+ },
+ "sections": [
+  "### 設計目標\n\n- 讓員工在手機和電腦上都能預約會議室，櫃台電腦可以用 USB 條碼掃描器讀 QR Code。\n- 上班時間可用性要達到 99%。\n- 預約、報到、發卡、還卡都要留稽核紀錄，保存 3 年。\n- 訪客的個人資料只讓櫃台人員和受訪人看到。\n\n### 容量\n\n| 項目 | 數值 |\n|---|---|\n| 使用者 | 約 200 人 |\n| 忙碌時段同時上線 | 約 40 人（上午 9 點到 10 點） |\n| 會議室 | 12 間（第一期） |\n\n### 限制\n\n- 部署在公司內部機房的 VM，不能用公有雲；只開放公司內網和公司 Wi-Fi 連線。\n- 資訊部熟悉 C# .NET 8 和 Vue 3，後端和前端以此為主。\n- 資料庫使用公司現有的 SQL Server 2019。\n- 門禁系統不能改動，臨時卡只能透過廠商提供的地端 API 開卡和停卡。\n- 每分鐘的背景排程要檢查自動釋放、未到訪和臨時卡未歸還；訪客個資去識別化每天晚上執行一次。",
+  "系統由內部機房的應用程式服務和公司既有系統組成。使用者只能從公司內網或公司 Wi-Fi 連線。\n\n| 對象 | 與系統的關係 |\n|---|---|\n| 員工 | 用手機或電腦瀏覽器預約會議室、登記訪客；到會議室門口掃 QR Code 報到 |\n| 櫃台人員 | 用櫃台電腦處理訪客報到、發卡、離開，電腦接 USB 條碼掃描器 |\n| 總務管理員 | 維護會議室、強制取消預約、看報表 |\n| 訪客 | 不登入系統，只收到含 QR Code 的 Email |\n| Azure AD | 提供 SSO 登入，權限依 AD Group（員工、櫃台人員、總務管理員）判斷 |\n| 門禁系統 | 廠商提供的地端 API，負責開卡和停卡 |\n| SMTP 伺服器 | 公司的郵件伺服器，寄給員工和訪客的 Email 都走這台 |\n| Microsoft Teams | 用 Incoming Webhook 發訊息到櫃台頻道和個人 |\n\nTeams 的 Incoming Webhook 需要從內部機房連到 Microsoft 365，是否允許這條對外連線，要請資訊安全組確認（待確認）。",
+  "### 元件職責\n\n| 元件 | 職責 | 對外介面 |\n|---|---|---|\n| Web 前端 | Vue 3 單頁應用程式，RWD 支援手機，不另外做 App | 呼叫 REST API |\n| REST API | 接收前端請求，驗證 Azure AD token，檢查權限 | HTTPS、JSON |\n| 預約與訪客服務 | 預約規則、報到規則、訪客登記、狀態管理，並寫稽核紀錄 | 內部呼叫 |\n| 門禁介接元件 | 呼叫門禁系統 API 開卡、停卡，10 秒沒有回應就回報失敗 | 地端 API |\n| 通知元件 | 組出通知內容，發送 Email 和 Teams，記錄發送結果 | SMTP、Webhook |\n| 背景排程 | 每分鐘檢查自動釋放、未到訪、臨時卡未歸還；每天晚上做訪客個資去識別化 | 呼叫預約與訪客服務 |\n| SQL Server | 儲存所有資料 | SQL |\n\n如下圖，所有業務規則放在預約與訪客服務，API 和排程都呼叫同一組服務，避免兩邊規則不一致。",
+  "以櫃台為訪客辦理報到並發臨時卡為例，說明元件怎麼互動：\n\n1. 櫃台人員用條碼掃描器掃訪客 Email 裡的 QR Code，前端用代碼查詢訪客。\n2. 櫃台人員核對證件後按「報到」，系統把訪客改成「已報到」、寫狀態歷程，並通知受訪人。\n3. 需要臨時卡時，櫃台選一張可用的卡片，後端呼叫門禁系統開通受訪人所在樓層。\n4. 門禁系統成功回應就把卡片改成「使用中」；10 秒沒有回應或回傳錯誤時，API 回 502，櫃台改請受訪人陪同，這次不發臨時卡。\n\n每個步驟都會寫稽核紀錄，門禁 API 的回應結果也一併保存。",
+  "系統部署在公司內部機房，資料庫放在獨立的資料區。\n\n| 區域 | 內容 | 說明 |\n|---|---|---|\n| 應用程式區 | 應用程式 VM，放前端靜態檔、REST API 和背景排程 | VM 數量和是否做高可用，要和資訊部確認（待確認） |\n| 資料區 | SQL Server 2019 | 沿用公司現有資料庫和機房每天晚上的備份 |\n| 公司既有系統 | Azure AD、門禁系統、SMTP 伺服器 | 由原本的管理單位維護 |\n| 外部 | Microsoft Teams Webhook | 只有通知元件連出去 |\n\n網站只開放公司內網和公司 Wi-Fi，不對外網提供服務。背景排程和 API 放在同一台 VM（假設），排程不重複執行的作法在設計決策說明。",
+  "| 類別 | 技術 | 選擇原因 |\n|---|---|---|\n| 後端 | C# .NET 8 | 資訊部熟悉 |\n| 前端 | Vue 3，RWD | 資訊部熟悉，手機不另外做 App |\n| 資料庫 | SQL Server 2019 | 公司現有，沿用備份機制 |\n| 登入 | Azure AD SSO | 沿用公司帳號和 AD Group |\n| Email | 公司 SMTP 伺服器 | 訪客和員工都用同一台 |\n| 即時通知 | Teams Incoming Webhook | 發到櫃台頻道和個人 |\n| 排程 | 背景排程，每分鐘執行 | 用來做自動釋放、未到訪和未歸還檢查 |\n| 條碼 | USB 條碼掃描器，櫃台電腦 | 讀取訪客 QR Code，不需另外安裝軟體（假設） |\n\n後端排程要用 .NET 8 哪一種方式實作，由開發團隊決定。",
+  "### 身分驗證與授權\n\n- 員工、櫃台人員和總務管理員用 Azure AD SSO 登入，API 驗證 access token。\n- 權限依 AD Group判斷：員工、櫃台人員、總務管理員。\n- 訪客不登入。Email 裡的 QR Code 只放一組隨機代碼，不含個人資料，只在來訪當天有效。\n\n### 資料保護\n\n- 訪客的手機和 Email 只有櫃台人員和受訪人看得到。\n- 訪客個資在來訪日起 1 年後去識別化，由背景排程每天晚上執行。\n- 只開放公司內網和公司 Wi-Fi，不對外網提供服務。\n\n### 稽核紀錄\n\n所有預約、報到、發卡、還卡都要留稽核紀錄，保存 3 年。紀錄包含操作人、時間、前後狀態；排程自動改的狀態，操作人記成「系統」。門禁 API 的回應結果也要記錄。",
+  "| 編號 | 背景 | 考慮過的選項 | 決定與原因 |\n|---|---|---|---|\n| DEC-01 | 預約、釋放等規則要在 API 和排程都生效 | 規則寫在 API；規則集中在服務層 | 集中在預約與訪客服務，API 和排程都呼叫，規則只有一份 |\n| DEC-02 | 自動釋放要在開始後 15 分鐘內處理 | 事件驅動；每分鐘輪詢 | 用每分鐘的排程輪詢，簡單，資訊部容易維護 |\n| DEC-03 | 門禁系統可能沒有回應 | 一直等待；10 秒逾時後回報失敗 | 10 秒逾時，讓櫃台改用人工陪同，不讓訪客排隊等 |\n| DEC-04 | 訪客 QR Code 可能被轉傳 | 放個人資料；只放隨機代碼 | 只放隨機代碼，並只在來訪當天有效 |\n| DEC-05 | 排程可能在多台主機上同時執行 | 單一排程；加鎖 | 第一期用單一排程，是否要做主機備援再討論（待確認） |"
+ ],
+ "diagrams": [
+  "flowchart LR\n    subgraph FE[\"前端\"]\n        WEB[\"Web 前端 Vue 3\"]\n    end\n    subgraph BE[\"後端服務\"]\n        API[\"REST API\"]\n        BIZ[\"預約與訪客服務\"]\n        CARD[\"門禁介接元件\"]\n        NOTI[\"通知元件\"]\n        JOB[\"背景排程\"]\n    end\n    DB[(\"SQL Server 2019\")]\n    AAD[\"Azure AD\"]\n    ACS[\"門禁系統\"]\n    SMTP[\"SMTP 伺服器\"]\n    TEAMS[\"Teams Webhook\"]\n    WEB -->|HTTPS| API\n    WEB -->|SSO| AAD\n    API --> BIZ\n    JOB --> BIZ\n    BIZ --> DB\n    BIZ --> CARD\n    BIZ --> NOTI\n    CARD -->|地端 API| ACS\n    NOTI -->|SMTP| SMTP\n    NOTI -->|Webhook| TEAMS",
+  "sequenceDiagram\n    actor C as 櫃台人員\n    participant W as Web 前端\n    participant A as REST API\n    participant B as 預約與訪客服務\n    participant G as 門禁系統\n    participant D as SQL Server\n    C->>W: 掃訪客 QR Code\n    W->>A: 查詢訪客\n    A->>D: 依代碼查詢\n    D-->>A: 訪客資料\n    A-->>W: 訪客資料\n    C->>W: 按報到並選臨時卡\n    W->>A: 報到並發卡\n    A->>B: 辦理報到\n    B->>D: 更新狀態並寫稽核紀錄\n    B->>G: 開通受訪人所在樓層\n    alt 10 秒內成功回應\n        G-->>B: 開卡成功\n        B->>D: 卡片改成使用中\n        A-->>W: 完成\n    else 沒有回應或回傳錯誤\n        G-->>B: 錯誤或逾時\n        A-->>W: 回傳 502\n        W-->>C: 改請受訪人陪同\n    end",
+  "flowchart TB\n    USER((\"員工與櫃台人員\"))\n    subgraph APP[\"應用程式區\"]\n        VM[\"應用程式 VM：前端、REST API、背景排程\"]\n    end\n    subgraph DATA[\"資料區\"]\n        DB[(\"SQL Server 2019\")]\n    end\n    subgraph SYS[\"公司既有系統\"]\n        AAD[\"Azure AD\"]\n        ACS[\"門禁系統\"]\n        SMTP[\"SMTP 伺服器\"]\n    end\n    TEAMS[\"Microsoft Teams Webhook\"]\n    USER -->|HTTPS 內網或公司 Wi-Fi| VM\n    VM -->|SQL| DB\n    VM -->|SSO| AAD\n    VM -->|地端 API| ACS\n    VM -->|SMTP| SMTP\n    VM -->|HTTPS Webhook| TEAMS"
+ ],
+ "review": {
+  "issues": [],
+  "review_points": [
+   {
+    "section_id": "S5",
+    "item": "背景排程和 API 放在同一台 VM。",
+    "reason": "需求沒說明部署的主機數量，這是假設，請資訊部確認。"
+   },
+   {
+    "section_id": "S2",
+    "item": "Teams Webhook 需要從內部機房連到外部。",
+    "reason": "需求要求不能用公有雲，這條連線是否符合規定要資訊安全組決定。"
+   },
+   {
+    "section_id": "S6",
+    "item": "USB 條碼掃描器不需另外安裝軟體。",
+    "reason": "需求沒說明掃描器型號，是依一般鍵盤型掃描器推測的。"
+   }
+  ],
+  "summary": "架構符合需求列出的技術條件，需要資訊部和資訊安全組確認主機數量與 Teams 連線。"
+ }
+}

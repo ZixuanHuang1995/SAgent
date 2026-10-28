@@ -44,8 +44,15 @@ def project_out(s: Session, project: Project) -> ProjectOut:
         PhaseSummary.model_validate(ph).model_copy(update={"spec_count": per_phase.get(ph.id, 0)})
         for ph in project.phases
     ]
+    runs = spec_service.active_run_counts(s, project.id)
     return ProjectOut.model_validate(project).model_copy(
-        update={"phase_count": phases, "spec_count": specs, "phases": summaries}
+        update={
+            "phase_count": phases,
+            "spec_count": specs,
+            "phases": summaries,
+            "running_runs": runs.get("running", 0),
+            "queued_runs": runs.get("queued", 0),
+        }
     )
 
 

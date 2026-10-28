@@ -6,7 +6,8 @@
 範本的選用欄位：
 - category：類型（見 CATEGORIES），新增 Spec 時先選類型再選文件類型，預設 feature
 - role：撰寫這種文件的角色，會放進提示詞，預設「系統分析師」
-- style：寫作規則。spec 規格文件（預設）、advice 建議類文件、idea 構想文件
+- style：寫作規則。spec 規格文件（預設）、advice 建議類文件、idea 構想文件、algorithm 演算法設計文件、
+  experiment 實驗設計文件
 - advice：舊寫法，true 等於 style: advice
 - allow_diagrams：false 表示這種文件不畫圖
 - max_diagrams：這種文件最多畫幾張圖，會蓋過畫面上設定的數量（只會變少）
@@ -36,10 +37,16 @@ CATEGORIES: list[Category] = [
     Category("idea", "Concept", "只有想法，還沒確定要不要做。整理問題、目標和可能的做法。"),
     Category("feature", "Functionality", "已經確定要做這個功能。寫清楚要做什麼、規則和驗收條件。"),
     Category("design", "Technical", "已經有功能規格，要設計怎麼實作：架構、資料庫、API。"),
+    Category(
+        "algorithm",
+        "Algorithm",
+        "要設計演算法或實驗。演算法：定義輸入、輸出和限制，說明解法、虛擬碼和測試案例；"
+        "實驗：評估新工具或新做法，說明假設、指標、分組、流程和分析方法。",
+    ),
     Category("change", "Change", "要修改既有系統的功能。說明改什麼、影響範圍和上線方式。"),
 ]
 CATEGORY_KEYS = {c.key for c in CATEGORIES}
-STYLES = ("spec", "advice", "idea")
+STYLES = ("spec", "advice", "idea", "algorithm", "experiment")
 
 
 @dataclass
@@ -70,6 +77,14 @@ class DocTemplate:
     @property
     def idea(self) -> bool:
         return self.style == "idea"
+
+    @property
+    def algorithm(self) -> bool:
+        return self.style == "algorithm"
+
+    @property
+    def experiment(self) -> bool:
+        return self.style == "experiment"
 
     def skeleton(self, title: str) -> str:
         """手動建立 Spec 時用的空白骨架。"""

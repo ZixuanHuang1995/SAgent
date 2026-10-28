@@ -1,0 +1,126 @@
+{
+ "plan": {
+  "title": "客服系統 API",
+  "summary": "說明客服工單系統的 REST API：客戶用的公開 API、客服人員和客服組長的工單與知識庫 API、客服主管的報表 API，以及驗證、錯誤碼和流量限制。",
+  "sections": [
+   {
+    "heading": "概述",
+    "goal": "說明 API 的用途、版本和 Base URL。",
+    "key_points": [
+     "Base URL /api/v1",
+     "公開 API 在 /api/v1/public",
+     "JSON，時間用 ISO 8601 UTC+8"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "驗證與授權",
+    "goal": "說明 token 怎麼取得和帶入，以及各角色的權限。",
+    "key_points": [
+     "內部人員用 Azure AD access token",
+     "客戶用驗證碼換 30 分鐘查詢 token",
+     "權限依 AD 分組"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "端點清單",
+    "goal": "用表格列出所有端點。",
+    "key_points": [
+     "32 個端點",
+     "公開、客服人員、客服組長、技術支援、客服主管"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "端點說明",
+    "goal": "重要端點寫請求、回應和範例，其餘用表格簡要說明。",
+    "key_points": [
+     "送出問題單",
+     "驗證碼",
+     "回覆、升級",
+     "全部工單查詢、分派"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "呼叫流程",
+    "goal": "說明主要情境的呼叫順序。",
+    "key_points": [
+     "客戶驗證後查詢進度",
+     "客服人員處理工單"
+    ],
+    "diagrams": [
+     {
+      "kind": "sequence",
+      "title": "客戶查詢進度呼叫流程",
+      "description": "申請驗證碼、驗證、取得 token、查詢進度"
+     }
+    ]
+   },
+   {
+    "heading": "錯誤碼",
+    "goal": "用表格列出 HTTP 狀態碼、錯誤碼、說明和處理建議。",
+    "key_points": [
+     "400、401、403、409、429"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "限制與注意事項",
+    "goal": "說明流量限制、分頁、時區和冪等性。",
+    "key_points": [
+     "每個 IP 每分鐘 5 張問題單",
+     "驗證碼輸錯 5 次鎖定 15 分鐘",
+     "Idempotency-Key"
+    ],
+    "diagrams": []
+   }
+  ],
+  "open_questions": [
+   "驗證碼的位數和格式？",
+   "客戶要讀取單篇公開文章的內容，要不要另外提供端點？目前只有搜尋端點。",
+   "Idempotency-Key 的有效時間，以及重複送出時的回應內容？",
+   "page 和 page_size 沒帶時的預設值？",
+   "客服主管月報表要支援哪些查詢參數（例如月份、進線管道）？"
+  ]
+ },
+ "sections": [
+  "這份文件說明客服工單系統後端的 REST API。API 提供給三種使用者的畫面：官網的客戶頁面、客服內部頁面，以及客服主管的報表畫面。\n\n| 項目 | 說明 |\n|---|---|\n| 版本 | v1 |\n| Base URL | /api/v1 |\n| 公開 API | 客戶用的 API 放在 /api/v1/public 底下 |\n| 資料格式 | JSON；送出問題單含附件，用 multipart |\n| 時間格式 | ISO 8601，時區 UTC+8，例如 2026-10-08T09:30:00+08:00 |\n| 分頁 | 用 page 和 page_size，page_size 最大 100 |\n\n本文件的欄位名稱和範例值是文件自己訂的，需求只列出功能，沒有指定欄位名稱。",
+  "API 有兩種使用者，驗證方式不同。token 都用 Authorization: Bearer 帶入。\n\n| 使用者 | 取得 token 的方式 | token 有效時間 |\n|---|---|---|\n| 內部人員 | 用 Azure AD 取得 access token | 依 Azure AD 設定 |\n| 客戶 | 用工單編號和 Email 申請驗證碼，驗證通過後拿到查詢 token | 30 分鐘 |\n\n### 權限\n\n內部人員的權限，由後端依 AD 分組判斷。\n\n| 角色 | 可以使用的 API |\n|---|---|\n| 客戶 | 公開 API，送出問題單和搜尋公開知識庫文章不需要 token；其他查詢要帶查詢 token |\n| 客服人員 | 我的工單、回覆客戶、內部備註、改狀態、升級、搜尋知識庫、新增文章和送審 |\n| 客服組長 | 全部工單查詢、分派、改派、優先順序、合併、審核發布和下架文章、維護產品類別和國定假日 |\n| 技術支援工程師 | 升級給他的工單、內部備註 |\n| 客服主管 | 月報表查詢和匯出 Excel |\n\n客戶的查詢 token 也用 Authorization: Bearer 帶入（假設）。",
+  "共 32 個端點。路徑都接在 Base URL /api/v1 後面。\n\n| 編號 | 方法 | 路徑 | 說明 | 權限 |\n|---|---|---|---|---|\n| API-01 | POST | `/public/tickets` | 客戶送出問題單，含附件 | 不需要 token |\n| API-02 | POST | `/public/verification-codes` | 客戶申請驗證碼 | 不需要 token |\n| API-03 | POST | `/public/verification-codes/verify` | 客戶驗證驗證碼，取得查詢 token | 不需要 token |\n| API-04 | GET | `/public/tickets/{ticket_no}` | 客戶查詢工單進度 | 查詢 token |\n| API-05 | GET | `/public/tickets/{ticket_no}/messages` | 客戶查詢往來紀錄，不含內部備註 | 查詢 token |\n| API-06 | POST | `/public/tickets/{ticket_no}/replies` | 客戶補充回覆 | 查詢 token |\n| API-07 | GET | `/public/articles` | 搜尋公開知識庫文章 | 不需要 token |\n| API-08 | GET | `/tickets/mine` | 查詢我的工單，依 SLA 剩餘時間排序 | 客服人員 |\n| API-09 | GET | `/tickets/{ticket_no}` | 查看單張工單內容和往來紀錄（假設，需求沒列） | 處理人、客服組長、被升級的技術支援工程師 |\n| API-10 | POST | `/tickets/{ticket_no}/replies` | 回覆客戶 | 處理人 |\n| API-11 | POST | `/tickets/{ticket_no}/notes` | 新增內部備註 | 處理人、被升級的技術支援工程師 |\n| API-12 | PATCH | `/tickets/{ticket_no}/status` | 改工單狀態 | 處理人 |\n| API-13 | POST | `/tickets/{ticket_no}/escalations` | 升級工單 | 處理人 |\n| API-14 | GET | `/tickets/escalated-to-me` | 查詢升級給我的工單 | 技術支援工程師 |\n| API-15 | GET | `/articles` | 搜尋知識庫文章 | 客服人員、客服組長 |\n| API-16 | POST | `/articles` | 新增文章草稿 | 客服人員 |\n| API-17 | POST | `/articles/{article_no}/submit` | 文章送審 | 客服人員 |\n| API-18 | GET | `/tickets` | 查詢全部工單，可篩選，分頁 | 客服組長 |\n| API-19 | POST | `/tickets/{ticket_no}/assign` | 分派工單 | 客服組長 |\n| API-20 | POST | `/tickets/{ticket_no}/reassign` | 改派工單 | 客服組長 |\n| API-21 | PATCH | `/tickets/{ticket_no}/priority` | 設定優先順序 | 客服組長 |\n| API-22 | POST | `/tickets/{ticket_no}/merge` | 合併工單 | 客服組長 |\n| API-23 | POST | `/articles/{article_no}/publish` | 審核發布文章 | 客服組長 |\n| API-24 | POST | `/articles/{article_no}/unpublish` | 下架文章 | 客服組長 |\n| API-25 | GET | `/product-categories` | 查詢產品類別 | 內部人員 |\n| API-26 | POST | `/product-categories` | 新增產品類別 | 客服組長 |\n| API-27 | PUT | `/product-categories/{category_id}` | 修改產品類別 | 客服組長 |\n| API-28 | GET | `/holidays` | 查詢國定假日 | 客服組長 |\n| API-29 | POST | `/holidays` | 新增國定假日 | 客服組長 |\n| API-30 | DELETE | `/holidays/{holiday_date}` | 刪除國定假日 | 客服組長 |\n| API-31 | GET | `/reports/monthly` | 查詢月報表 | 客服主管 |\n| API-32 | GET | `/reports/monthly/export` | 匯出月報表 Excel | 客服主管 |",
+  "以下用表格說明請求和回應。重要的端點寫完整的參數和範例，其餘端點在最後用表格簡要說明。\n\n### API-01 送出問題單\n\n請求格式是 multipart/form-data，可以帶 Idempotency-Key 標頭。\n\n| 欄位 | 型別 | 必填 | 說明 |\n|---|---|---|---|\n| customer_name | string | 是 | 客戶姓名 |\n| email | string | 是 | Email，要符合格式 |\n| phone | string | 否 | 電話 |\n| product_category_id | int | 是 | 產品類別 |\n| issue_type | string | 是 | 問題類型 |\n| subject | string | 是 | 主旨，最多 100 字 |\n| description | string | 是 | 問題說明，10～2000 字 |\n| attachments | file | 否 | 附件，最多 3 個，每個最大 10MB，jpg、png、pdf、txt |\n\n回應範例：\n\n```json\n{\n  \"ticket_no\": \"T202610080001\",\n  \"status\": \"新建\",\n  \"created_at\": \"2026-10-08T09:30:00+08:00\"\n}\n```\n\n| 回應欄位 | 型別 | 說明 |\n|---|---|---|\n| ticket_no | string | 工單編號 |\n| status | string | 工單狀態 |\n| created_at | string | 建立時間 |\n\n### API-02 申請驗證碼\n\n請求範例：\n\n```json\n{\n  \"ticket_no\": \"T202610080001\",\n  \"email\": \"customer@example.com\"\n}\n```\n\n| 請求欄位 | 型別 | 必填 | 說明 |\n|---|---|---|---|\n| ticket_no | string | 是 | 工單編號 |\n| email | string | 是 | 工單上的 Email |\n\n系統把驗證碼寄到這個 Email。驗證碼 10 分鐘內有效。不論工單編號和 Email 是否相符都回應成功，避免被用來猜測工單（假設）。\n\n回應範例：\n\n```json\n{\n  \"message\": \"驗證碼已寄出\",\n  \"expires_in_minutes\": 10\n}\n```\n\n### API-03 驗證驗證碼\n\n請求範例：\n\n```json\n{\n  \"ticket_no\": \"T202610080001\",\n  \"email\": \"customer@example.com\",\n  \"code\": \"123456\"\n}\n```\n\n| 請求欄位 | 型別 | 必填 | 說明 |\n|---|---|---|---|\n| ticket_no | string | 是 | 工單編號 |\n| email | string | 是 | 工單上的 Email |\n| code | string | 是 | 驗證碼 |\n\n回應範例：\n\n```json\n{\n  \"access_token\": \"eyJhbGciOi...\",\n  \"token_type\": \"Bearer\",\n  \"expires_in\": 1800\n}\n```\n\n| 回應欄位 | 型別 | 說明 |\n|---|---|---|\n| access_token | string | 查詢 token |\n| token_type | string | 固定為 Bearer |\n| expires_in | int | 有效秒數，30 分鐘為 1800 |\n\n### API-04 查詢工單進度\n\n路徑參數 ticket_no 是工單編號，要帶查詢 token。\n\n```json\n{\n  \"ticket_no\": \"T202610080001\",\n  \"subject\": \"無法登入帳號\",\n  \"status\": \"處理中\",\n  \"created_at\": \"2026-10-08T09:30:00+08:00\",\n  \"updated_at\": \"2026-10-08T11:05:00+08:00\"\n}\n```\n\n| 回應欄位 | 型別 | 說明 |\n|---|---|---|\n| ticket_no | string | 工單編號 |\n| subject | string | 主旨 |\n| status | string | 工單狀態 |\n| created_at | string | 建立時間 |\n| updated_at | string | 最近更新時間 |\n\n### API-10 回覆客戶\n\n請求範例：\n\n```json\n{\n  \"content\": \"您好，請先重設密碼後再試一次。\",\n  \"article_nos\": [\"KB00012\"]\n}\n```\n\n| 請求欄位 | 型別 | 必填 | 說明 |\n|---|---|---|---|\n| content | string | 是 | 回覆內容 |\n| article_nos | array | 否 | 要插入連結的知識庫文章編號，只能是公開文章 |\n\n回應範例：\n\n```json\n{\n  \"message_id\": 1021,\n  \"sent_at\": \"2026-10-08T11:05:00+08:00\",\n  \"is_first_reply\": true\n}\n```\n\n| 回應欄位 | 型別 | 說明 |\n|---|---|---|\n| message_id | int | 往來紀錄編號 |\n| sent_at | string | 送出時間 |\n| is_first_reply | boolean | 是否為這張工單的首次回覆 |\n\n### API-13 升級工單\n\n請求範例：\n\n```json\n{\n  \"target_id\": \"E10023\",\n  \"reason\": \"需要技術支援確認韌體版本\"\n}\n```\n\n| 請求欄位 | 型別 | 必填 | 說明 |\n|---|---|---|---|\n| target_id | string | 是 | 升級對象的工號 |\n| reason | string | 是 | 升級原因 |\n\n升級不改變工單狀態和處理人，只記錄升級對象和原因。\n\n回應範例：\n\n```json\n{\n  \"ticket_no\": \"T202610080001\",\n  \"target_id\": \"E10023\",\n  \"escalated_at\": \"2026-10-08T14:20:00+08:00\"\n}\n```\n\n| 回應欄位 | 型別 | 說明 |\n|---|---|---|\n| ticket_no | string | 工單編號 |\n| target_id | string | 升級對象 |\n| escalated_at | string | 升級時間 |\n\n### API-18 查詢全部工單\n\n用查詢參數篩選，回應是分頁的清單。\n\n| 查詢參數 | 型別 | 必填 | 說明 |\n|---|---|---|---|\n| status | string | 否 | 依狀態篩選 |\n| priority | string | 否 | 依優先順序篩選 |\n| product_category_id | int | 否 | 依產品類別篩選 |\n| channel | string | 否 | 依進線管道篩選 |\n| date_from | string | 否 | 建立日期起 |\n| date_to | string | 否 | 建立日期迄 |\n| page | int | 否 | 頁碼 |\n| page_size | int | 否 | 每頁筆數，最大 100 |\n\n回應範例：\n\n```json\n{\n  \"page\": 1,\n  \"page_size\": 20,\n  \"total\": 132,\n  \"items\": [\n    {\n      \"ticket_no\": \"T202610080001\",\n      \"subject\": \"無法登入帳號\",\n      \"status\": \"已分派\",\n      \"priority\": \"高\",\n      \"assignee_name\": \"王小明\",\n      \"first_reply_due_at\": \"2026-10-08T13:30:00+08:00\"\n    }\n  ]\n}\n```\n\n| 回應欄位 | 型別 | 說明 |\n|---|---|---|\n| page | int | 目前頁碼 |\n| page_size | int | 每頁筆數 |\n| total | int | 符合條件的總筆數 |\n| items | array | 工單清單，每筆含編號、主旨、狀態、優先順序、處理人、首次回覆到期時間 |\n\n### API-19 分派工單\n\n請求範例：\n\n```json\n{\n  \"assignee_id\": \"E10008\",\n  \"priority\": \"一般\",\n  \"product_category_id\": 3\n}\n```\n\n| 請求欄位 | 型別 | 必填 | 說明 |\n|---|---|---|---|\n| assignee_id | string | 是 | 處理人的工號 |\n| priority | string | 否 | 優先順序，沒填就是一般 |\n| product_category_id | int | 否 | 產品類別；Email 進線的工單沒有產品類別，分派時補上 |\n\n分派成功後，工單狀態改成「已分派」。\n\n回應範例：\n\n```json\n{\n  \"ticket_no\": \"T202610080001\",\n  \"status\": \"已分派\",\n  \"assignee_id\": \"E10008\"\n}\n```\n\n| 回應欄位 | 型別 | 說明 |\n|---|---|---|\n| ticket_no | string | 工單編號 |\n| status | string | 分派後的狀態 |\n| assignee_id | string | 處理人 |\n\n### 其他端點\n\n| 編號 | 主要請求內容 | 主要回應內容 |\n|---|---|---|\n| API-05 | 路徑帶 ticket_no | 往來紀錄清單，每筆有類型、內容、時間，不含內部備註 |\n| API-06 | content、附件 | 新增的往來紀錄編號和時間 |\n| API-07 | keyword | 公開文章清單：文章編號、標題、摘要 |\n| API-08 | page、page_size | 我的工單清單，依 SLA 剩餘時間排序 |\n| API-09 | 路徑帶 ticket_no | 工單內容、往來紀錄、升級紀錄 |\n| API-11 | content | 新增的內部備註編號和時間 |\n| API-12 | status、解決方式（改成已解決時必填） | 改變後的狀態 |\n| API-14 | page、page_size | 升級給我的工單清單 |\n| API-15 | keyword | 文章清單；客服人員和客服組長可以看到內部文章 |\n| API-16 | title、content、category、visibility | 新文章編號，狀態為草稿 |\n| API-17 | 路徑帶 article_no | 文章狀態改成待審核 |\n| API-20 | assignee_id | 新的處理人；原處理人和新處理人都會收到通知 |\n| API-21 | priority | 新的優先順序和重新計算的到期時間 |\n| API-22 | target_ticket_no | 合併結果；被併入的工單狀態為已結案 |\n| API-23 | 路徑帶 article_no | 文章狀態改成已發布，記錄審核人和發布時間 |\n| API-24 | 路徑帶 article_no | 文章狀態改成已下架 |\n| API-25 | 無 | 產品類別清單 |\n| API-26 | name | 新產品類別的編號 |\n| API-27 | name、是否停用 | 修改後的產品類別 |\n| API-28 | year | 該年度的國定假日清單 |\n| API-29 | holiday_date、name | 新增的假日 |\n| API-30 | 路徑帶 holiday_date | 無內容 |\n| API-31 | month | 每月工單數（依進線管道、產品類別）、平均首次回覆時間、SLA 達成率、逾期件數 |\n| API-32 | month | Excel 檔案 |",
+  "客戶查詢進度要先驗證，流程如下圖。取得查詢 token 後，30 分鐘內可以反覆查詢。\n\n### 呼叫順序\n\n1. 客戶輸入工單編號和 Email，前端呼叫 API-02，系統把驗證碼寄到 Email。\n2. 客戶輸入驗證碼，前端呼叫 API-03，驗證通過就拿到 30 分鐘有效的查詢 token。\n3. 前端帶著 token 呼叫 API-04 和 API-05，顯示進度和往來紀錄。\n4. token 過期回 401，前端要請客戶重新驗證。\n\n### 客服人員處理工單\n\n1. 呼叫 API-08 取得我的工單，依 SLA 剩餘時間排序。\n2. 呼叫 API-09 查看單張工單，再用 API-10 回覆客戶。\n3. 需要客戶補資料時，呼叫 API-12 改成待客戶回覆。\n4. 處理不了時，呼叫 API-13 升級。",
+  "| HTTP 狀態碼 | 錯誤碼 | 說明 | 處理建議 |\n|---|---|---|---|\n| 400 | VALIDATION_FAILED | 欄位檢查不通過，例如主旨太長、附件格式不符、驗證碼錯誤 | 依回應的 errors 修正後重送 |\n| 401 | TOKEN_EXPIRED | token 過期或沒有帶 token | 內部人員重新取得 Azure AD token；客戶重新驗證 |\n| 403 | FORBIDDEN | 權限不足 | 確認使用者的角色，或請客服組長操作 |\n| 404 | NOT_FOUND | 找不到工單或文章（需求沒列，依常見做法補上，假設） | 確認編號是否正確 |\n| 409 | INVALID_STATE | 工單狀態不允許這個操作，例如已結案的工單不能再回覆 | 重新查詢工單狀態後再決定 |\n| 429 | RATE_LIMITED | 同一個 IP 每分鐘送出的問題單超過 5 張 | 等待 1 分鐘後再送 |\n| 429 | CODE_LOCKED | 驗證碼輸錯 5 次，鎖定 15 分鐘 | 15 分鐘後再申請驗證碼 |\n| 500 | INTERNAL_ERROR | 系統錯誤（需求沒列，假設） | 稍後重試，持續發生請聯絡資訊部 |\n\n錯誤回應的格式（假設）：\n\n```json\n{\n  \"code\": \"VALIDATION_FAILED\",\n  \"message\": \"主旨最多 100 字\",\n  \"errors\": [{\"field\": \"subject\", \"message\": \"最多 100 字\"}]\n}\n```",
+  "### 流量限制\n\n| 項目 | 限制 | 超過時 |\n|---|---|---|\n| 送出問題單（API-01） | 同一個 IP 每分鐘最多 5 張 | 回 429，錯誤碼 RATE_LIMITED |\n| 驗證碼輸錯 | 輸錯 5 次鎖定 15 分鐘 | 鎖定期間回 429，錯誤碼 CODE_LOCKED |\n\n驗證碼輸錯時，前 5 次回 400，鎖定後再驗證才回 429（假設）。\n\n### 分頁\n\n清單類 API 用 page 和 page_size，page_size 最大 100。沒帶時的預設值需求沒有說明（待確認）。\n\n### 時區\n\n時間一律用 ISO 8601，時區 UTC+8，例如 2026-10-08T09:30:00+08:00。\n\n### 冪等性\n\n送出問題單（API-01）可以帶 Idempotency-Key 標頭。同一個 key 重複送出，只會建立一張工單。\n\n- 重複送出時，回應和第一次相同的工單編號（假設）。\n- key 的有效時間和格式需求沒有說明（待確認）。\n- 其他 API 沒有要求冪等；改狀態、分派這類操作重複呼叫，會依工單目前的狀態回 409。"
+ ],
+ "diagrams": [
+  "sequenceDiagram\n    actor C as 客戶\n    participant W as 官網頁面\n    participant A as 後端 API\n    participant M as 郵件伺服器\n    C->>W: 輸入工單編號和 Email\n    W->>A: POST /public/verification-codes\n    A->>M: 寄出驗證碼\n    M-->>C: 收到驗證碼 Email\n    C->>W: 輸入驗證碼\n    W->>A: POST /public/verification-codes/verify\n    alt 驗證成功\n        A-->>W: 回傳 30 分鐘有效的查詢 token\n        W->>A: 查詢工單進度並帶 token\n        A-->>W: 回傳工單進度\n        W-->>C: 顯示進度\n    else 驗證失敗\n        A-->>W: 回傳 400 錯誤\n        W-->>C: 提示重新輸入\n    end"
+ ],
+ "review": {
+  "issues": [],
+  "review_points": [
+   {
+    "section_id": "S3",
+    "item": "API-09 查看單張工單",
+    "reason": "需求沒有列出這個端點，但客服人員處理工單需要看到內容，文件補上了，需要確認是否要納入。"
+   },
+   {
+    "section_id": "S4",
+    "item": "欄位名稱、範例值、驗證碼 123456 這類範例",
+    "reason": "需求只列出功能，沒有指定欄位名稱和格式，範例是文件自己訂的，開發前要和前端團隊對齊。"
+   },
+   {
+    "section_id": "S6",
+    "item": "404 和 500 錯誤碼，以及錯誤回應的格式",
+    "reason": "需求只列了 400、401、403、409、429，其他是依常見做法補上的，需要資訊部確認。"
+   },
+   {
+    "section_id": "S7",
+    "item": "驗證碼輸錯前 5 次回 400、鎖定後回 429",
+    "reason": "需求只說輸錯 5 次鎖定 15 分鐘，超過限制回 429，沒有說第 5 次輸錯當下回哪個狀態碼，需要確認。"
+   }
+  ],
+  "summary": "端點涵蓋需求列出的全部功能；欄位名稱、補充的端點和錯誤碼細節需要開發團隊確認。"
+ }
+}

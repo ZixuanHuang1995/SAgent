@@ -39,9 +39,33 @@ _IDEA_RULES = [
 ]
 
 
+# 演算法設計文件（範本 style: algorithm）：問題的事實（輸入、限制、效能要求）照需求，解法由撰寫者設計
+_ALGORITHM_RULES = [
+    "這是演算法設計文件。問題的輸入、輸出、限制條件和效能要求要根據需求；需求沒寫的數字不要編造，必要的假設標註「（假設）」，不確定的地方標註「（待確認）」。",
+    "解題方法、資料結構和虛擬碼由你設計，不用等需求寫明。寫清楚每個步驟做什麼、為什麼這樣做；有多種做法時說明選用的理由。",
+    "虛擬碼放在 ```text 程式碼區塊，用 function、for、if、return 這類簡單的英文關鍵字，註解用繁體中文。不要寫特定程式語言的完整程式。",
+    "複雜度用大 O 表示，並說明 n 代表什麼。文字說明、虛擬碼和複雜度分析要互相對得上。",
+    "只有這一節的目標或要點寫明要編號時才新增編號，格式照目標寫的（例如 TC-01）；其他章節提到時引用前面已經定義的編號，不要重新編號。",
+]
+
+
+# 實驗設計文件（範本 style: experiment）：評估對象、資源和判斷標準照需求，實驗方法由撰寫者設計
+_EXPERIMENT_RULES = [
+    "這是實驗設計文件。要評估的對象、實驗目的、可用的人力、時間、環境和判斷標準要根據需求；需求沒寫的數字不要編造，必要的假設標註「（假設）」，不確定的地方標註「（待確認）」。",
+    "研究假設、指標、分組方式、實驗步驟和分析方法由你設計，不用等需求寫明。寫清楚為什麼這樣設計，以及怎麼避免結果被其他因素影響（例如隨機分組、控制條件）。",
+    "每個假設都要寫比較的對象、用哪個指標判斷，以及怎樣算成立。每個指標都要寫定義和計算方式。",
+    "統計方法要配合資料的型態和樣本數，並說明理由。實驗還沒做，不要寫出實驗結果，也不要編造數據。",
+    "只有這一節的目標或要點寫明要編號時才新增編號，格式照目標寫的（例如 H-01、M-01）；其他章節提到時引用前面已經定義的編號，不要重新編號。",
+]
+
+
 def _style_rules(template: DocTemplate) -> list[str]:
     if template.idea:
         return _IDEA_RULES
+    if template.algorithm:
+        return _ALGORITHM_RULES
+    if template.experiment:
+        return _EXPERIMENT_RULES
     return _ADVICE_RULES if template.advice else _SPEC_RULES
 
 
@@ -51,7 +75,7 @@ def _rules(template: DocTemplate, *extra: str) -> str:
 
 
 def _doc_noun(template: DocTemplate) -> str:
-    return f"「{template.name}」文件" if template.advice or template.idea else "系統分析文件"
+    return "系統分析文件" if template.style == "spec" else f"「{template.name}」文件"
 
 
 def _with_role(prefix: str, template: DocTemplate) -> str:
@@ -162,6 +186,16 @@ def planner_messages(inp: RunInput) -> list[dict[str, str]]:
         advice_rule = (
             "\n8. 這是構想文件：章節少一點、內容短一點，不要規劃欄位、API、畫面細節這類細節規格的章節。"
             "想法還不清楚的地方，多寫進 open_questions。"
+        )
+    elif tpl.algorithm:
+        advice_rule = (
+            "\n8. 這是演算法設計文件：key_points 寫這一節具體的設計內容（資料結構、步驟、複雜度、測試重點），"
+            "需求沒寫的限制條件和效能數字寫進 open_questions。"
+        )
+    elif tpl.experiment:
+        advice_rule = (
+            "\n8. 這是實驗設計文件：key_points 寫這一節具體的設計內容（假設、指標、分組、步驟、分析方法），"
+            "需求沒寫的人數、期間和判斷標準寫進 open_questions。"
         )
     system = f"""你是{_with_role("資深", tpl)}，現在要「規劃」一份{_doc_noun(tpl)}的大綱。你只負責規劃，不用寫內文。
 
@@ -448,7 +482,7 @@ REVIEW_SCHEMA = {
     "required": ["issues", "review_points", "summary"],
 }
 
-# 三種文件的審查重點一樣（格式、邏輯錯誤，以及要人工覆核的地方），只差這一行說明
+# 每種文件的審查重點一樣（格式、邏輯錯誤，以及要人工覆核的地方），只差這一行說明
 _REVIEW_STYLE_NOTE = {
     "spec": "這是規格文件：內容要根據需求。需求沒提到、文件卻寫得很具體的內容（數字、期限、規則、欄位），列為人工覆核。",
     "advice": (
@@ -458,6 +492,16 @@ _REVIEW_STYLE_NOTE = {
     "idea": (
         "這是構想文件：想法還沒確定，內容本來就不完整，不要要求補上細節。"
         "寫成細節規格（欄位、API、FR 編號需求）算格式錯誤。「可能的做法」這類章節提出需求沒寫的做法是正常的，不算錯誤。"
+    ),
+    "algorithm": (
+        "這是演算法設計文件：解題方法、資料結構和虛擬碼是撰寫者設計的，不算編造，也不用列人工覆核。"
+        "文字說明、虛擬碼、複雜度分析和測試案例的預期結果互相矛盾算邏輯錯誤。"
+        "需求沒提到的限制條件或效能數字，列為人工覆核。"
+    ),
+    "experiment": (
+        "這是實驗設計文件：假設、指標、分組方式和分析方法是撰寫者設計的，不算編造，也不用列人工覆核。"
+        "假設用到沒有定義的指標、分析方法不適合資料的型態、人數或期間前後寫得不一樣，算邏輯錯誤；寫出實驗結果或編造數據也算錯誤。"
+        "需求沒提到的人數、期間或判斷標準，列為人工覆核。"
     ),
 }
 

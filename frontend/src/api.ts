@@ -16,6 +16,9 @@ export interface Project {
   spec_count: number
   /** 各階段和底下的 Spec 數量（不含封存），依階段順序 */
   phases: PhaseSummary[]
+  /** 執行中、排隊中的 AI 工作數量 */
+  running_runs: number
+  queued_runs: number
 }
 
 export interface Phase {
@@ -135,7 +138,7 @@ export interface CompareItem {
   to_version: number | null
 }
 
-/** 類型：Concept、Functionality、Technical、Change。新增 Spec 時先選類型，再選文件類型 */
+/** 類型：Concept、Functionality、Technical、Algorithm、Change。新增 Spec 時先選類型，再選文件類型 */
 export interface TemplateCategory {
   key: string
   name: string
@@ -148,8 +151,8 @@ export interface Template {
   description: string
   builtin: boolean
   category: string
-  /** 寫作規則：spec 規格文件、advice 建議類文件、idea 構想文件 */
-  style: 'spec' | 'advice' | 'idea'
+  /** 寫作規則：spec 規格文件、advice 建議類文件、idea 構想文件、algorithm 演算法設計文件、experiment 實驗設計文件 */
+  style: 'spec' | 'advice' | 'idea' | 'algorithm' | 'experiment'
   /** 建議類文件（例如 UI/UX 設計建議）：可以提出需求沒寫的做法 */
   advice: boolean
   /** false：這種文件不畫圖 */

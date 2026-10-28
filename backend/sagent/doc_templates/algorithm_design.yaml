@@ -1,0 +1,24 @@
+key: algorithm_design
+name: 演算法設計
+description: 定義問題的輸入、輸出和限制，設計解題方法和虛擬碼，分析複雜度並列出測試案例。
+order: 8
+category: algorithm
+role: 演算法工程師
+style: algorithm
+max_diagrams: 2
+sections:
+  - heading: 問題定義
+    goal: 說明要解決的問題、輸入和輸出的格式、限制條件和效能要求。
+  - heading: 資料表示
+    goal: 說明資料在程式裡怎麼表示、用到哪些資料結構，以及為什麼這樣選。
+  - heading: 解題方法
+    goal: 說明演算法的核心想法和步驟。有多種做法時用表格比較優缺點，並說明選用的理由。
+    diagrams: [flowchart]
+  - heading: 虛擬碼
+    goal: 用 ```text 程式碼區塊寫主要函式的虛擬碼，再逐段說明。
+  - heading: 複雜度分析
+    goal: 用大 O 分析時間和空間複雜度，說明最好、最差的情況，以及實際資料量下的效能預估。
+  - heading: 邊界情況與錯誤處理
+    goal: 列出特殊輸入（例如格式錯誤、沒有解、有多個解）和處理方式。
+  - heading: 測試案例
+    goal: 用表格列出測試案例，編號 TC-01、TC-02…，寫輸入、預期結果和要驗證的重點。

@@ -3,15 +3,21 @@
   "configurations": [
     {
       "name": "sagent",
-      "runtimeExecutable": "uv",
-      "runtimeArgs": ["run", "--project", "backend", "sagent", "serve", "--port", "8765"],
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": ["-NoProfile", "-File", "scripts/start.ps1", "--port", "8765"],
       "port": 8765
     },
     {
       "name": "sagent-demo",
-      "runtimeExecutable": "uv",
-      "runtimeArgs": ["run", "--project", "backend", "sagent", "serve", "--port", "8766", "--fake-llm", "--data-dir", "data-demo"],
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": ["-NoProfile", "-File", "scripts/start.ps1", "--port", "8766", "--fake-llm", "--data-dir", "data-demo"],
       "port": 8766
+    },
+    {
+      "name": "sagent-demo-preview",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": ["-NoProfile", "-File", "scripts/start.ps1", "--port", "8767", "--fake-llm", "--data-dir", "data-demo-preview"],
+      "port": 8767
     }
   ]
 }

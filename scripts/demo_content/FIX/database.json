@@ -1,0 +1,123 @@
+{
+ "plan": {
+  "title": "報修系統資料庫",
+  "summary": "說明設備報修系統在 SQL Server 2019 的資料模型、資料表定義、索引、資料保存與封存規則，以及初始資料和備份方式。",
+  "sections": [
+   {
+    "heading": "設計說明",
+    "goal": "說明資料庫用途、產品和命名規則。",
+    "key_points": [
+     "SQL Server 2019",
+     "命名規則",
+     "一律軟刪除"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "資料模型",
+    "goal": "說明實體和關聯。",
+    "key_points": [
+     "報修單為核心",
+     "地點三層",
+     "處理回報與使用材料"
+    ],
+    "diagrams": [
+     {
+      "kind": "er",
+      "title": "報修系統實體關聯圖",
+      "description": "員工、地點、設備類別、報修單、照片、派工、狀態歷程、處理回報、材料和通知紀錄的關係"
+     }
+    ]
+   },
+   {
+    "heading": "資料表定義",
+    "goal": "每張資料表用表格說明欄位。",
+    "key_points": [
+     "報修單編號 R + 年月日 + 4 碼流水號",
+     "照片最多 3 張",
+     "派工與狀態歷程每次一筆"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "索引與限制",
+    "goal": "列出主鍵、外來鍵、唯一鍵和索引及建立原因。",
+    "key_points": [
+     "我的報修單、總務篩選、指派給我",
+     "報表統計用索引"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "資料生命週期",
+    "goal": "說明資料怎麼建立、更新、封存和刪除。",
+    "key_points": [
+     "保存 5 年",
+     "照片 2 年後封存",
+     "軟刪除"
+    ],
+    "diagrams": [
+     {
+      "kind": "state",
+      "title": "照片資料生命週期圖",
+      "description": "照片從上傳、封存、保存期滿到軟刪除"
+     }
+    ]
+   },
+   {
+    "heading": "資料移轉與備份",
+    "goal": "說明初始資料、資料移轉和備份還原。",
+    "key_points": [
+     "6 種設備類別",
+     "AD 員工資料同步",
+     "備份沿用現有機制"
+    ],
+    "diagrams": []
+   }
+  ],
+  "open_questions": [
+   "保存 5 年是從建立日還是結案日開始算？",
+   "軟刪除的資料是否要在一段時間後實際清除？",
+   "舊的紙本報修單和 Excel 統計紀錄是否要匯入新系統？",
+   "外包維修人員是否也在 AD 員工資料裡？沒有的話要怎麼建立他們的資料？"
+  ]
+ },
+ "sections": [
+  "本資料庫存放設備報修系統的資料：員工、地點、設備類別、報修單、照片、派工、狀態歷程、處理回報、使用材料和通知紀錄。使用公司現有的 SQL Server 2019。\n\n### 命名規則\n\n- 資料表和欄位名稱用英文小寫加底線，例如 repair_request、created_at。\n- 主鍵：報修單用 request_no，其他資料表用「表名_id」。外來鍵欄位名稱和被參照的主鍵相同，只有指向員工的欄位例外，會依用途命名，例如 requester_no、assignee_no。\n- 時間欄位用 datetime2，存本地時間（UTC+8）（假設）。\n- 每張資料表都有 is_deleted 和 deleted_at 兩個欄位，刪除一律用軟刪除，查詢時要排除 is_deleted = 1 的資料。\n- 本文件的資料表長度是初步設計（假設），開發前再依資訊部的規範調整。\n- 實體關聯圖的實體名稱用大寫，對應同名的小寫資料表。",
+  "### 實體說明\n\n| 實體 | 說明 |\n|---|---|\n| EMPLOYEE | 員工，每天從 AD 同步 |\n| LOCATION | 地點，分大樓、樓層、區域三層，用上層編號串起來 |\n| EQUIPMENT_CATEGORY | 設備類別，由總務維護 |\n| REPAIR_REQUEST | 報修單，是整個系統的核心 |\n| REQUEST_PHOTO | 報修單的照片，一張報修單最多 3 張 |\n| DISPATCH | 派工紀錄，每次派工、改派都留一筆 |\n| STATUS_HISTORY | 狀態歷程，每次狀態改變留一筆 |\n| REPAIR_REPORT | 處理回報，維修人員每次回報處理結果留一筆 |\n| MATERIAL_USAGE | 處理回報用到的材料 |\n| NOTIFICATION_LOG | 通知紀錄，每發一次通知留一筆 |\n\n另外有一張小的資料表 request_sequence，用來產生報修單編號的流水號，不畫在圖裡。\n\n### 關聯\n\n一張報修單屬於一位報修人、一種設備類別和一個地點，底下有多張照片、多筆派工紀錄、多筆狀態歷程、多筆處理回報和多筆通知紀錄。一次處理回報可以用多種材料。派工紀錄的「派給誰」和「誰派的」，還有狀態歷程的操作人，都指向員工，圖中沒有全部畫出。報修人退回重修後，維修人員會再回報一次，所以一張報修單可以有多筆處理回報。\n\n下圖是實體關聯圖。",
+  "以下每張資料表的共用欄位 is_deleted 和 deleted_at 都列在最後兩列。\n\n### employee（員工）\n\n| 欄位 | 型別 | 長度 | 必填 | 預設值 | 說明 |\n|---|---|---|---|---|---|\n| employee_no | nvarchar | 20 | 是 | — | 工號，主鍵 |\n| name | nvarchar | 50 | 是 | — | 姓名 |\n| department | nvarchar | 100 | 否 | — | 部門 |\n| email | nvarchar | 200 | 是 | — | Email，通知用 |\n| role | varchar | 20 | 是 | — | 角色：員工、總務窗口、維修人員、主管，由 AD Group對應 |\n| is_active | bit | — | 是 | 1 | 是否在職，離職的人不刪除，只改成 0 |\n| synced_at | datetime2 | — | 是 | — | 最後一次從 AD 同步的時間 |\n| is_deleted | bit | — | 是 | 0 | 軟刪除標記 |\n| deleted_at | datetime2 | — | 否 | — | 軟刪除時間 |\n\n### location（地點）\n\n| 欄位 | 型別 | 長度 | 必填 | 預設值 | 說明 |\n|---|---|---|---|---|---|\n| location_id | int | — | 是 | 自動編號 | 主鍵 |\n| parent_id | int | — | 否 | — | 上層地點，大樓為空值，指向 location_id |\n| level | tinyint | — | 是 | — | 層級：1 大樓、2 樓層、3 區域 |\n| name | nvarchar | 100 | 是 | — | 名稱 |\n| sort_order | int | — | 是 | 0 | 排序 |\n| is_deleted | bit | — | 是 | 0 | 軟刪除標記 |\n| deleted_at | datetime2 | — | 否 | — | 軟刪除時間 |\n\n### equipment_category（設備類別）\n\n| 欄位 | 型別 | 長度 | 必填 | 預設值 | 說明 |\n|---|---|---|---|---|---|\n| category_id | int | — | 是 | 自動編號 | 主鍵 |\n| name | nvarchar | 50 | 是 | — | 類別名稱，總務可以維護 |\n| sort_order | int | — | 是 | 0 | 排序 |\n| is_deleted | bit | — | 是 | 0 | 軟刪除標記 |\n| deleted_at | datetime2 | — | 否 | — | 軟刪除時間 |\n\n### repair_request（報修單）\n\n| 欄位 | 型別 | 長度 | 必填 | 預設值 | 說明 |\n|---|---|---|---|---|---|\n| request_no | char | 13 | 是 | — | 報修單編號，主鍵。格式 R + 年月日 + 4 碼流水號，例如 R202610150001 |\n| requester_no | nvarchar | 20 | 是 | — | 報修人，指向 employee |\n| category_id | int | — | 是 | — | 設備類別，指向 equipment_category |\n| location_id | int | — | 是 | — | 地點，指向 location，存最下層的區域 |\n| description | nvarchar | 500 | 是 | — | 問題說明 |\n| urgency | varchar | 10 | 是 | normal | 緊急程度：normal 一般、urgent 緊急 |\n| status | varchar | 20 | 是 | submitted | 狀態：已提交、已退回、已派工、處理中、等待零件、待確認、已結案、已取消 |\n| current_assignee_no | nvarchar | 20 | 否 | — | 目前負責的維修人員，指向 employee，方便查詢「指派給我」的工單（假設） |\n| created_at | datetime2 | — | 是 | 目前時間 | 建立時間 |\n| closed_at | datetime2 | — | 否 | — | 結案時間，結案時才寫入 |\n| is_deleted | bit | — | 是 | 0 | 軟刪除標記 |\n| deleted_at | datetime2 | — | 否 | — | 軟刪除時間 |\n\n### request_photo（報修照片）\n\n| 欄位 | 型別 | 長度 | 必填 | 預設值 | 說明 |\n|---|---|---|---|---|---|\n| photo_id | bigint | — | 是 | 自動編號 | 主鍵 |\n| request_no | char | 13 | 是 | — | 指向 repair_request，同一張報修單最多 3 筆 |\n| file_path | nvarchar | 400 | 是 | — | 照片在檔案伺服器的路徑 |\n| file_name | nvarchar | 200 | 是 | — | 檔名 |\n| file_size | int | — | 是 | — | 檔案大小，單位 byte |\n| uploaded_by | nvarchar | 20 | 是 | — | 上傳者，指向 employee |\n| uploaded_at | datetime2 | — | 是 | 目前時間 | 上傳時間 |\n| is_archived | bit | — | 是 | 0 | 是否已移到封存區 |\n| archived_at | datetime2 | — | 否 | — | 移到封存區的時間 |\n| is_deleted | bit | — | 是 | 0 | 軟刪除標記 |\n| deleted_at | datetime2 | — | 否 | — | 軟刪除時間 |\n\n### dispatch（派工紀錄）\n\n| 欄位 | 型別 | 長度 | 必填 | 預設值 | 說明 |\n|---|---|---|---|---|---|\n| dispatch_id | bigint | — | 是 | 自動編號 | 主鍵 |\n| request_no | char | 13 | 是 | — | 指向 repair_request |\n| dispatch_type | varchar | 10 | 是 | assign | 類型：assign 派工、reassign 改派 |\n| assignee_no | nvarchar | 20 | 是 | — | 派給誰，指向 employee |\n| assigned_by | nvarchar | 20 | 是 | — | 誰派的，指向 employee |\n| assigned_at | datetime2 | — | 是 | 目前時間 | 派工時間 |\n| reason | nvarchar | 200 | 否 | — | 原因，改派時填寫 |\n| is_deleted | bit | — | 是 | 0 | 軟刪除標記 |\n| deleted_at | datetime2 | — | 否 | — | 軟刪除時間 |\n\n### status_history（狀態歷程）\n\n| 欄位 | 型別 | 長度 | 必填 | 預設值 | 說明 |\n|---|---|---|---|---|---|\n| history_id | bigint | — | 是 | 自動編號 | 主鍵 |\n| request_no | char | 13 | 是 | — | 指向 repair_request |\n| from_status | varchar | 20 | 否 | — | 變更前的狀態，建立報修單時為空值 |\n| to_status | varchar | 20 | 是 | — | 變更後的狀態 |\n| operator_no | nvarchar | 20 | 否 | — | 操作人，指向 employee；系統自動結案時為空值 |\n| changed_at | datetime2 | — | 是 | 目前時間 | 變更時間 |\n| note | nvarchar | 200 | 否 | — | 備註，例如「逾期自動結案」 |\n| is_deleted | bit | — | 是 | 0 | 軟刪除標記 |\n| deleted_at | datetime2 | — | 否 | — | 軟刪除時間 |\n\n### repair_report（處理回報）\n\n| 欄位 | 型別 | 長度 | 必填 | 預設值 | 說明 |\n|---|---|---|---|---|---|\n| report_id | bigint | — | 是 | 自動編號 | 主鍵 |\n| request_no | char | 13 | 是 | — | 指向 repair_request |\n| description | nvarchar | 1000 | 是 | — | 處理說明 |\n| reported_by | nvarchar | 20 | 是 | — | 回報的維修人員，指向 employee |\n| finished_at | datetime2 | — | 是 | — | 完工時間 |\n| created_at | datetime2 | — | 是 | 目前時間 | 回報時間 |\n| is_deleted | bit | — | 是 | 0 | 軟刪除標記 |\n| deleted_at | datetime2 | — | 否 | — | 軟刪除時間 |\n\n### material_usage（使用材料）\n\n| 欄位 | 型別 | 長度 | 必填 | 預設值 | 說明 |\n|---|---|---|---|---|---|\n| usage_id | bigint | — | 是 | 自動編號 | 主鍵 |\n| report_id | bigint | — | 是 | — | 指向 repair_report |\n| material_name | nvarchar | 100 | 是 | — | 材料名稱 |\n| quantity | decimal | 10,2 | 是 | — | 數量 |\n| unit | nvarchar | 20 | 是 | — | 單位 |\n| is_deleted | bit | — | 是 | 0 | 軟刪除標記 |\n| deleted_at | datetime2 | — | 否 | — | 軟刪除時間 |\n\n### notification_log（通知紀錄）\n\n| 欄位 | 型別 | 長度 | 必填 | 預設值 | 說明 |\n|---|---|---|---|---|---|\n| notification_id | bigint | — | 是 | 自動編號 | 主鍵 |\n| request_no | char | 13 | 是 | — | 指向 repair_request |\n| recipient_no | nvarchar | 20 | 是 | — | 通知對象，指向 employee |\n| channel | varchar | 10 | 是 | — | 管道：email 或 teams |\n| summary | nvarchar | 200 | 是 | — | 內容摘要 |\n| result | varchar | 10 | 是 | — | 發送結果：success 或 failed |\n| error_message | nvarchar | 500 | 否 | — | 失敗原因 |\n| sent_at | datetime2 | — | 是 | 目前時間 | 發送時間 |\n| is_deleted | bit | — | 是 | 0 | 軟刪除標記 |\n| deleted_at | datetime2 | — | 否 | — | 軟刪除時間 |\n\n### request_sequence（報修單流水號）\n\n| 欄位 | 型別 | 長度 | 必填 | 預設值 | 說明 |\n|---|---|---|---|---|---|\n| seq_date | date | — | 是 | — | 日期，主鍵 |\n| last_seq | int | — | 是 | 0 | 當天已使用的最大流水號，每次建立報修單加 1，用交易鎖定避免重複 |",
+  "| 資料表 | 名稱 | 類型 | 欄位 | 建立原因 |\n|---|---|---|---|---|\n| 所有資料表 | PK_資料表名稱 | 主鍵 | 各表的主鍵欄位 | 唯一識別每一筆資料 |\n| location | FK_location_parent | 外來鍵 | parent_id | 串起大樓、樓層、區域三層 |\n| repair_request | FK_request_requester | 外來鍵 | requester_no | 對應報修人 |\n| repair_request | FK_request_category | 外來鍵 | category_id | 對應設備類別 |\n| repair_request | FK_request_location | 外來鍵 | location_id | 對應地點 |\n| request_photo、dispatch、status_history、repair_report、notification_log | FK_資料表名稱_request | 外來鍵 | request_no | 對應報修單 |\n| material_usage | FK_material_report | 外來鍵 | report_id | 對應處理回報 |\n| equipment_category | UQ_category_name | 唯一鍵 | name | 同名的設備類別不能重複 |\n| location | UQ_location_parent_name | 唯一鍵 | parent_id、name | 同一個上層地點底下的名稱不能重複 |\n| repair_request | IX_request_requester | 索引 | requester_no、created_at | 報修人查詢自己的報修單 |\n| repair_request | IX_request_status | 索引 | status、urgency、created_at | 總務窗口依狀態、緊急程度篩選，以及逾時檢查和自動結案 |\n| repair_request | IX_request_assignee | 索引 | current_assignee_no、status | 維修人員查詢指派給自己的工單 |\n| repair_request | IX_request_report | 索引 | category_id、created_at | 月報表依設備類別統計 |\n| status_history | IX_history_request | 索引 | request_no、changed_at | 查詢一張報修單的狀態歷程，並計算退回重修的次數 |\n| dispatch | IX_dispatch_request | 索引 | request_no、assigned_at | 查詢一張報修單的派工紀錄 |\n| request_photo | IX_photo_archive | 篩選索引 | uploaded_at，條件 is_archived = 0 | 找出上傳滿 2 年、要移到封存區的照片 |\n\n資料庫層級的檢查限制：urgency 只能是 normal 或 urgent；level 只能是 1、2、3；channel 只能是 email 或 teams。一張報修單最多 3 張照片，由應用程式檢查，資料庫不另外限制。",
+  "### 各資料的處理方式\n\n| 資料 | 建立 | 更新 | 保存與封存 | 刪除 |\n|---|---|---|---|---|\n| 員工 | 每天從 AD 同步時新增 | 同步時更新姓名、部門、Email、角色 | 離職者保留，只把 is_active 改成 0 | 軟刪除 |\n| 設備類別、地點 | 總務維護 | 總務維護 | 隨系統長期保存 | 軟刪除 |\n| 報修單 | 報修人提交 | 只更新狀態、負責人和結案時間 | 保存 5 年 | 保存期滿後軟刪除 |\n| 照片 | 報修人上傳 | 不更新 | 上傳 2 年後移到封存區，並把 is_archived 改成 1 | 保存期滿後軟刪除 |\n| 派工、狀態歷程、處理回報、使用材料、通知紀錄 | 每次操作新增一筆 | 不更新 | 保存 5 年，和稽核紀錄的保存年限一致 | 保存期滿後軟刪除 |\n\n保存 5 年是從哪一天算起（建立日或結案日），還沒有確認（待確認）。軟刪除的資料是否要在一段時間後實際清除，也要和資訊部確認（待確認）。\n\n下圖是照片的生命週期。報修單和相關紀錄也一樣，保存期滿後軟刪除，只是沒有封存這個步驟。",
+  "### 初始資料\n\n- 設備類別：空調、電腦週邊、印表機、門禁、水電、其他，共 6 種，由總務之後可以自行維護。\n- 地點：總部大樓的樓層和區域，由總務部提供清單後匯入（待確認）。\n- 員工：第一次上線前，從 AD 同步一次完整的員工資料。\n\n### 資料移轉\n\n目前的紙本報修單和 Excel 統計紀錄是否要匯入新系統，還沒有確認（待確認）。如果不匯入，舊資料由總務部繼續保管，新系統從上線日開始累積。\n\n### 備份與還原\n\n- 資料庫沿用資訊部現有的 SQL Server 備份機制和保存週期（待確認）。\n- 照片所在的 NAS，沿用檔案伺服器現有的備份機制（待確認）。\n- 資料庫和 NAS 要用同一個時間點還原，避免資料庫有報修單，但找不到對應的照片。"
+ ],
+ "diagrams": [
+  "erDiagram\n    EMPLOYEE ||--o{ REPAIR_REQUEST : \"提出報修\"\n    EQUIPMENT_CATEGORY ||--o{ REPAIR_REQUEST : \"分類\"\n    LOCATION ||--o{ REPAIR_REQUEST : \"發生地點\"\n    LOCATION ||--o{ LOCATION : \"上層地點\"\n    REPAIR_REQUEST ||--o{ REQUEST_PHOTO : \"附加照片\"\n    REPAIR_REQUEST ||--o{ DISPATCH : \"派工紀錄\"\n    REPAIR_REQUEST ||--o{ STATUS_HISTORY : \"狀態歷程\"\n    REPAIR_REQUEST ||--o{ REPAIR_REPORT : \"處理回報\"\n    REPAIR_REQUEST ||--o{ NOTIFICATION_LOG : \"通知紀錄\"\n    REPAIR_REPORT ||--o{ MATERIAL_USAGE : \"使用材料\"\n    EMPLOYEE {\n        string employee_no PK \"工號\"\n        string name \"姓名\"\n        string role \"角色\"\n    }\n    LOCATION {\n        int location_id PK \"地點編號\"\n        int parent_id FK \"上層地點\"\n        string name \"名稱\"\n    }\n    EQUIPMENT_CATEGORY {\n        int category_id PK \"類別編號\"\n        string name \"類別名稱\"\n    }\n    REPAIR_REQUEST {\n        string request_no PK \"報修單編號\"\n        string requester_no FK \"報修人\"\n        int category_id FK \"設備類別\"\n        int location_id FK \"地點\"\n        string urgency \"緊急程度\"\n        string status \"狀態\"\n        datetime created_at \"建立時間\"\n        datetime closed_at \"結案時間\"\n    }\n    REQUEST_PHOTO {\n        int photo_id PK \"照片編號\"\n        string request_no FK \"報修單編號\"\n        string file_path \"檔案路徑\"\n    }\n    DISPATCH {\n        int dispatch_id PK \"派工編號\"\n        string request_no FK \"報修單編號\"\n        string assignee_no FK \"派給誰\"\n        datetime assigned_at \"派工時間\"\n    }\n    STATUS_HISTORY {\n        int history_id PK \"歷程編號\"\n        string request_no FK \"報修單編號\"\n        string from_status \"原狀態\"\n        string to_status \"新狀態\"\n        datetime changed_at \"變更時間\"\n    }\n    REPAIR_REPORT {\n        int report_id PK \"回報編號\"\n        string request_no FK \"報修單編號\"\n        datetime finished_at \"完工時間\"\n    }\n    MATERIAL_USAGE {\n        int usage_id PK \"材料編號\"\n        int report_id FK \"回報編號\"\n        string material_name \"材料名稱\"\n        decimal quantity \"數量\"\n    }\n    NOTIFICATION_LOG {\n        int notification_id PK \"通知編號\"\n        string request_no FK \"報修單編號\"\n        string channel \"管道\"\n        string result \"發送結果\"\n    }",
+  "stateDiagram-v2\n    state \"使用中\" as Active\n    state \"照片已封存\" as Archived\n    state \"保存期滿\" as Expired\n    state \"已軟刪除\" as Deleted\n    [*] --> Active : 上傳照片\n    Active --> Archived : 上傳滿 2 年\n    Archived --> Expired : 保存滿 5 年\n    Expired --> Deleted : 設定軟刪除\n    Deleted --> [*]"
+ ],
+ "review": {
+  "issues": [],
+  "review_points": [
+   {
+    "section_id": "S3",
+    "item": "欄位長度、current_assignee_no 欄位和資料型別是文件的初步設計",
+    "reason": "需求只列出要記錄的資料，沒有說欄位長度，要和資訊部的資料庫規範確認"
+   },
+   {
+    "section_id": "S3",
+    "item": "時間欄位存本地時間（UTC+8）",
+    "reason": "需求沒有說時區的儲存方式，要確認是否和其他系統一致"
+   },
+   {
+    "section_id": "S5",
+    "item": "保存 5 年的起算日，以及軟刪除後是否實際清除",
+    "reason": "需求只寫保存 5 年和一律軟刪除，起算方式和清除時機要由總務部和資訊部決定"
+   },
+   {
+    "section_id": "S6",
+    "item": "備份沿用資訊部現有機制，舊紙本報修單是否匯入",
+    "reason": "需求沒有提到備份和舊資料，這些要資訊部和總務部決定"
+   }
+  ],
+  "summary": "格式與編號檢查沒有發現問題，另有 4 項需要資訊部或總務部確認。"
+ }
+}

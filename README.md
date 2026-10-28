@@ -18,7 +18,7 @@
 
 | 軟體 | 用途 | 備註 |
 |---|---|---|
-| Python 3.11 以上 + [uv](https://docs.astral.sh/uv/) | 後端 | |
+| Python 3.11 以上 + [uv](https://docs.astral.sh/uv/) | 後端 | 沒有 uv 也可以，見下面「不用 uv」 |
 | Node.js 20 以上 | 打包前端 | 只有第一次打包和開發時需要 |
 | [Ollama](https://ollama.com/) + 模型 | AI 撰寫 | 例如 `ollama pull qwen3:8b` |
 
@@ -42,6 +42,17 @@ cd ..
 uv run --project backend sagent serve
 ```
 
+### 不用 uv
+
+`start.ps1` 找不到 uv 時，會改用 `backend\.venv` 裡的 Python。還沒有 `.venv` 的話，用 Python 3.11 以上自己建立：
+
+```powershell
+python -m venv backend\.venv
+backend\.venv\Scripts\python.exe -m pip install -e backend pytest ruff
+```
+
+pip 不會讀 `uv.lock`，套件版本可能跟用 uv 安裝的不同。其他指令把 `uv run --project backend python` 換成 `backend\.venv\Scripts\python.exe`；在 `backend` 目錄裡的 `uv run pytest`、`uv run ruff` 換成 `.\.venv\Scripts\pytest.exe`、`.\.venv\Scripts\ruff.exe`。
+
 ### 示範模式（不接模型）
 
 想先看畫面和流程，可以用假模型。AI 撰寫幾秒就完成，內容是固定的示範文字：
@@ -52,18 +63,25 @@ uv run --project backend sagent serve
 
 `--data-dir` 讓示範資料跟正式資料分開。
 
-`data-demo/` 的示範資料是用 `scripts/seed_demo.py` 產生的：一個完整的「設備報修系統」專案，四種類型、九種文件類型都有，AI 撰寫的部分是真的地端模型（qwen3.6:35b-a3b）寫的。也包含構想轉功能規格、AI 修訂、手動編輯、版本標籤、還原、封存、兩個基準版本。要重新產生：
+`data-demo/` 的示範資料是用 `scripts/seed_demo.py` 產生的：四個不同情境的完整專案（設備報修、採購請購簽核、會議室與訪客預約、客服工單與知識庫），每個都從構想走到第二期變更，九種文件類型、四種狀態都有；另外一個 Algorithm 類型的專案「數獨解題與出題引擎」，有解題和出題兩份演算法設計，解題演算法再依玩家測試的需求修訂一次。也包含構想轉功能規格、AI 修訂、手動編輯、版本標籤、還原、封存、基準版本比較、自訂範本，以及失敗和取消的 AI 工作。情境和需求內容在 `scripts/demo_scenarios.py`。
+
+**示範資料的文件內容是模擬的，不是地端模型實際的產出。** 內容由 AI 子代理事先寫好（`scripts/demo_content/`），再由腳本模型（`scripts/demo_llm.py`）依序回答給 SAgent 真正的 AI 流程（Planner → Writer → Reviewer），所以 AI 工作紀錄、步驟、大綱、審查結果、版本都跟實際操作一樣，只是速度和文字品質不代表地端模型。地端模型實際的速度見下面的「速度」一節。要重新產生：
 
 ```powershell
-uv run --project backend python scripts/seed_demo.py --data-dir data-demo-build
+uv run --project backend python scripts/check_demo_content.py scripts/demo_content
+uv run --project backend python scripts/seed_demo.py --data-dir data-demo-build --script scripts/demo_content
 ```
 
-在 CPU 上大約要 7～8 小時。中途停掉再跑一次，會從沒做完的地方繼續。產生完確認沒問題，再把 `data-demo-build` 改名成 `data-demo`。加 `--fake` 可以用假模型幾十秒跑完，只檢查流程。
+第一行檢查內容檔（格式、Mermaid 語法、簡體字，並用腳本模型實際跑一次 AI 流程），第二行大約 2 分鐘。產生完確認沒問題，再把 `data-demo-build` 改名成 `data-demo`。內容檔的格式見 `DEMO_DATA_PLAN.md`。
+
+不加 `--script` 就是用真的地端模型寫，模型和 AI 設定跟 SAgent 目前的設定一樣，在 CPU 上大約要 29～34 小時（約 39 份 AI 文件）。中途停掉再跑一次，會從沒做完的地方繼續；Ollama 連不到時會先等它啟動。加 `--fake` 可以用假模型約 10 分鐘跑完，只檢查流程。
+
+示範時用 `--fake-llm` 啟動，現場按 AI 撰寫會寫進假模型的固定內容，示範前先備份 `data-demo/`。
 
 ## 使用流程
 
-1. 建立專案。預設有「需求分析」「系統設計」「詳細設計」三個階段，可以改名、增減、調整順序。
-2. 新增 Spec：先選類型（Concept、Functionality、Technical、Change），再選這個類型的文件類型。內容來源可以選：
+1. 建立專案。預設有「需求分析」「系統設計」「詳細設計」三個階段，可以改名、增減、調整順序。首頁可以搜尋、依更新時間或名稱排序、切換卡片和列表；每個專案的階段條一格代表一個階段，有 Spec 的階段會上色，AI 正在撰寫或排隊時會顯示標籤。
+2. 新增 Spec：先選類型（Concept、Functionality、Technical、Algorithm、Change），再選這個類型的文件類型。內容來源可以選：
    - 用 AI 撰寫：貼上需求，直接開始
    - 範本骨架：依文件類型產生空白章節
    - 空白文件、匯入 Markdown
@@ -95,6 +113,7 @@ uv run --project backend python scripts/seed_demo.py --data-dir data-demo-build
 | Concept | 只有想法，還沒確定要不要做 | 構想提案 |
 | Functionality | 已經確定要做這個功能 | 功能規格書、使用案例規格、SDD 功能規格、UI/UX 設計建議 |
 | Technical | 已經有功能規格，要設計怎麼實作 | 系統架構設計、資料庫設計、API 規格 |
+| Algorithm | 要設計演算法，或設計評估新工具、新做法的實驗 | 演算法設計、實驗設計 |
 | Change | 要修改既有系統的功能 | 變更需求說明 |
 
 | 文件類型 | 主要章節 |
@@ -107,6 +126,8 @@ uv run --project backend python scripts/seed_demo.py --data-dir data-demo-build
 | 系統架構設計 | 設計目標、元件設計、主要流程、部署架構、技術選型、安全設計、設計決策 |
 | 資料庫設計 | 資料模型、資料表定義、索引、資料生命週期 |
 | API 規格 | 驗證授權、端點清單、端點說明、呼叫流程、錯誤碼 |
+| 演算法設計 | 問題定義、資料表示、解題方法、虛擬碼、複雜度分析、邊界情況與錯誤處理、測試案例 |
+| 實驗設計 | 實驗目的、研究假設、指標定義、實驗對象與分組、實驗流程、資料收集與分析方法、風險與限制 |
 | 變更需求說明 | 變更原因、現況、變更內容、影響範圍、相容性與資料轉換、測試範圍、上線與回復 |
 
 ### 構想提案
@@ -125,6 +146,24 @@ uv run --project backend python scripts/seed_demo.py --data-dir data-demo-build
 - 「重點建議」一節會列出編號 UX-01、UX-02… 的建議，每條都有理由和優先順序（高、中、低）。後面的章節會引用這些編號。
 - 跟其他文件類型不同，AI 可以提出需求沒有寫的做法，但需求沒提到的事實（數字、既有系統、使用者人數）不能編造。審查時，超出需求的建議不算錯誤；建議裡用到需求沒提到的事實，會列進人工覆核。
 
+### 演算法設計
+
+設計解決特定問題的演算法，例如數獨的解題和出題、排程、路徑規劃。
+
+- 用法：新增 Spec 時類型選 Algorithm，文件類型選「演算法設計」。需求欄寫清楚要解決的問題、輸入和輸出、限制條件和效能要求。例如：「解 9×9 數獨，題目用 81 個字元表示，0 是空格；沒有解或有多個解時要回報；手機上每題要在 1 秒內解完。」
+- 輸入、輸出、限制條件和效能數字照需求寫，需求沒寫的標「假設」或「待確認」。解法、資料結構和虛擬碼由 AI 設計，有多種做法時會比較並說明選用的理由。
+- 虛擬碼放在 ` ```text ` 程式碼區塊；複雜度用大 O 表示。測試案例編號 TC-01、TC-02…。最多畫兩張圖（通常是解題流程圖）。
+- 審查時，AI 設計的解法不算編造；文字說明、虛擬碼、複雜度和測試案例的預期結果互相矛盾算錯誤；需求沒提到的限制或效能數字會列進人工覆核。
+
+### 實驗設計
+
+設計評估新工具或新做法的實驗，例如試用 AI 程式碼審查工具、比較兩種測試流程、新介面的 A/B 測試。
+
+- 用法：新增 Spec 時類型選 Algorithm，文件類型選「實驗設計」。需求欄寫清楚要評估什麼、想知道的事、可以參與的人和時間、怎樣算成功。例如：「評估 AI 程式碼審查工具，三個團隊參加 8 週；PR 前置時間縮短 20% 以上、誤報比例不超過 40% 才導入。」
+- 評估對象、人數、期間和判斷標準照需求寫，需求沒寫的標「假設」或「待確認」。研究假設、指標、分組方式、實驗步驟和統計方法由 AI 設計，並說明理由。
+- 研究假設編號 H-01、H-02…，指標編號 M-01、M-02…。每個假設都寫比較的對象、用哪個指標判斷、怎樣算成立。最多畫兩張圖（通常是實驗流程圖）。
+- 實驗還沒做，文件不會寫實驗結果。審查時，AI 設計的實驗方法不算編造；假設用到沒定義的指標、分析方法不適合資料型態、人數或期間前後不一致算錯誤；需求沒提到的人數、期間或判斷標準會列進人工覆核。
+
 ### 自訂範本
 
 可以自己加範本：在 `data/templates/` 放 YAML 檔，格式照 `backend/sagent/doc_templates/` 裡的檔案。key 相同時會取代內建範本，不用重新啟動。
@@ -133,9 +172,9 @@ uv run --project backend python scripts/seed_demo.py --data-dir data-demo-build
 
 | 欄位 | 預設值 | 說明 |
 |---|---|---|
-| `category` | `feature` | 類型：`idea` Concept、`feature` Functionality、`design` Technical、`change` Change |
+| `category` | `feature` | 類型：`idea` Concept、`feature` Functionality、`design` Technical、`algorithm` Algorithm、`change` Change |
 | `role` | 系統分析師 | 撰寫這種文件的角色，會放進提示詞 |
-| `style` | `spec` | 寫作和審查規則：`spec` 規格文件、`advice` 建議類文件（可以提出需求沒寫的做法）、`idea` 構想文件（不寫細節規格） |
+| `style` | `spec` | 寫作和審查規則：`spec` 規格文件、`advice` 建議類文件（可以提出需求沒寫的做法）、`idea` 構想文件（不寫細節規格）、`algorithm` 演算法設計文件（解法由 AI 設計）、`experiment` 實驗設計文件（實驗方法由 AI 設計） |
 | `advice` | `false` | 舊寫法，`true` 等於 `style: advice` |
 | `allow_diagrams` | `true` | `false` 表示這種文件不畫圖，AI 撰寫的圖表選項也不會出現 |
 | `max_diagrams` | 不限制 | 這種文件最多畫幾張圖。畫面上設定的數量比較多時，以這裡為準 |
@@ -192,7 +231,7 @@ AI 工作在 CPU 上很慢，一次只會執行一個，其他排隊。
 
 PlantUML 是選用功能。要啟用，二選一：
 
-1. 自架 PlantUML 伺服器（例如 `docker run -d -p 8080:8080 plantuml/plantuml-server:jetty`），在「設定」填 `http://localhost:8080`
+1. 自架 PlantUML 伺服器（例如 `docker run -d -p 8080:8080 plantuml/plantuml-server:jetty`），啟動時用環境變數 `SAGENT_PLANTUML_SERVER=http://localhost:8080` 指定
 2. 安裝 Java，把 `plantuml.jar` 放在 `tools/plantuml.jar`
 
 啟用後，「自動」模式下使用案例圖、元件圖、部署圖會改用 PlantUML。也可以在設定選「全部用 PlantUML」。沒有啟用時，PlantUML 圖只顯示原始碼。
@@ -201,7 +240,7 @@ PlantUML 是選用功能。要啟用，二選一：
 
 ## 設定
 
-畫面上的「設定」頁可以改：Ollama 網址、預設模型、溫度、修訂輪數、UML 語法、PlantUML 伺服器。
+畫面上的「設定」頁可以改：Ollama 網址、預設模型、溫度、Context 長度、修訂輪數、畫圖、UML 語法。PlantUML 伺服器用環境變數設定。
 
 啟動時也可以用環境變數：
 

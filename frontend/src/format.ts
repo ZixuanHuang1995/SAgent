@@ -22,6 +22,7 @@ export const CATEGORY_TONE: Record<string, string> = {
   idea: 'amber',
   feature: 'blue',
   design: 'violet',
+  algorithm: 'teal',
   change: 'green',
 }
 

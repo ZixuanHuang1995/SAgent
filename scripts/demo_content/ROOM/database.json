@@ -1,0 +1,141 @@
+{
+ "plan": {
+  "title": "會議室預約資料庫",
+  "summary": "說明會議室與訪客預約系統的資料模型、資料表欄位、索引、保存和去識別化規則，以及資料移轉和備份。",
+  "sections": [
+   {
+    "heading": "設計說明",
+    "goal": "說明資料庫用途、產品、命名規則和資料表一覽。",
+    "key_points": [
+     "SQL Server 2019",
+     "軟刪除",
+     "九張資料表"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "資料模型",
+    "goal": "說明實體和關聯。",
+    "key_points": [
+     "員工、會議室、預約、訪客",
+     "臨時卡和發卡紀錄"
+    ],
+    "diagrams": [
+     {
+      "kind": "er",
+      "title": "會議室預約實體關聯圖",
+      "description": "員工、會議室、預約、訪客、臨時卡和發卡紀錄的關聯"
+     }
+    ]
+   },
+   {
+    "heading": "主檔資料表定義",
+    "goal": "說明員工、停權和會議室資料表。",
+    "key_points": [
+     "EMPLOYEE",
+     "BOOKING_SUSPENSION",
+     "ROOM"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "預約與訪客資料表定義",
+    "goal": "說明預約、訪客和臨時卡資料表，包含編號規則。",
+    "key_points": [
+     "BOOKING",
+     "VISITOR",
+     "TEMP_CARD"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "紀錄資料表定義",
+    "goal": "說明發卡紀錄、狀態歷程和通知紀錄資料表。",
+    "key_points": [
+     "CARD_ISSUE",
+     "STATUS_LOG",
+     "NOTIFICATION_LOG"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "索引與限制",
+    "goal": "列出外來鍵、唯一鍵和索引，說明原因。",
+    "key_points": [
+     "時段重疊檢查",
+     "一張卡同時只發一位訪客"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "資料生命週期",
+    "goal": "說明保存期限、去識別化、軟刪除和臨時卡狀態。",
+    "key_points": [
+     "訪客個資 1 年後去識別化",
+     "其他資料保存 3 年"
+    ],
+    "diagrams": [
+     {
+      "kind": "state",
+      "title": "臨時卡狀態圖",
+      "description": "臨時卡在可用、使用中、未歸還、停用之間的轉換"
+     }
+    ]
+   },
+   {
+    "heading": "資料移轉與備份",
+    "goal": "說明初始資料、移轉和備份還原。",
+    "key_points": [
+     "匯入 12 間會議室",
+     "沿用機房每晚備份"
+    ],
+    "diagrams": []
+   }
+  ],
+  "open_questions": [
+   "超過 3 年的資料，軟刪除後是否要實體刪除。",
+   "同一間會議室的時段不能重疊，是否要在資料庫加條件限制。",
+   "備份還原演練的頻率。"
+  ]
+ },
+ "sections": [
+  "本資料庫存放會議室與訪客預約系統的資料，使用公司現有的 SQL Server 2019。\n\n### 命名規則\n\n- 資料表名稱用英文大寫加底線，例如 BOOKING；欄位名稱用英文小寫加底線，例如 start_at。\n- 時間欄位用 datetime2，以 UTC+8 的當地時間儲存（假設）。\n- 狀態欄位直接存中文狀態名稱，例如「已預約」，方便查詢和除錯。\n- 所有資料都用軟刪除：有 is_deleted 欄位的資料表，刪除時只標記，不實際移除資料。\n- 欄位長度是初步設定（假設），實際長度由資訊部資料庫管理人員確認。\n\n### 資料表一覽\n\n| 資料表 | 說明 |\n|---|---|\n| EMPLOYEE | 員工資料，每天從 AD 同步 |\n| BOOKING_SUSPENSION | 預約停權紀錄 |\n| ROOM | 會議室 |\n| BOOKING | 會議室預約 |\n| VISITOR | 訪客 |\n| TEMP_CARD | 臨時卡 |\n| CARD_ISSUE | 發卡紀錄 |\n| STATUS_LOG | 狀態歷程 |\n| NOTIFICATION_LOG | 通知紀錄 |",
+  "員工預約會議室，一位員工可以有多筆預約，一間會議室也會有多筆預約。訪客由員工（受訪人）登記，可以關聯一筆會議室預約，也可以不關聯。臨時卡每次發出都留一筆發卡紀錄。預約和訪客的每次狀態改變都寫進狀態歷程，通知結果寫進通知紀錄。\n\n下圖列出主要實體和關聯。STATUS_LOG 和 NOTIFICATION_LOG 同時記錄預約和訪客的資料，用編號欄位對應，不設外來鍵，圖中不畫連線。",
+  "### EMPLOYEE 員工\n\n每天從 AD 同步。\n\n| 欄位 | 型別 | 必填 | 說明 |\n|---|---|---|---|\n| employee_no | varchar(20) | 是 | 工號，主鍵 |\n| name | nvarchar(50) | 是 | 姓名 |\n| department | nvarchar(50) | 是 | 部門 |\n| email | varchar(100) | 是 | Email |\n| floor | tinyint | 否 | 所在樓層 |\n| role | nvarchar(10) | 是 | 角色：員工、櫃台人員、總務管理員 |\n| manager_no | varchar(20) | 否 | 部門主管的工號 |\n| updated_at | datetime2 | 是 | 最後同步時間 |\n\n### BOOKING_SUSPENSION 預約停權\n\n| 欄位 | 型別 | 必填 | 說明 |\n|---|---|---|---|\n| suspension_id | int | 是 | 流水號，主鍵 |\n| employee_no | varchar(20) | 是 | 被停權的員工 |\n| start_date | date | 是 | 停權開始日 |\n| end_date | date | 是 | 停權結束日 |\n| reason | nvarchar(200) | 是 | 原因，例如本月自動釋放 3 次 |\n| released_by | varchar(20) | 否 | 提前解除的人員工號 |\n| released_at | datetime2 | 否 | 提前解除時間 |\n\n### ROOM 會議室\n\n| 欄位 | 型別 | 必填 | 說明 |\n|---|---|---|---|\n| room_id | int | 是 | 主鍵 |\n| name | nvarchar(50) | 是 | 會議室名稱 |\n| floor | tinyint | 是 | 樓層（2F～8F） |\n| room_type | nvarchar(10) | 是 | 類型：小型、中型、大型 |\n| capacity | int | 是 | 容納人數 |\n| has_projector | bit | 是 | 是否有投影機 |\n| has_video | bit | 是 | 是否有視訊設備 |\n| qr_code | varchar(36) | 是 | 門口 QR Code 的隨機代碼 |\n| is_disabled | bit | 是 | 是否停用，預設 0 |\n| is_deleted | bit | 是 | 軟刪除標記，預設 0 |",
+  "### BOOKING 會議室預約\n\n編號規則：M + 建立日期（年月日）+ 4 碼流水號，例如 M202610080001。\n\n| 欄位 | 型別 | 必填 | 說明 |\n|---|---|---|---|\n| booking_no | char(13) | 是 | 預約編號，主鍵 |\n| room_id | int | 是 | 會議室 |\n| booker_no | varchar(20) | 是 | 預約人工號 |\n| subject | nvarchar(50) | 是 | 會議主題 |\n| attendee_count | int | 是 | 參加人數 |\n| start_at | datetime2 | 是 | 開始時間 |\n| end_at | datetime2 | 是 | 結束時間 |\n| status | nvarchar(10) | 是 | 已預約、使用中、已結束、已取消、已釋放 |\n| checkin_at | datetime2 | 否 | 報到時間 |\n| checkin_by | varchar(20) | 否 | 報到人工號 |\n| released_at | datetime2 | 否 | 釋放時間 |\n| created_at | datetime2 | 是 | 建立時間 |\n| is_deleted | bit | 是 | 軟刪除標記，預設 0 |\n\n### VISITOR 訪客\n\n編號規則：V + 建立日期（年月日）+ 4 碼流水號，例如 V202610080001。\n\n| 欄位 | 型別 | 必填 | 說明 |\n|---|---|---|---|\n| visitor_no | char(13) | 是 | 訪客編號，主鍵 |\n| booking_no | char(13) | 否 | 關聯的會議室預約，可以沒有 |\n| name | nvarchar(50) | 是 | 姓名；去識別化後只留姓氏 |\n| company | nvarchar(100) | 是 | 公司 |\n| phone | varchar(10) | 否 | 手機；去識別化後清空 |\n| email | varchar(100) | 否 | Email，事先登記必填；去識別化後清空 |\n| purpose | nvarchar(10) | 是 | 來訪事由：洽公、面試、廠商會議、其他 |\n| host_no | varchar(20) | 是 | 受訪人工號 |\n| planned_arrive_at | datetime2 | 是 | 預定到達時間 |\n| planned_leave_at | datetime2 | 是 | 預定離開時間 |\n| need_card | bit | 是 | 是否需要臨時卡 |\n| qr_code | varchar(36) | 是 | QR Code 的隨機代碼 |\n| status | nvarchar(10) | 是 | 已登記、已報到、已離開、已取消、未到訪、拒絕入場 |\n| checkin_at | datetime2 | 否 | 報到時間 |\n| leave_at | datetime2 | 否 | 離開時間 |\n| note | nvarchar(200) | 否 | 備註，例如人工陪同、拒絕原因 |\n| anonymized_at | datetime2 | 否 | 去識別化時間 |\n| created_at | datetime2 | 是 | 建立時間 |\n| is_deleted | bit | 是 | 軟刪除標記，預設 0 |\n\n### TEMP_CARD 臨時卡\n\n| 欄位 | 型別 | 必填 | 說明 |\n|---|---|---|---|\n| card_no | char(3) | 是 | 卡號 C01～C30，主鍵 |\n| access_code | varchar(50) | 是 | 門禁系統的卡片代碼 |\n| status | nvarchar(10) | 是 | 可用、使用中、未歸還、停用 |",
+  "### CARD_ISSUE 發卡紀錄\n\n每次發卡、還卡都留一筆，不會修改舊紀錄的卡號和訪客。\n\n| 欄位 | 型別 | 必填 | 說明 |\n|---|---|---|---|\n| issue_id | bigint | 是 | 流水號，主鍵 |\n| card_no | char(3) | 是 | 卡號 |\n| visitor_no | char(13) | 是 | 訪客 |\n| floor | tinyint | 是 | 開通的樓層 |\n| issued_by | varchar(20) | 是 | 發卡人工號 |\n| issued_at | datetime2 | 是 | 發卡時間 |\n| returned_at | datetime2 | 否 | 還卡時間 |\n| issue_result | nvarchar(200) | 是 | 發卡時門禁 API 的回應結果 |\n| return_result | nvarchar(200) | 否 | 還卡時門禁 API 的回應結果（假設分成兩欄） |\n\n### STATUS_LOG 狀態歷程\n\n| 欄位 | 型別 | 必填 | 說明 |\n|---|---|---|---|\n| log_id | bigint | 是 | 流水號，主鍵 |\n| target_type | nvarchar(10) | 是 | 對象：預約、訪客 |\n| target_no | char(13) | 是 | 預約編號或訪客編號 |\n| from_status | nvarchar(10) | 否 | 改變前的狀態，新建立時為空 |\n| to_status | nvarchar(10) | 是 | 改變後的狀態 |\n| operator | varchar(20) | 是 | 操作人工號；排程自動改的記成「系統」 |\n| changed_at | datetime2 | 是 | 改變時間 |\n| note | nvarchar(200) | 否 | 備註 |\n\n### NOTIFICATION_LOG 通知紀錄\n\n| 欄位 | 型別 | 必填 | 說明 |\n|---|---|---|---|\n| notify_id | bigint | 是 | 流水號，主鍵 |\n| target_no | char(13) | 否 | 相關的預約編號或訪客編號 |\n| recipient | varchar(100) | 是 | 通知對象，員工工號或訪客 Email |\n| channel | nvarchar(10) | 是 | 管道：Email、Teams |\n| summary | nvarchar(200) | 是 | 內容摘要 |\n| result | nvarchar(100) | 是 | 發送結果 |\n| sent_at | datetime2 | 是 | 發送時間 |",
+  "### 主鍵與外來鍵\n\n| 資料表 | 外來鍵 | 參照 |\n|---|---|---|\n| BOOKING_SUSPENSION | employee_no | EMPLOYEE |\n| BOOKING | room_id、booker_no | ROOM、EMPLOYEE |\n| VISITOR | booking_no、host_no | BOOKING、EMPLOYEE |\n| CARD_ISSUE | card_no、visitor_no | TEMP_CARD、VISITOR |\n\nSTATUS_LOG 和 NOTIFICATION_LOG 同時對應預約和訪客，不設外來鍵，由應用程式維護。\n\n### 唯一鍵\n\n| 資料表 | 欄位 | 原因 |\n|---|---|---|\n| ROOM | name | 會議室名稱不重複 |\n| ROOM | qr_code | 門口 QR Code 代碼不重複 |\n| VISITOR | qr_code | 訪客 QR Code 代碼不重複 |\n| TEMP_CARD | access_code | 門禁系統卡片代碼不重複 |\n| CARD_ISSUE | card_no，條件 returned_at 為空 | 同一張卡同時只能發給一位訪客 |\n| CARD_ISSUE | visitor_no，條件 returned_at 為空 | 同一位訪客同時只能有一張使用中的卡 |\n\n### 索引\n\n| 資料表 | 欄位 | 用途 |\n|---|---|---|\n| BOOKING | room_id、start_at、end_at | 檢查同一間會議室的時段是否重疊 |\n| BOOKING | booker_no、start_at | 查詢某位員工的預約 |\n| BOOKING | status、start_at | 排程找出該自動釋放的預約 |\n| VISITOR | planned_arrive_at、status | 櫃台查詢當天的訪客，排程找出未到訪的訪客 |\n| VISITOR | host_no | 查詢某位員工登記的訪客 |\n| STATUS_LOG | target_no | 查詢單筆預約或訪客的歷程 |\n\n時段不能重疊的規則，主要由應用程式在交易中檢查，是否再用資料庫的條件限制補強，要和資訊部確認（待確認）。",
+  "### 資料保存\n\n- 訪客的個人資料在來訪日起 1 年後去識別化：只留姓氏和公司，刪除手機和 Email；通知紀錄裡的訪客 Email 也一起刪除。\n- 其他資料保存 3 年。超過 3 年的資料怎麼處理（軟刪除後是否實體刪除），需求沒有說明（待確認）。\n- 刪除一律用軟刪除，只標記 is_deleted，不實際移除資料。\n\n### 預約停權\n\n預約停權用 BOOKING_SUSPENSION 紀錄起訖日期；提前解除時記錄解除人和時間，不刪除原紀錄。\n\n### 臨時卡狀態\n\n臨時卡發出後改成「使用中」，還卡後回到「可用」。當天 18:00 還沒歸還的卡改成「未歸還」，歸還前不能發給其他訪客。「停用」是總務管理員因卡片損壞等原因停止使用，恢復為「可用」的方式（假設）由總務管理員操作。",
+  "### 初始資料\n\n- 上線前從總務的 Excel 匯入 12 間會議室；舊的 Excel 預約紀錄不轉入。\n- 員工資料在上線前先從 AD 同步一次，之後每天同步。\n- 30 張臨時卡的卡號 C01～C30 和門禁系統的卡片代碼，上線前由總務部和門禁廠商提供清單後匯入（假設）。\n\n### 備份與還原\n\n沿用機房每天晚上對 SQL Server 的備份，不另外建立備份機制。\n\n還原備份時，已經去識別化的資料可能被還原成原本的內容，所以還原後要再執行一次訪客個資去識別化（假設）。還原演練的頻率由資訊部決定（待確認）。"
+ ],
+ "diagrams": [
+  "erDiagram\n    EMPLOYEE ||--o{ BOOKING_SUSPENSION : \"被停權\"\n    EMPLOYEE ||--o{ BOOKING : \"預約\"\n    EMPLOYEE ||--o{ VISITOR : \"受訪\"\n    ROOM ||--o{ BOOKING : \"被預約\"\n    BOOKING |o--o{ VISITOR : \"關聯\"\n    TEMP_CARD ||--o{ CARD_ISSUE : \"發出\"\n    VISITOR ||--o{ CARD_ISSUE : \"領卡\"\n    EMPLOYEE {\n        string employee_no PK \"工號\"\n        string name \"姓名\"\n        string role \"角色\"\n    }\n    BOOKING_SUSPENSION {\n        int suspension_id PK \"流水號\"\n        string employee_no FK \"員工\"\n        date start_date \"開始日\"\n        date end_date \"結束日\"\n    }\n    ROOM {\n        int room_id PK \"會議室編號\"\n        string name \"名稱\"\n        int capacity \"容納人數\"\n        boolean is_disabled \"是否停用\"\n    }\n    BOOKING {\n        string booking_no PK \"預約編號\"\n        int room_id FK \"會議室\"\n        string booker_no FK \"預約人\"\n        datetime start_at \"開始時間\"\n        string status \"狀態\"\n    }\n    VISITOR {\n        string visitor_no PK \"訪客編號\"\n        string booking_no FK \"關聯預約\"\n        string host_no FK \"受訪人\"\n        string status \"狀態\"\n    }\n    TEMP_CARD {\n        string card_no PK \"卡號\"\n        string access_code \"門禁卡片代碼\"\n        string status \"狀態\"\n    }\n    CARD_ISSUE {\n        int issue_id PK \"流水號\"\n        string card_no FK \"卡號\"\n        string visitor_no FK \"訪客\"\n        datetime issued_at \"發卡時間\"\n    }",
+  "stateDiagram-v2\n    state \"可用\" as Available\n    state \"使用中\" as InUse\n    state \"未歸還\" as NotReturned\n    state \"停用\" as Disabled\n    [*] --> Available\n    Available --> InUse : 發卡\n    InUse --> Available : 還卡\n    InUse --> NotReturned : 當天 18:00 未歸還\n    NotReturned --> Available : 歸還\n    Available --> Disabled : 停用\n    Disabled --> Available : 恢復"
+ ],
+ "review": {
+  "issues": [],
+  "review_points": [
+   {
+    "section_id": "S4",
+    "item": "欄位的型別和長度，例如姓名 nvarchar(50)。",
+    "reason": "需求沒有規定欄位長度，這些是初步設定，請資訊部資料庫管理人員確認。"
+   },
+   {
+    "section_id": "S5",
+    "item": "發卡紀錄把發卡和還卡的門禁回應分成兩個欄位。",
+    "reason": "需求只說記錄門禁 API 回應結果，分成兩欄是設計上的假設。"
+   },
+   {
+    "section_id": "S7",
+    "item": "臨時卡「停用」後的恢復方式。",
+    "reason": "需求只列出停用狀態，沒有說明怎麼停用和恢復，要請總務部決定。"
+   },
+   {
+    "section_id": "S8",
+    "item": "還原備份後要再執行去識別化。",
+    "reason": "需求沒有提到備份還原後的個資處理，這是依個資規則推測的作法。"
+   }
+  ],
+  "summary": "資料表涵蓋需求列出的所有資料，欄位長度和部分處理細節需要資訊部與總務部確認。"
+ }
+}

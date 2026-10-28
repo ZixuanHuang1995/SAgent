@@ -52,6 +52,10 @@ def clean_list(value: Any, limit: int = 20, max_len: int = 300) -> list[str]:
 # （避免把開頭和結尾剛好都是範例程式碼的章節拆壞）
 _WRAP_RE = re.compile(r"^```(markdown|md)?[ \t]*\n(.*)\n```\s*$", re.S)
 _FENCE_LINE_RE = re.compile(r"^\s{0,3}(```|~~~)", re.M)
+# 模型自己放的圖片（圖是另外畫的，圖片檔不存在）
+_IMAGE_LINE_RE = re.compile(r"^\s*!\[[^\]]*\]\([^)]*\)\s*$")
+# 提示詞的內部說明外洩，例如「（註：圖表由其他步驟產生，此處僅描述內容）」
+_DIAGRAM_NOTE_RE = re.compile(r"[（(]註[:：][^）)\n]*圖[^）)\n]*[）)]")
 
 
 def clean_section_body(text: str, heading: str, *, keep_diagrams: bool) -> str:
@@ -60,6 +64,7 @@ def clean_section_body(text: str, heading: str, *, keep_diagrams: bool) -> str:
     - 去掉開頭重複的章節標題
     - 內文裡的 # / ## 標題降成 ###，避免把文件結構切亂
     - 不保留圖時，拿掉模型自己畫的圖
+    - 拿掉模型自己放的圖片，以及「（註：圖表由其他步驟產生）」這類內部說明
     """
     text = strip_think(text).strip()
     m = _WRAP_RE.match(text)
@@ -82,8 +87,12 @@ def clean_section_body(text: str, heading: str, *, keep_diagrams: bool) -> str:
 
     out: list[str] = []
     for line, in_fence in iter_lines_with_fence_state(text):
-        if not in_fence and re.match(r"^#{1,2}\s", line):
-            line = "### " + line.lstrip("#").strip()
+        if not in_fence:
+            if _IMAGE_LINE_RE.match(line):
+                continue
+            line = _DIAGRAM_NOTE_RE.sub("", line)
+            if re.match(r"^#{1,2}\s", line):
+                line = "### " + line.lstrip("#").strip()
         out.append(line)
     text = "\n".join(out).strip()
     text = _normalize_subheadings(text)

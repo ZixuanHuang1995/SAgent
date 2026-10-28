@@ -19,7 +19,14 @@ export const keys = {
   health: ['health'] as const,
 }
 
-export const useProjects = () => useQuery({ queryKey: keys.projects, queryFn: api.projects })
+export const useProjects = () =>
+  useQuery({
+    queryKey: keys.projects,
+    queryFn: api.projects,
+    // 有 AI 工作在跑或排隊時，定時更新首頁卡片上的狀態
+    refetchInterval: (query) =>
+      query.state.data?.some((p) => p.running_runs > 0 || p.queued_runs > 0) ? 5000 : false,
+  })
 
 export const useProjectTree = (projectId: number, archived = false) =>
   useQuery({

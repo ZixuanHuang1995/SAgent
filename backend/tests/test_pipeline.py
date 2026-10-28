@@ -193,6 +193,8 @@ def test_textutil_helpers():
     )
     assert body == "說明\n\n### 子標題"
     assert clean_section_body("```markdown\n內容\n```", "x", keep_diagrams=False) == "內容"
+    leaked = "部署如下圖所示（註：圖表由其他步驟產生，此處僅描述內容）。\n\n![部署圖](placeholder.png)\n\n說明（註：待確認）"
+    assert clean_section_body(leaked, "x", keep_diagrams=False) == "部署如下圖所示。\n\n說明（註：待確認）"
     marked, originals = diagrams_to_markers("前\n```mermaid\nflowchart TD\nA-->B\n```\n後")
     assert marked == "前\n[[圖1]]\n後" and len(originals) == 1
     assert markers_to_diagrams("改過的前\n[[圖1]]\n後", originals).count("flowchart TD") == 1
@@ -342,6 +344,45 @@ def test_idea_doc_uses_idea_rules_and_one_diagram():
     user = next(c["messages"][1]["content"] for c in llm.calls if "第 4 節：可能的做法" in c["messages"][1]["content"])
     assert "可以提出需求沒寫的做法" in user
     assert "FR-" not in result.markdown
+
+
+def test_algorithm_doc_uses_algorithm_rules_and_keeps_pseudocode():
+    templates = load_templates()
+    assert templates["algorithm_design"].category == "algorithm" and templates["algorithm_design"].algorithm
+    llm = FakeLLM()
+    inp = make_input(template="algorithm_design", diagrams=True, max_diagrams=4)
+    result, _ = run(llm, inp)
+    assert inp.options.max_diagrams == 2
+
+    planner_system = llm.calls[0]["messages"][0]["content"]
+    assert "「演算法設計」文件" in planner_system and "這是演算法設計文件" in planner_system
+    writer = [c["messages"][0]["content"] for c in llm.calls if ":section:" in c["purpose"]]
+    assert writer and all(s.startswith("你是演算法工程師") and "解題方法、資料結構和虛擬碼由你設計" in s for s in writer)
+    assert not any("只根據需求內容撰寫" in s or "這是建議文件" in s for s in writer)
+    reviewer = [c["messages"][0]["content"] for c in llm.calls if c["purpose"].startswith("reviewer")]
+    assert reviewer and all("這是演算法設計文件" in s and "不算編造" in s for s in reviewer)
+    # 虛擬碼是 ```text 區塊，不是圖，Writer 整理內文時要保留
+    assert "```text\nfunction solve(input)" in result.markdown
+    assert all(b.lang == "mermaid" for b in extract_diagrams(result.markdown))
+
+
+def test_experiment_doc_uses_experiment_rules():
+    templates = load_templates()
+    assert templates["experiment_design"].category == "algorithm" and templates["experiment_design"].experiment
+    llm = FakeLLM()
+    inp = make_input(template="experiment_design", diagrams=True, max_diagrams=4)
+    result, _ = run(llm, inp)
+    assert inp.options.max_diagrams == 2
+
+    planner_system = llm.calls[0]["messages"][0]["content"]
+    assert "「實驗設計」文件" in planner_system and "這是實驗設計文件" in planner_system
+    writer = [c["messages"][0]["content"] for c in llm.calls if ":section:" in c["purpose"]]
+    assert writer and all(s.startswith("你是實驗設計研究員") and "不要寫出實驗結果" in s for s in writer)
+    assert not any("只根據需求內容撰寫" in s or "這是演算法設計文件" in s for s in writer)
+    reviewer = [c["messages"][0]["content"] for c in llm.calls if c["purpose"].startswith("reviewer")]
+    assert reviewer and all("這是實驗設計文件" in s and "不算編造" in s for s in reviewer)
+    # 研究假設、指標照章節目標編號
+    assert "H-02" in result.markdown and "M-03" in result.markdown
 
 
 def _draft(*bodies: str) -> tuple[Plan, Draft]:

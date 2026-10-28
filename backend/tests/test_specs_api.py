@@ -232,7 +232,11 @@ def test_migration_adds_source_spec_id(tmp_path):
 
 def test_template_categories_api(client):
     cats = client.get("/api/agent/template-categories").json()
-    assert [c["key"] for c in cats] == ["idea", "feature", "design", "change"]
+    assert [c["key"] for c in cats] == ["idea", "feature", "design", "algorithm", "change"]
     templates = {t["key"]: t for t in client.get("/api/agent/templates").json()}
     assert templates["idea_proposal"]["category"] == "idea"
     assert templates["idea_proposal"]["style"] == "idea"
+    assert templates["algorithm_design"]["category"] == "algorithm"
+    assert templates["algorithm_design"]["style"] == "algorithm"
+    assert templates["experiment_design"]["category"] == "algorithm"
+    assert templates["experiment_design"]["style"] == "experiment"

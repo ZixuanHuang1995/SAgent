@@ -1,6 +1,6 @@
 import json
 
-from conftest import wait_run
+from conftest import wait_run, wait_status
 
 
 def _spec(client, project, init="none"):
@@ -164,3 +164,24 @@ def test_sse_fills_in_missing_run_end(client, project):
     assert events[-1]["type"] == "run_end"
     assert events[-1]["data"]["status"] == "failed"
     assert events[-1]["message"] == "伺服器重新啟動，工作被中斷"
+
+
+def test_project_list_counts_active_runs(slow_client):
+    pid = slow_client.post("/api/projects", json={"name": "首頁狀態"}).json()["id"]
+    tree = slow_client.get(f"/api/projects/{pid}").json()
+    run_ids = []
+    for title in ("A", "B"):
+        body = {"phase_id": tree["phases"][0]["id"], "title": title, "init": "none"}
+        spec = slow_client.post(f"/api/projects/{pid}/specs", json=body).json()
+        r = slow_client.post("/api/agent/runs", json={"spec_id": spec["id"], "requirement": "需求"})
+        run_ids.append(r.json()["id"])
+    wait_status(slow_client, run_ids[0], ("running",))
+
+    def counts():
+        p = next(p for p in slow_client.get("/api/projects").json() if p["id"] == pid)
+        return p["running_runs"], p["queued_runs"]
+
+    assert counts() == (1, 1)
+    for run_id in run_ids:
+        wait_run(slow_client, run_id)
+    assert counts() == (0, 0)

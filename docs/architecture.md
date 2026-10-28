@@ -168,9 +168,9 @@ sequenceDiagram
 
 範本設 `allow_diagrams: false` 時，不管畫面上怎麼選，這次 AI 工作都不畫圖（建立工作時和流程開始時都會檢查）。UI/UX 設計建議兩個都有設定。
 
-提示詞寫在 `backend/sagent/agents/prompts.py`：`_SPEC_RULES` 和 `_ADVICE_RULES` 是兩組寫作規則。審查提示詞三種文件共用，見 4.8 節。
+提示詞寫在 `backend/sagent/agents/prompts.py`：`_SPEC_RULES` 和 `_ADVICE_RULES` 是兩組寫作規則。審查提示詞各種文件共用，見 4.8 節。
 
-範本用 `style` 指定規則：`spec`（預設）、`advice`、`idea`。舊的 `advice: true` 等於 `style: advice`。
+範本用 `style` 指定規則：`spec`（預設）、`advice`、`idea`、`algorithm`、`experiment`（見 4.9 節）。舊的 `advice: true` 等於 `style: advice`。
 
 ### 4.7 類型與構想文件
 
@@ -181,6 +181,7 @@ sequenceDiagram
 | Concept | `idea` | 構想提案 |
 | Functionality | `feature` | 功能規格書、使用案例規格、SDD 五節、UI/UX 設計建議 |
 | Technical | `design` | 系統架構設計、資料庫設計、API 規格 |
+| Algorithm | `algorithm` | 演算法設計、實驗設計 |
 | Change | `change` | 變更需求說明 |
 
 類型由文件類型決定，`specs` 不另外存類型，舊資料不用升級。自訂範本沒寫 `category` 時歸到 Functionality。
@@ -212,13 +213,39 @@ Reviewer 只做兩件事，不評論寫得好不好、完不完整，也不打�
 - 格式問題盡量用程式檢查，因為小模型數表格欄位、對編號都不可靠。
 - 編號檢查只看文件裡有定義過的種類：有定義 FR-01，才會檢查引用的 FR-07 有沒有定義。條列、標題開頭或表格第一欄出現的編號算是定義。
 - `issues` 裡 high、medium 的錯誤會觸發修訂；`review_points` 不會。
-- 三種文件（規格、建議、構想）共用 `reviewer_system()`，差別只在 `_REVIEW_STYLE_NOTE` 的一行說明。
+- 各種文件（規格、建議、構想、演算法、實驗）共用 `reviewer_system()`，差別只在 `_REVIEW_STYLE_NOTE` 的一行說明。
+
+### 4.9 演算法設計和實驗設計文件
+
+類型 Algorithm 的「演算法設計」（`algorithm_design.yaml`，`style: algorithm`，角色「演算法工程師」）用來設計解決特定問題的演算法，例如數獨的解題和出題。規格文件只能寫需求有的內容，但演算法文件的重點是設計解法，所以規則不同：
+
+| 項目 | 演算法設計文件 |
+|---|---|
+| 寫作規則 | 輸入、輸出、限制條件、效能要求照需求，沒寫的數字不能編造；解法、資料結構、虛擬碼由 AI 設計，要寫理由；虛擬碼放 ` ```text ` 區塊；複雜度用大 O，說明 n 是什麼 |
+| 編號 | 照章節目標，例如測試案例 TC-01 |
+| Planner | key_points 寫具體的設計內容；需求沒寫的限制和效能數字寫進 open_questions |
+| 圖 | 範本設 `max_diagrams: 2`，通常是解題流程圖 |
+| 審查 | AI 設計的解法不算編造；文字、虛擬碼、複雜度、測試案例的預期結果互相矛盾算邏輯錯誤；需求沒提到的限制或效能數字列人工覆核 |
+
+寫作規則是 `_ALGORITHM_RULES`。虛擬碼的 ` ```text ` 區塊不是圖，Writer 整理內文時會保留（只有 ` ```mermaid `、` ```plantuml ` 會被當成圖拿掉）。
+
+同一個類型還有「實驗設計」（`experiment_design.yaml`，`style: experiment`，角色「實驗設計研究員」），用來設計評估新工具或新做法的實驗，例如試用 AI 程式碼審查工具。重點是設計實驗方法，所以也跟規格文件的規則不同：
+
+| 項目 | 實驗設計文件 |
+|---|---|
+| 寫作規則 | 評估對象、目的、人力、時間、環境和判斷標準照需求，沒寫的數字不能編造；假設、指標、分組、步驟和分析方法由 AI 設計，要寫理由；每個假設寫比較對象、指標和成立條件；統計方法配合資料型態；不能寫實驗結果或編造數據 |
+| 編號 | 照章節目標：研究假設 H-01、指標 M-01 |
+| Planner | key_points 寫具體的設計內容；需求沒寫的人數、期間和判斷標準寫進 open_questions |
+| 圖 | 範本設 `max_diagrams: 2`，通常是實驗流程圖 |
+| 審查 | AI 設計的實驗方法不算編造；假設用到沒定義的指標、分析方法不適合資料型態、人數或期間前後不一致、寫出實驗結果算錯誤；需求沒提到的人數、期間或判斷標準列人工覆核 |
+
+寫作規則是 `_EXPERIMENT_RULES`。
 
 ## 5. API 一覽
 
 | 方法 | 路徑 | 說明 |
 |---|---|---|
-| GET/POST | `/api/projects` | 專案清單（含各階段的 Spec 數量）、建立專案 |
+| GET/POST | `/api/projects` | 專案清單（含各階段的 Spec 數量、執行中和排隊中的 AI 工作數量）、建立專案 |
 | GET/PATCH/DELETE | `/api/projects/{id}` | 專案（含階段與 Spec 清單） |
 | POST | `/api/projects/{id}/phases` | 新增階段 |
 | POST | `/api/projects/{id}/phases/reorder` | 調整階段順序 |

@@ -1,0 +1,125 @@
+{
+ "plan": {
+  "title": "請購系統資料庫",
+  "summary": "說明請購簽核系統在 SQL Server 2019 的資料模型、資料表欄位、索引、資料生命週期，以及資料移轉和備份。",
+  "sections": [
+   {
+    "heading": "設計說明",
+    "goal": "說明資料庫的用途、使用的產品、命名規則和共通欄位。",
+    "key_points": [
+     "SQL Server 2019",
+     "命名規則",
+     "共通欄位與軟刪除"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "資料模型",
+    "goal": "說明有哪些實體，以及實體之間的關聯。",
+    "key_points": [
+     "組織與廠商",
+     "預算與異動",
+     "請購、簽核、報價",
+     "採購單與驗收"
+    ],
+    "diagrams": [
+     {
+      "kind": "er",
+      "title": "請購系統實體關聯圖",
+      "description": "主要實體和關聯"
+     }
+    ]
+   },
+   {
+    "heading": "資料表定義",
+    "goal": "每張資料表用一個表格說明欄位名稱、型別、必填、預設值和說明。",
+    "key_points": [
+     "12 張業務資料表和 1 張流水號表"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "索引與限制",
+    "goal": "列出主鍵、外來鍵、唯一鍵和索引，說明建立的原因。",
+    "key_points": [
+     "唯一鍵",
+     "外來鍵",
+     "依查詢設計的索引",
+     "檢查限制"
+    ],
+    "diagrams": []
+   },
+   {
+    "heading": "資料生命週期",
+    "goal": "說明資料怎麼建立、更新、封存和刪除。",
+    "key_points": [
+     "預算異動和簽核紀錄只新增",
+     "附件 3 年後封存",
+     "保存 7 年",
+     "軟刪除"
+    ],
+    "diagrams": [
+     {
+      "kind": "state",
+      "title": "資料生命週期狀態圖",
+      "description": "資料從建立到保存期滿的狀態"
+     }
+    ]
+   },
+   {
+    "heading": "資料移轉與備份",
+    "goal": "說明初始資料、資料移轉的方式，以及備份和還原。",
+    "key_points": [
+     "上線時匯入預算 Excel",
+     "每天同步 AD 和 ERP",
+     "每天晚上備份"
+    ],
+    "diagrams": []
+   }
+  ],
+  "open_questions": [
+   "一個員工是否可以同時有多個角色（例如主管兼採購人員）？",
+   "資料保存期滿 7 年後，要刪除還是匯出保存？",
+   "員工離職或在 AD 停用後，歷史請購單和簽核紀錄怎麼處理？",
+   "附件和資料庫備份保留幾份，多久做一次還原演練？"
+  ]
+ },
+ "sections": [
+  "### 用途\n\n資料庫存放請購簽核系統的所有業務資料：員工和組織、廠商、預算、請購單、簽核紀錄、報價、採購單、驗收紀錄和附件資訊。使用公司現有的 SQL Server 2019，資料保存 7 年。\n\n### 命名規則\n\n- 資料表和欄位用英文小寫加底線（snake_case），資料表名稱用複數，例如 purchase_requests。\n- 主鍵一律叫 id，型別 bigint，自動遞增（假設）。\n- 外來鍵欄位用「被參照的名稱_id」，例如 dept_id。\n- 中文文字欄位用 nvarchar。除了請購事由（300 字）以外，需求沒有寫文字欄位的長度，表格裡的長度是設計假設（待確認）。\n- 金額一律用 decimal(18,2)，也就是小數 2 位；整數位數是設計假設（待確認）。\n\n### 共通欄位\n\n除了流水號表 doc_sequences 以外，每張資料表都有下列欄位，後面的表格不再重複列出。\n\n| 欄位 | 型別 | 說明 |\n|---|---|---|\n| created_at | datetime2 | 建立時間 |\n| created_by | bigint | 建立者（員工 id），系統排程建立的資料為空白 |\n| updated_at | datetime2 | 最後修改時間 |\n| updated_by | bigint | 最後修改者 |\n| is_deleted | bit | 軟刪除標記，預設 0 |\n| deleted_at | datetime2 | 軟刪除時間 |",
+  "資料模型分成四塊：\n\n- 組織與廠商：部門、員工每天從 AD 同步；廠商每天從 ERP 同步。\n- 預算：每個部門每年度每個預算科目一筆預算，每次預佔、釋放、轉已使用、調整都記一筆預算異動。\n- 請購與簽核：一張請購單有多個品項、多筆簽核紀錄、多筆報價和多個附件。\n- 採購與驗收：請購單簽核通過並決標後建立採購單，一張請購單對應一張採購單；每次驗收記一筆驗收紀錄，分批驗收每批一筆。\n\n如下圖，是主要實體和關聯。",
+  "### departments 部門\n\n| 欄位 | 型別 | 必填 | 預設 | 說明 |\n|---|---|---|---|---|\n| id | bigint | 是 | 自動遞增 | 主鍵 |\n| dept_code | nvarchar(20) | 是 | 無 | 部門代號，每天從 AD 同步 |\n| dept_name | nvarchar(100) | 是 | 無 | 部門名稱 |\n\n### employees 員工\n\n| 欄位 | 型別 | 必填 | 預設 | 說明 |\n|---|---|---|---|---|\n| id | bigint | 是 | 自動遞增 | 主鍵 |\n| emp_no | nvarchar(20) | 是 | 無 | 工號，每天從 AD 同步 |\n| name | nvarchar(50) | 是 | 無 | 姓名 |\n| dept_id | bigint | 是 | 無 | 所屬部門 |\n| title | nvarchar(50) | 否 | 空白 | 職稱 |\n| manager_id | bigint | 否 | 空白 | 直屬主管（員工 id），用來決定簽核人 |\n| email | nvarchar(200) | 是 | 無 | Email，通知用 |\n| role | nvarchar(20) | 是 | 無 | 角色：員工、主管、採購人員、財務人員；一個人是否可以有多個角色（待確認） |\n\n### vendors 廠商\n\n| 欄位 | 型別 | 必填 | 預設 | 說明 |\n|---|---|---|---|---|\n| id | bigint | 是 | 自動遞增 | 主鍵 |\n| vendor_code | nvarchar(20) | 是 | 無 | 廠商代號，每天從 ERP 同步 |\n| name | nvarchar(100) | 是 | 無 | 廠商名稱 |\n| tax_id | nvarchar(8) | 是 | 無 | 統一編號 |\n| contact_name | nvarchar(50) | 否 | 空白 | 聯絡人 |\n| phone | nvarchar(30) | 否 | 空白 | 電話 |\n| is_disabled | bit | 是 | 0 | 是否停用，停用的廠商不能報價 |\n\n### budgets 預算\n\n| 欄位 | 型別 | 必填 | 預設 | 說明 |\n|---|---|---|---|---|\n| id | bigint | 是 | 自動遞增 | 主鍵 |\n| dept_id | bigint | 是 | 無 | 部門 |\n| fiscal_year | int | 是 | 無 | 年度 |\n| subject | nvarchar(20) | 是 | 無 | 預算科目：辦公用品、電腦設備、軟體授權、維修費、雜項 |\n| annual_amount | decimal(18,2) | 是 | 0 | 年度預算 |\n| reserved_amount | decimal(18,2) | 是 | 0 | 已預佔金額 |\n| used_amount | decimal(18,2) | 是 | 0 | 已使用金額 |\n\n可用餘額 = annual_amount − reserved_amount − used_amount，不另外存欄位，查詢時計算（假設）。\n\n### budget_txns 預算異動紀錄\n\n| 欄位 | 型別 | 必填 | 預設 | 說明 |\n|---|---|---|---|---|\n| id | bigint | 是 | 自動遞增 | 主鍵 |\n| budget_id | bigint | 是 | 無 | 預算 |\n| txn_type | nvarchar(10) | 是 | 無 | 異動類型：RESERVE 預佔、RELEASE 釋放、USE 轉已使用、ADJUST 調整 |\n| amount | decimal(18,2) | 是 | 無 | 異動金額；調整可以是負數 |\n| pr_id | bigint | 否 | 空白 | 相關的請購單 |\n| note | nvarchar(200) | 否 | 空白 | 說明，例如調整原因 |\n\n這張表只新增，不修改、不刪除（假設），用來追查每一筆預算變化。\n\n### purchase_requests 請購單\n\n| 欄位 | 型別 | 必填 | 預設 | 說明 |\n|---|---|---|---|---|\n| id | bigint | 是 | 自動遞增 | 主鍵 |\n| pr_no | nvarchar(14) | 是 | 無 | 請購單編號：PR + 年月日 + 4 碼流水號，例如 PR202610130001 |\n| requester_id | bigint | 是 | 無 | 請購人 |\n| dept_id | bigint | 是 | 無 | 請購部門 |\n| reason | nvarchar(300) | 是 | 無 | 請購事由 |\n| budget_subject | nvarchar(20) | 是 | 無 | 預算科目 |\n| required_date | date | 是 | 無 | 需求日期 |\n| total_amount | decimal(18,2) | 是 | 0 | 總金額（含稅） |\n| buyer_id | bigint | 否 | 空白 | 負責的採購人員 |\n| low_quote_reason | nvarchar(300) | 否 | 空白 | 報價不足 3 家的理由 |\n| status | nvarchar(20) | 是 | DRAFT | 狀態，值見下方說明 |\n| closed_at | datetime2 | 否 | 空白 | 結案時間；建立時間用共通欄位 created_at |\n\nstatus 的值：DRAFT 草稿、APPROVING 簽核中、RETURNED 已退回、REJECTED 已駁回、APPROVED 已核准、ORDERED 已下單、PART_RECEIVED 部分驗收、CLOSED 已結案、CANCELLED 已取消。\n\n### pr_items 請購單品項\n\n| 欄位 | 型別 | 必填 | 預設 | 說明 |\n|---|---|---|---|---|\n| id | bigint | 是 | 自動遞增 | 主鍵 |\n| pr_id | bigint | 是 | 無 | 請購單 |\n| line_no | int | 是 | 無 | 項次 |\n| item_name | nvarchar(100) | 是 | 無 | 品名 |\n| spec | nvarchar(200) | 否 | 空白 | 規格 |\n| quantity | int | 是 | 無 | 數量，正整數 |\n| unit | nvarchar(10) | 是 | 無 | 單位：個、台、套、箱、式 |\n| est_unit_price | decimal(18,2) | 是 | 無 | 預估單價 |\n\n### approvals 簽核紀錄\n\n| 欄位 | 型別 | 必填 | 預設 | 說明 |\n|---|---|---|---|---|\n| id | bigint | 是 | 自動遞增 | 主鍵 |\n| pr_id | bigint | 是 | 無 | 請購單 |\n| round_no | int | 是 | 1 | 第幾輪簽核；重新簽核時加 1，舊紀錄保留 |\n| step_no | int | 是 | 無 | 第幾關 |\n| level | nvarchar(20) | 是 | 無 | 層級：DEPT_MANAGER 部門主管、DIRECTOR 處長、GM 總經理 |\n| approver_id | bigint | 是 | 無 | 簽核人 |\n| result | nvarchar(10) | 否 | 空白 | 結果：APPROVE 核准、RETURN 退回、REJECT 駁回；還沒處理時為空白 |\n| comment | nvarchar(500) | 否 | 空白 | 意見，退回和駁回必填 |\n| assigned_at | datetime2 | 是 | 無 | 輪到這一關的時間 |\n| acted_at | datetime2 | 否 | 空白 | 處理時間 |\n\n### quotations 報價\n\n| 欄位 | 型別 | 必填 | 預設 | 說明 |\n|---|---|---|---|---|\n| id | bigint | 是 | 自動遞增 | 主鍵 |\n| pr_id | bigint | 是 | 無 | 請購單 |\n| vendor_id | bigint | 是 | 無 | 廠商 |\n| amount | decimal(18,2) | 是 | 無 | 報價金額 |\n| lead_days | int | 否 | 空白 | 交期（天數）；需求只寫「交期」，用天數還是日期（待確認） |\n| is_awarded | bit | 是 | 0 | 是否決標 |\n\n報價單附件存在 attachments，用 quotation_id 對應。\n\n### purchase_orders 採購單\n\n| 欄位 | 型別 | 必填 | 預設 | 說明 |\n|---|---|---|---|---|\n| id | bigint | 是 | 自動遞增 | 主鍵 |\n| po_no | nvarchar(14) | 是 | 無 | 採購單編號：PO + 年月日 + 4 碼流水號 |\n| pr_id | bigint | 是 | 無 | 請購單，一張請購單對應一張採購單 |\n| vendor_id | bigint | 是 | 無 | 廠商 |\n| award_amount | decimal(18,2) | 是 | 無 | 決標金額 |\n| expected_date | date | 否 | 空白 | 預計到貨日 |\n| status | nvarchar(20) | 是 | ORDERED | 狀態；需求沒有列出採購單的狀態，先與請購單的已下單、部分驗收、已結案一致（假設） |\n\n### receipts 驗收紀錄\n\n| 欄位 | 型別 | 必填 | 預設 | 說明 |\n|---|---|---|---|---|\n| id | bigint | 是 | 自動遞增 | 主鍵 |\n| po_id | bigint | 是 | 無 | 採購單 |\n| pr_item_id | bigint | 是 | 無 | 驗收的品項 |\n| batch_no | int | 是 | 1 | 第幾批；分批驗收每批一筆 |\n| received_qty | int | 是 | 無 | 到貨數量 |\n| accepted_qty | int | 否 | 空白 | 合格數量；請購人驗收前為空白 |\n| inspector_id | bigint | 否 | 空白 | 驗收人 |\n| inspected_at | datetime2 | 否 | 空白 | 驗收時間 |\n| reject_reason | nvarchar(300) | 否 | 空白 | 不合格原因 |\n\n### attachments 附件\n\n| 欄位 | 型別 | 必填 | 預設 | 說明 |\n|---|---|---|---|---|\n| id | bigint | 是 | 自動遞增 | 主鍵 |\n| pr_id | bigint | 否 | 空白 | 所屬請購單 |\n| quotation_id | bigint | 否 | 空白 | 所屬報價；pr_id 和 quotation_id 至少要有一個 |\n| file_path | nvarchar(500) | 是 | 無 | 在檔案伺服器的路徑 |\n| file_name | nvarchar(260) | 是 | 無 | 檔名 |\n| file_size | bigint | 是 | 無 | 檔案大小（位元組） |\n| is_archived | bit | 是 | 0 | 是否已移到封存區 |\n| archived_at | datetime2 | 否 | 空白 | 移到封存區的時間 |\n\n上傳者就是共通欄位的 created_by。\n\n### doc_sequences 流水號\n\n| 欄位 | 型別 | 必填 | 預設 | 說明 |\n|---|---|---|---|---|\n| doc_type | nvarchar(2) | 是 | 無 | 單據類型：PR 或 PO |\n| seq_date | date | 是 | 無 | 日期 |\n| last_no | int | 是 | 0 | 當天最後使用的流水號 |\n\n這張表用來產生每天從 0001 開始的流水號（假設）。",
+  "### 主鍵與唯一鍵\n\n| 資料表 | 種類 | 欄位 | 原因 |\n|---|---|---|---|\n| 所有資料表（doc_sequences 除外） | 主鍵 | id | 每筆資料的唯一識別 |\n| doc_sequences | 主鍵 | doc_type、seq_date | 每種單據每天只有一筆 |\n| employees | 唯一 | emp_no | 同步 AD 時用工號對應 |\n| departments | 唯一 | dept_code | 同步 AD 時用部門代號對應 |\n| vendors | 唯一 | vendor_code | 同步 ERP 時用廠商代號對應 |\n| budgets | 唯一 | dept_id、fiscal_year、subject | 每個部門每年度每個預算科目只有一筆 |\n| purchase_requests | 唯一 | pr_no | 請購單編號不能重複 |\n| purchase_orders | 唯一 | po_no | 採購單編號不能重複 |\n| purchase_orders | 唯一 | pr_id | 一張請購單只能對應一張採購單 |\n\n### 外來鍵\n\n| 資料表.欄位 | 參照 |\n|---|---|\n| employees.dept_id、budgets.dept_id、purchase_requests.dept_id | departments.id |\n| employees.manager_id、purchase_requests.requester_id、purchase_requests.buyer_id、approvals.approver_id、receipts.inspector_id | employees.id |\n| budget_txns.budget_id | budgets.id |\n| budget_txns.pr_id、pr_items.pr_id、approvals.pr_id、quotations.pr_id、purchase_orders.pr_id、attachments.pr_id | purchase_requests.id |\n| quotations.vendor_id、purchase_orders.vendor_id | vendors.id |\n| attachments.quotation_id | quotations.id |\n| receipts.po_id | purchase_orders.id |\n| receipts.pr_item_id | pr_items.id |\n\n### 索引\n\n以下索引是依主要查詢設計的（假設），上線後依實際查詢速度再調整。\n\n| 資料表 | 索引欄位 | 原因 |\n|---|---|---|\n| purchase_requests | requester_id、status | 請購人查詢自己的請購單 |\n| purchase_requests | status、required_date | 採購人員的待採購清單，需求日期近的排前面 |\n| purchase_requests | dept_id、created_at | 月報表依部門和月份統計 |\n| approvals | approver_id、result | 簽核主管查詢待我簽核的請購單；找出逾時沒處理的關卡 |\n| approvals | pr_id、round_no、step_no | 查詢請購單的簽核進度 |\n| budget_txns | budget_id、created_at | 查詢某筆預算的異動歷史 |\n| quotations | pr_id | 查詢請購單的報價 |\n| receipts | po_id | 查詢採購單的驗收紀錄 |\n\n### 檢查限制\n\n- pr_items：quantity 大於 0；est_unit_price 大於 0。\n- budgets：reserved_amount 和 used_amount 不能小於 0。\n- purchase_requests：total_amount 大於 0；status 只能是上述 9 個值。\n- approvals：result 只能是 APPROVE、RETURN、REJECT 或空白。",
+  "### 建立與更新\n\n- 員工、部門、廠商由每天的同步工作新增或更新，其他資料由使用者操作產生。\n- 請購單編號和採購單編號在建立時，從 doc_sequences 取得當天的下一個流水號。\n- 預算的已預佔和已使用金額，每次改變都要同時新增一筆 budget_txns；兩者要在同一個交易內完成，確保金額和異動紀錄一致。\n- 重新簽核時，approvals 新增下一輪（round_no 加 1）的紀錄，舊紀錄保留，不修改。\n\n### 保存與封存\n\n- 所有資料保存 7 年。保存期滿後怎麼處理（刪除或匯出）需求沒有說明（待確認）。\n- 附件 3 年後移到封存區：檔案從原本的位置搬到封存位置，attachments 的 is_archived 設為 1，並更新 file_path。封存工作每天晚上執行一次（假設）。\n\n### 刪除\n\n刪除一律用軟刪除：把 is_deleted 設為 1，記錄 deleted_at，資料不會真的從資料庫移除。一般查詢都要加上 is_deleted = 0 的條件。\n\n如下圖，是資料從建立到保存期滿的狀態。",
+  "### 初始資料\n\n系統上線時依下列順序建立資料：\n\n1. 第一次執行 AD 同步，建立部門和員工。\n2. 第一次執行 ERP 同步，建立廠商。\n3. 從財務部的 Excel 匯入當年度的預算和已使用金額，寫入 budgets。匯入的已使用金額另外記一筆 budget_txns 當作期初（假設）。\n\n預算匯入前，要先檢查部門和預算科目對得上，對不上的列要列出來由財務部修正後再匯入。\n\n### 每天同步\n\n- AD 同步：每天從 AD 同步工號、姓名、部門、職稱、直屬主管、Email 和角色，用 emp_no 對應新增或更新。員工離職或停用時怎麼處理（待確認）。\n- ERP 同步：每天從 ERP 同步廠商代號、名稱、統一編號、聯絡人、電話和是否停用，用 vendor_code 對應新增或更新。\n\n### 備份與還原\n\n- 資料庫每天晚上備份。\n- 附件在檔案伺服器，備份方式由資訊部另外決定（待確認）。\n- 備份保留幾份、還原演練的頻率，需求沒有說明（待確認）。"
+ ],
+ "diagrams": [
+  "erDiagram\n    DEPARTMENT ||--o{ EMPLOYEE : \"所屬\"\n    DEPARTMENT ||--o{ BUDGET : \"編列\"\n    BUDGET ||--o{ BUDGET_TXN : \"異動\"\n    EMPLOYEE ||--o{ PURCHASE_REQUEST : \"提出\"\n    EMPLOYEE ||--o{ APPROVAL : \"簽核\"\n    PURCHASE_REQUEST ||--|{ PR_ITEM : \"包含\"\n    PURCHASE_REQUEST ||--o{ APPROVAL : \"簽核紀錄\"\n    PURCHASE_REQUEST ||--o{ QUOTATION : \"報價\"\n    PURCHASE_REQUEST ||--o| PURCHASE_ORDER : \"產生\"\n    PURCHASE_REQUEST ||--o{ ATTACHMENT : \"附件\"\n    VENDOR ||--o{ QUOTATION : \"提供\"\n    VENDOR ||--o{ PURCHASE_ORDER : \"下單給\"\n    PURCHASE_ORDER ||--o{ RECEIPT : \"驗收\"\n    PR_ITEM ||--o{ RECEIPT : \"驗收品項\"\n    DEPARTMENT {\n        bigint id PK \"部門 id\"\n        string dept_code \"部門代號\"\n    }\n    EMPLOYEE {\n        bigint id PK \"員工 id\"\n        string emp_no \"工號\"\n        bigint dept_id FK \"部門\"\n    }\n    BUDGET {\n        bigint id PK \"預算 id\"\n        int fiscal_year \"年度\"\n        string subject \"預算科目\"\n        decimal annual_amount \"年度預算\"\n    }\n    PURCHASE_REQUEST {\n        bigint id PK \"請購單 id\"\n        string pr_no \"請購單編號\"\n        decimal total_amount \"總金額\"\n        string status \"狀態\"\n    }\n    PURCHASE_ORDER {\n        bigint id PK \"採購單 id\"\n        string po_no \"採購單編號\"\n        decimal award_amount \"決標金額\"\n    }",
+  "stateDiagram-v2\n    state \"使用中\" as Active\n    state \"已封存\" as Archived\n    state \"已軟刪除\" as Deleted\n    state \"保存期滿\" as Expired\n    [*] --> Active : 建立\n    Active --> Deleted : 刪除\n    Active --> Archived : 附件滿 3 年\n    Archived --> Expired : 滿 7 年\n    Active --> Expired : 滿 7 年\n    Deleted --> Expired : 滿 7 年\n    Expired --> [*] : 依保存期滿規則處理"
+ ],
+ "review": {
+  "issues": [],
+  "review_points": [
+   {
+    "section_id": "S1",
+    "item": "金額欄位用 decimal(18,2)，文字欄位長度和主鍵型別",
+    "reason": "需求只說金額小數 2 位，整數位數、長度和主鍵型別是設計假設，要資訊部確認"
+   },
+   {
+    "section_id": "S3",
+    "item": "採購單 status 的值和驗收紀錄的欄位設計",
+    "reason": "需求沒有列出採購單狀態，也沒說到貨登記和驗收是否分開記錄，要採購部確認"
+   },
+   {
+    "section_id": "S4",
+    "item": "各項索引",
+    "reason": "索引是依預期查詢設計，需求沒有提到，上線後要依實際查詢調整"
+   },
+   {
+    "section_id": "S5",
+    "item": "預算異動只新增、附件每天晚上封存",
+    "reason": "需求沒有說明，是文件建議的做法，要資訊部和財務部確認"
+   }
+  ],
+  "summary": "格式和邏輯沒有發現問題，有 4 個地方要資訊部和業務單位確認。"
+ }
+}

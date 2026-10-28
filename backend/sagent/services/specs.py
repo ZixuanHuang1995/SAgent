@@ -109,6 +109,16 @@ def phase_spec_counts(s: Session, project_id: int) -> dict[int, int]:
     return {phase_id: n for phase_id, n in rows}
 
 
+def active_run_counts(s: Session, project_id: int) -> dict[str, int]:
+    """執行中、排隊中的 AI 工作數量，例如 {"running": 1, "queued": 2}。沒有的狀態不會出現在結果裡。"""
+    rows = s.execute(
+        select(AgentRun.status, func.count(AgentRun.id))
+        .where(AgentRun.project_id == project_id, AgentRun.status.in_(("running", "queued")))
+        .group_by(AgentRun.status)
+    ).all()
+    return {status: n for status, n in rows}
+
+
 # ---------------------------------------------------------------------------
 # 階段
 # ---------------------------------------------------------------------------
