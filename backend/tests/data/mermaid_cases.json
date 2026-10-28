@@ -440,6 +440,76 @@
    "code": "flowchart TD\n    A[待處理 (新)] --> B[\"已處理 [舊]\"]",
    "valid": false,
    "valid_after_fix": true
+  },
+  "snippet_flowchart": {
+   "code": "flowchart TD\n    %% 步驟：代號[\"文字\"]，判斷：代號{\"問題？\"}，開始和結束：代號([\"文字\"])\n    %% 連線：A --> B，有條件時寫 A -->|是| B\n    S([\"開始\"]) --> A[\"步驟一\"]\n    A --> B{\"判斷條件？\"}\n    B -->|是| C[\"步驟二\"]\n    B -->|否| A\n    C --> E([\"結束\"])",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "snippet_swimlane": {
+   "code": "flowchart LR\n    %% 每個角色一個 subgraph，步驟放在負責的角色裡\n    %% 步驟：代號[\"文字\"]，判斷：代號{\"問題？\"}，連線：A --> B\n    subgraph R1[\"角色一\"]\n        S([\"開始\"]) --> A[\"步驟一\"]\n    end\n    subgraph R2[\"角色二\"]\n        B{\"判斷條件？\"}\n    end\n    subgraph R3[\"角色三\"]\n        C[\"步驟二\"] --> E([\"結束\"])\n    end\n    A --> B\n    B -->|是| C\n    B -->|否| A",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "snippet_sequence": {
+   "code": "sequenceDiagram\n    %% 參與者：participant 代號 as 名稱，人用 actor\n    %% 訊息：A->>B: 內容，回應：B-->>A: 內容，條件：alt 條件 … else … end\n    actor U as 使用者\n    participant A as 系統一\n    participant B as 系統二\n    U->>A: 操作\n    A->>B: 呼叫\n    B-->>A: 回應\n    A-->>U: 顯示結果",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "snippet_state": {
+   "code": "stateDiagram-v2\n    %% 先宣告狀態：state \"名稱\" as 代號（代號用英文）\n    %% 轉換：A --> B : 觸發事件，[*] 是開始和結束\n    state \"狀態一\" as S1\n    state \"狀態二\" as S2\n    state \"狀態三\" as S3\n    [*] --> S1\n    S1 --> S2 : 事件一\n    S2 --> S3 : 事件二\n    S2 --> S1 : 事件三\n    S3 --> [*]",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "snippet_usecase": {
+   "code": "usecase-beta\n    direction LR\n    %% 角色：actor 代號(\"名稱\")，使用案例：代號(\"名稱\")\n    %% 包含：UC2 ..>:include UC1，延伸：UC3 ..>:extend UC1\n    actor U1(\"角色一\")\n    actor U2(\"角色二\")\n    systemBoundary SYS(\"系統名稱\")\n        UC1(\"使用案例一\")\n        UC2(\"使用案例二\")\n        UC3(\"使用案例三\")\n    end\n    U1 --> UC1\n    U1 --> UC2\n    U2 --> UC3",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "snippet_er": {
+   "code": "erDiagram\n    %% 資料表名稱用英文大寫，欄位：型別 名稱 PK或FK \"說明\"\n    %% 關聯：||--o{ 一對多、||--|| 一對一、}o--o{ 多對多\n    TABLE_A ||--o{ TABLE_B : \"關聯說明\"\n    TABLE_A {\n        string a_id PK \"編號\"\n        string name \"名稱\"\n    }\n    TABLE_B {\n        string b_id PK \"編號\"\n        string a_id FK \"TABLE_A 的編號\"\n        date created_at \"建立日期\"\n    }",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "snippet_class": {
+   "code": "classDiagram\n    %% 類別、屬性、方法用英文，中文寫在關聯的冒號後面\n    %% 關聯：--> 關聯、*-- 組合、o-- 聚合、<|-- 繼承\n    class ClassA {\n        +String id\n        +String name\n        +doSomething()\n    }\n    class ClassB {\n        +String id\n    }\n    ClassA \"1\" --> \"*\" ClassB : 關聯說明",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "snippet_component": {
+   "code": "flowchart LR\n    %% 元件：代號[\"名稱\"]，資料庫：代號[(\"名稱\")]\n    %% 分層用 subgraph 代號[\"名稱\"] … end，連線上寫通訊方式：A -->|HTTPS| B\n    subgraph L1[\"前端\"]\n        A[\"元件一\"]\n    end\n    subgraph L2[\"後端\"]\n        B[\"元件二\"]\n        C[\"元件三\"]\n    end\n    DB[(\"資料庫\")]\n    A -->|HTTPS| B\n    B --> C\n    C --> DB",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "snippet_deployment": {
+   "code": "flowchart TB\n    %% 網路區域用 subgraph 代號[\"名稱\"] … end\n    %% 主機：代號[\"名稱\"]，資料庫：代號[(\"名稱\")]，連線上寫協定和埠號：A -->|HTTPS 443| B\n    USER((\"使用者\"))\n    subgraph Z1[\"網路區域一\"]\n        H1[\"主機一\"]\n    end\n    subgraph Z2[\"網路區域二\"]\n        H2[\"主機二\"]\n        DB[(\"資料庫主機\")]\n    end\n    USER -->|HTTPS 443| H1\n    H1 --> H2\n    H2 --> DB",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "snippet_mindmap": {
+   "code": "mindmap\n    %% 用縮排表示層級，第一個是主題\n    root((主題))\n        想法一\n            細節一\n            細節二\n        想法二\n        想法三",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "snippet_quadrant": {
+   "code": "quadrantChart\n    %% 兩軸寫「低 --> 高」，項目座標是 0～1 的 [橫軸, 縱軸]\n    %% quadrant-1 右上、quadrant-2 左上、quadrant-3 左下、quadrant-4 右下\n    title 優先順序\n    x-axis 低成本 --> 高成本\n    y-axis 低效益 --> 高效益\n    quadrant-1 值得投入\n    quadrant-2 優先做\n    quadrant-3 有空再做\n    quadrant-4 不建議做\n    項目一: [0.2, 0.8]\n    項目二: [0.7, 0.7]\n    項目三: [0.3, 0.3]",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "snippet_journey": {
+   "code": "journey\n    %% 每個步驟：步驟名稱: 感受分數（1～5，5 最好）: 角色\n    title 使用者旅程\n    section 階段一\n        步驟一: 5: 使用者\n        步驟二: 3: 使用者\n    section 階段二\n        步驟三: 2: 使用者, 客服人員\n        步驟四: 4: 使用者",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "snippet_timeline": {
+   "code": "timeline\n    %% 每行一個時間點：時間 : 事件，同一個時間點有多個事件時再接「: 事件」\n    title 版本規劃\n    2027 Q1 : 里程碑一\n    2027 Q2 : 里程碑二 : 里程碑三\n    2027 Q3 : 里程碑四",
+   "valid": true,
+   "valid_after_fix": true
+  },
+  "snippet_gantt": {
+   "code": "gantt\n    %% 工作：名稱 :代號, 開始日期, 天數d，接在前一個工作後面：名稱 :代號, after 前一個代號, 天數d\n    dateFormat YYYY-MM-DD\n    section 階段一\n    工作一 :a1, 2027-01-04, 10d\n    工作二 :a2, after a1, 5d\n    section 階段二\n    工作三 :b1, after a2, 15d",
+   "valid": true,
+   "valid_after_fix": true
   }
  }
 }

@@ -139,7 +139,14 @@ sequenceDiagram
 | 使用案例圖 | Mermaid 12 的 `usecase-beta` | 真正的 UML 使用案例圖（角色、系統邊界、include/extend） |
 | 元件圖、部署圖 | Mermaid flowchart | 有設定 PlantUML 時改用 PlantUML |
 
-語法檢查規則是用前端同版本的 Mermaid 實際解析 88 個案例校正過的（`backend/tests/data/mermaid_cases.json`），檢查結果跟 Mermaid 一致。
+語法檢查規則是用前端同版本的 Mermaid 實際解析 102 個案例校正過的（`backend/tests/data/mermaid_cases.json`），檢查結果跟 Mermaid 一致。
+
+編輯器「插入圖表」選單的內容在 `services/diagram_snippets.py`，由 `GET /api/agent/diagram-kinds` 提供，跟 AI 用的範例（`agents/diagram_kinds.py`）分開：
+
+- AI 的範例要完整，小模型才照得來；插入用的是精簡骨架，文字用佔位字，語法提示寫成註解。
+- 選單多了泳道流程圖、心智圖、象限圖、使用者旅程圖、時間軸，但沒有加進 AI 的圖表種類。種類會寫進 Planner 的提示詞，越多小模型越容易選錯。
+- 骨架的 key 跟 AI 圖表種類相同，前端用範本各章節的 `diagrams` 列出「這份文件常用」的圖。
+- 每個骨架都要通過程式檢查，並且在 `mermaid_cases.json` 有 `snippet_*` 案例（測試會比對內容是否一致）。
 
 ### 4.4 進度怎麼送到畫面
 
@@ -282,7 +289,7 @@ backend/sagent/
   config.py          啟動設定（環境變數）
   models.py          資料表
   api/               API 路由
-  services/          版本控制、基準版本、匯出、差異、圖表檢查、PlantUML
+  services/          版本控制、基準版本、匯出、差異、圖表檢查、插入圖表的骨架、PlantUML
   agents/
     llm.py           Ollama 用戶端（串流、JSON Schema）
     planner.py       Planner

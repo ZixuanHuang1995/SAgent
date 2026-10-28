@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from sagent.agents.diagram_kinds import KINDS, resolve_syntax
+from sagent.services.diagram_snippets import SNIPPETS
 from sagent.services.diagrams import (
     extract_code,
     extract_diagrams,
@@ -23,6 +24,25 @@ def test_all_examples_pass_lint():
         assert lint_mermaid(kind.mermaid_example) == [], kind.key
         assert lint_plantuml(kind.plantuml_example) == [], kind.key
         assert fix_mermaid(kind.mermaid_example) == kind.mermaid_example.strip(), kind.key
+
+
+def test_snippets_pass_lint():
+    """「插入圖表」的骨架要通過檢查，AI 修訂文件時才不會被當成錯誤。"""
+    assert {k for k in KINDS} <= {s.key for s in SNIPPETS}, "AI 的每種圖都要有骨架，範本的常用圖表才對得起來"
+    assert len({s.key for s in SNIPPETS}) == len(SNIPPETS)
+    for s in SNIPPETS:
+        assert lint_mermaid(s.mermaid) == [], s.key
+        assert fix_mermaid(s.mermaid) == s.mermaid.strip(), s.key
+        if s.plantuml:
+            assert lint_plantuml(s.plantuml) == [], s.key
+
+
+def test_snippets_parsed_by_real_mermaid():
+    """骨架改了要用 frontend/scripts/mermaid-validate.mjs 重新檢查，更新 mermaid_cases.json 的 snippet_* 案例。"""
+    for s in SNIPPETS:
+        case = _CORPUS["cases"].get(f"snippet_{s.key}")
+        assert case and case["code"] == s.mermaid, f"{s.key}：mermaid_cases.json 的案例跟骨架不一樣"
+        assert case["valid"], s.key
 
 
 def test_extract_and_transform():

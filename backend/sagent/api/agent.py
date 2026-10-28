@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import asdict
 from typing import Any
 
 import httpx
@@ -13,7 +14,6 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..agents.diagram_kinds import KINDS
 from ..agents.doc_templates import CATEGORIES
 from ..agents.llm import ollama_list_models
 from ..app_state import AppState
@@ -21,6 +21,7 @@ from ..db import utcnow
 from ..models import AgentEvent, AgentRun, Spec
 from ..schemas import EventOut, RunCreate, RunDetail, RunOut
 from ..services import specs as spec_service
+from ..services.diagram_snippets import SNIPPETS
 from ..services.errors import BadRequest, Conflict, NotFound, Unavailable
 from .deps import get_state
 
@@ -43,16 +44,8 @@ def list_template_categories() -> list[dict[str, str]]:
 
 @router.get("/diagram-kinds")
 def list_diagram_kinds() -> list[dict[str, str]]:
-    """各種圖的範例，給編輯器的「插入圖表」用。跟 AI 用的是同一套範例。"""
-    return [
-        {
-            "key": k.key,
-            "name": k.name,
-            "mermaid": k.mermaid_example,
-            "plantuml": k.plantuml_example,
-        }
-        for k in KINDS.values()
-    ]
+    """編輯器「插入圖表」選單的圖表骨架。plantuml 是空字串表示 PlantUML 沒有這種圖。"""
+    return [asdict(s) for s in SNIPPETS]
 
 
 @router.get("/models")

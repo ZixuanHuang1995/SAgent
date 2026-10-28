@@ -84,7 +84,7 @@ function useAutoCloseMenus() {
       const target = e.target as Element
       for (const menu of document.querySelectorAll<HTMLDetailsElement>('details.menu[open]')) {
         const inside = menu.contains(target)
-        const picked = inside && target.closest('.menu-list button, .menu-list a')
+        const picked = inside && target.closest('.menu-list button, .menu-list a') && !target.closest('[data-keep-open]')
         if (!inside || picked) menu.open = false
       }
     }

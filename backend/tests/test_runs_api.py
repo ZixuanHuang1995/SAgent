@@ -140,10 +140,13 @@ def test_uiux_advice_run_never_draws(client, project):
 def test_diagram_kinds_for_editor(client):
     kinds = client.get("/api/agent/diagram-kinds").json()
     keys = [k["key"] for k in kinds]
-    assert keys[:3] == ["flowchart", "sequence", "class"]
+    assert keys[:3] == ["flowchart", "swimlane", "sequence"]
     usecase = next(k for k in kinds if k["key"] == "usecase")
+    assert usecase["name"] == "使用案例圖" and usecase["hint"] and usecase["group"] == "流程與互動"
     assert usecase["mermaid"].startswith("usecase-beta")
     assert usecase["plantuml"].startswith("@startuml")
+    # PlantUML 沒有的圖是空字串
+    assert next(k for k in kinds if k["key"] == "journey")["plantuml"] == ""
 
 
 def test_sse_fills_in_missing_run_end(client, project):

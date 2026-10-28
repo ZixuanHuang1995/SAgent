@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { Link, useBlocker, useParams } from 'react-router'
 import { api, ApiError, type SpecDetail, type SpecStatus } from '../api'
 import { AgentPanel } from '../components/AgentPanel'
+import { DiagramMenu, type DiagramLang } from '../components/DiagramMenu'
 import { DiffModal } from '../components/DiffView'
 import { MarkdownEditor, type EditorHandle } from '../components/Editor'
 import { MarkdownView } from '../components/MarkdownView'
@@ -12,7 +13,7 @@ import { VersionPanel } from '../components/VersionPanel'
 import { Badge, ConfirmDialog, Empty, errorText, Skeleton, Spinner, Splitter, useToast } from '../components/ui'
 import { useElementWidth, useMediaQuery, usePersistent, usePersistentNumber } from '../hooks/layout'
 import { CATEGORY_TONE, extractOutline, slugify, SPEC_STATUS, VERSION_SOURCE } from '../format'
-import { keys, useDiagramKinds, useHealth, useProjectTree, useSpec, useTemplateCategories, useTemplates } from '../queries'
+import { keys, useProjectTree, useSpec, useTemplateCategories, useTemplates } from '../queries'
 import { NewSpecDialog } from './ProjectLayout'
 import { Icon, type IconName } from '../components/icons'
 
@@ -91,10 +92,8 @@ export function SpecPage() {
   const [archiving, setArchiving] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const editor = useRef<EditorHandle>(null)
-  const diagramKinds = useDiagramKinds()
-  const plantumlOn = useHealth().data?.plantuml.available ?? false
   // 預覽模式下插入圖表時，要等編輯器出現後才能插入
-  const [pendingInsert, setPendingInsert] = useState<string | null>(null)
+  const [pendingInsert, setPendingInsert] = useState<{ text: string; select: [number, number] } | null>(null)
 
   const data = spec.data
   const content = draft ?? data?.content ?? ''
@@ -177,7 +176,7 @@ export function SpecPage() {
     // 剛從預覽切到編輯時，CodeMirror 要等一下才建立好
     let tries = 0
     const timer = setInterval(() => {
-      if (editor.current?.insertBlock(pendingInsert) || ++tries > 40) {
+      if (editor.current?.insertBlock(pendingInsert.text, pendingInsert.select) || ++tries > 40) {
         clearInterval(timer)
         setPendingInsert(null)
       }
@@ -185,12 +184,16 @@ export function SpecPage() {
     return () => clearInterval(timer)
   }, [pendingInsert])
 
-  const insertDiagram = (title: string, lang: 'mermaid' | 'plantuml', code: string, menu: HTMLElement) => {
-    menu.closest('details')?.removeAttribute('open')
+  const insertDiagram = (title: string, lang: DiagramLang, code: string) => {
     if (mode === 'preview') setMode('split')
     if (window.innerWidth <= 800) setPanelOpen(false) // 窄螢幕時側欄會蓋住編輯器
     const fence = '```'
-    setPendingInsert(`**圖：${title}**\n\n${fence}${lang}\n${code}\n${fence}`)
+    const caption = '**圖：'
+    // 插入後選取圖名，直接打字就能改名
+    setPendingInsert({
+      text: `${caption}${title}**\n\n${fence}${lang}\n${code}\n${fence}`,
+      select: [caption.length, caption.length + title.length],
+    })
   }
 
   const outline = useMemo(() => extractOutline(content), [content])
@@ -466,33 +469,7 @@ export function SpecPage() {
             </button>
           )}
           <span className="spacer" />
-          {!data.archived && diagramKinds.data && (
-            <details className="menu">
-              <summary className="btn btn-sm">插入圖表 ▾</summary>
-              <div className="menu-list menu-right insert-menu">
-                <div className="menu-group">Mermaid（瀏覽器直接畫）</div>
-                {diagramKinds.data.map((k) => (
-                  <button key={`m-${k.key}`} onClick={(e) => insertDiagram(k.name, 'mermaid', k.mermaid, e.currentTarget)}>
-                    {k.name}
-                  </button>
-                ))}
-                {plantumlOn ? (
-                  <>
-                    <div className="menu-group">PlantUML</div>
-                    {diagramKinds.data.map((k) => (
-                      <button key={`p-${k.key}`} onClick={(e) => insertDiagram(k.name, 'plantuml', k.plantuml, e.currentTarget)}>
-                        {k.name}
-                      </button>
-                    ))}
-                  </>
-                ) : (
-                  <div className="menu-note">
-                    要用 PlantUML 畫圖，先到<Link to="/settings">設定</Link>啟用。
-                  </div>
-                )}
-              </div>
-            </details>
-          )}
+          {!data.archived && <DiagramMenu template={template} onInsert={insertDiagram} />}
           <div className="seg seg-sm">
             {(
               [

@@ -229,6 +229,13 @@ AI 工作在 CPU 上很慢，一次只會執行一個，其他排隊。
 | 使用案例圖 | Mermaid 12 原生的使用案例圖（`usecase-beta`） |
 | 元件圖、部署圖 | Mermaid flowchart |
 
+編輯器的「插入圖表」選單：
+
+- 除了上面這些，還有泳道流程圖、心智圖、象限圖、使用者旅程圖、時間軸。這幾種只能手動插入，AI 撰寫不會畫。
+- 依用途分組，每種圖有一行說明。最上面列出這份文件的範本常用的圖。
+- 插入的是精簡骨架，文字是佔位字，語法提示寫在註解裡（註解不會畫出來）。插入後圖名會被選取，直接打字就能改名。
+- 啟用 PlantUML 時，選單頂端可以切換 Mermaid 或 PlantUML。PlantUML 沒有的圖（象限圖、使用者旅程圖、時間軸）切到 PlantUML 時不列出。
+
 PlantUML 是選用功能。要啟用，二選一：
 
 1. 自架 PlantUML 伺服器（例如 `docker run -d -p 8080:8080 plantuml/plantuml-server:jetty`），啟動時用環境變數 `SAGENT_PLANTUML_SERVER=http://localhost:8080` 指定

@@ -36,6 +36,7 @@
 | 畫面 | 用 `.claude/launch.json` 的 `sagent-demo` 開預覽（埠 8766、假模型、資料在 `data-demo/`）實際操作確認 |
 | 提示詞、agent 流程 | pytest 用假模型，只能測流程。要看真模型的結果用 `run_pipeline.py`，但 CPU 上一份文件要 30～70 分鐘，先問使用者再跑 |
 | 圖表語法規則（`diagram_kinds.py`、`services/diagrams.py`） | 跑 `tests/test_diagrams.py`。它用前端同版本 Mermaid 產生的標準答案比對 |
+| 插入圖表的骨架（`services/diagram_snippets.py`） | 用 `mermaid-validate.mjs` 檢查改過的骨架，更新 `mermaid_cases.json` 裡對應的 `snippet_*` 案例，再跑 `tests/test_diagrams.py`（會比對案例和骨架是否一致） |
 | 升級 Mermaid | 用 `frontend/scripts/mermaid-validate.mjs` 重新產生 `backend/tests/data/mermaid_cases.json`，再跑測試 |
 
 ## 程式在哪裡
@@ -48,7 +49,7 @@
 | `config.py`、`cli.py` | 環境變數和命令列參數 |
 | `models.py`、`migrations.py` | 資料表、舊資料庫升級 |
 | `api/` | API 路由，保持精簡，邏輯放 `services/` |
-| `services/` | 版本控制、基準版本、匯出、差異、圖表檢查、PlantUML |
+| `services/` | 版本控制、基準版本、匯出、差異、圖表檢查、插入圖表的骨架、PlantUML |
 | `agents/` | `planner.py`、`writer.py`、`reviewer.py`、`pipeline.py`、`runner.py`、`prompts.py`、`diagram_kinds.py`、`fake_llm.py`、`zh.py` |
 | `doc_templates/` | 內建文件範本（YAML） |
 
@@ -95,6 +96,7 @@
 - 文件的寫作規則有五種，由範本的 `style` 決定：`spec` 規格文件（只寫需求有的內容）、`advice` 建議類文件（例如 UI/UX 設計建議，可以提出需求沒寫的做法）、`idea` 構想文件（不寫細節規格，只有「可能的做法」一節可以提建議）、`algorithm` 演算法設計文件（問題的事實照需求，解法、虛擬碼由 AI 設計）、`experiment` 實驗設計文件（評估對象和判斷標準照需求，實驗方法由 AI 設計，不能寫實驗結果）。每種的寫作規則不同，見 `docs/architecture.md` 第 4.6、4.7、4.9 節。改其中一種的寫作規則時，不要動到其他種。
 - Reviewer 只找格式、邏輯錯誤（交給 Writer 修）和需要人工覆核的地方（只列給使用者），不評論完整度、不打分數。格式問題盡量用程式檢查。各種文件共用審查提示詞 `reviewer_system()`，見 `docs/architecture.md` 第 4.8 節。
 - 新增 Spec 時先選類型（範本的 `category`：idea、feature、design、algorithm、change），類型清單在 `doc_templates.py` 的 `CATEGORIES`。新增內建範本要寫 `category`。
+- 編輯器「插入圖表」選單的骨架在 `services/diagram_snippets.py`，跟 AI 的圖表種類分開。只想讓選單多一種圖時加在這裡，不要加進 `diagram_kinds.py` 的 `KINDS`（會寫進 Planner 的提示詞，種類越多小模型越容易選錯）。
 - 範本 `allow_diagrams: false` 表示不畫圖，`api/agent.py` 建立工作時和 `pipeline.py` 開始時都會強制關掉畫圖。
 - Mermaid 12 的 `usecase-beta` 沒有官方文件，語法是從套件的解析器反推、再用 `mermaid-validate.mjs` 驗證的。
 

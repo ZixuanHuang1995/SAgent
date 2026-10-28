@@ -2083,14 +2083,35 @@ body.is-resizing .cm-editor {
 }
 
 .insert-menu {
-  max-height: 60vh;
+  max-height: 70vh;
   overflow: auto;
+  min-width: 280px; /* 改的話 DiagramMenu.tsx 的 MENU_WIDTH 要一起改 */
 }
-.menu-note {
-  padding: 8px 10px;
-  font-size: var(--fs-sm);
+.insert-menu > .insert-item {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+.insert-hint {
+  margin-left: auto;
+  font-size: var(--fs-xs);
   color: var(--muted);
-  max-width: 220px;
+  white-space: nowrap;
+}
+/* 選單有最大高度，flex 會壓扁 overflow: hidden 的元素，所以不能縮 */
+.insert-syntax {
+  display: flex;
+  flex: none;
+  margin: 4px 6px;
+}
+.insert-syntax button {
+  flex: 1;
+}
+.menu-sep {
+  flex: none;
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
 }
 .props-menu {
   min-width: 240px;

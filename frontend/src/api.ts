@@ -160,10 +160,16 @@ export interface Template {
   sections: { heading: string; goal: string; diagrams: string[] }[]
 }
 
+/** 「插入圖表」選單的一種圖 */
 export interface DiagramKind {
   key: string
   name: string
+  /** 選單上的一行說明 */
+  hint: string
+  /** 分組名稱，例如「流程與互動」 */
+  group: string
   mermaid: string
+  /** 空字串：PlantUML 沒有這種圖 */
   plantuml: string
 }
 
