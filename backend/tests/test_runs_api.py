@@ -295,3 +295,40 @@ def test_continue_sends_confirmed_plan(client, project):
     run = wait_run(client, run_id)
     update = next(e for e in run["events"] if e["type"] == "plan_update")
     assert [t["name"] for t in update["data"]["plan"]["terms"]] == ["會員"]
+
+
+def test_review_checks(client, project):
+    """審查項目可以逐項標成已處理；Spec 和專案清單會顯示還沒處理的數量。"""
+    from sagent.db import session_scope
+    from sagent.models import AgentRun
+
+    spec = _spec(client, project)
+    run_id = client.post("/api/agent/runs", json={"spec_id": spec["id"], "requirement": "x"}).json()["id"]
+    wait_run(client, run_id)
+    with session_scope(client.app.state.sagent.session_factory) as s:
+        run = s.get(AgentRun, run_id)
+        final = dict(run.review["final"])
+        final["issues"] = [{"section_id": "S1", "severity": "high", "problem": "編號重複", "suggestion": ""}]
+        final["review_points"] = [{"section_id": None, "item": "時限", "reason": ""}] * 2
+        run.review = {**run.review, "final": final}
+
+    summary = client.get(f"/api/specs/{spec['id']}").json()["review"]
+    assert summary == {"run_id": run_id, "version_no": 1, "total": 3, "open": 3}
+
+    r = client.put(f"/api/agent/runs/{run_id}/review-checks", json={"key": "point:1", "done": True})
+    assert r.json() == {"checked": ["point:1"]}
+    client.put(f"/api/agent/runs/{run_id}/review-checks", json={"key": "issue:0", "done": True})
+    assert client.get(f"/api/agent/runs/{run_id}").json()["review_checked"] == ["issue:0", "point:1"]
+    tree = client.get(f"/api/projects/{project['project']['id']}").json()
+    assert tree["specs"][0]["review"]["open"] == 1
+
+    client.put(f"/api/agent/runs/{run_id}/review-checks", json={"key": "issue:0", "done": False})
+    assert client.get(f"/api/specs/{spec['id']}").json()["review"]["open"] == 2
+    r = client.put(f"/api/agent/runs/{run_id}/review-checks", json={"key": "point:9", "done": True})
+    assert r.status_code == 400
+
+    # 新的 AI 工作完成後，改看新的審查結果
+    run2 = client.post("/api/agent/runs", json={"spec_id": spec["id"], "requirement": "y"}).json()["id"]
+    wait_run(client, run2)
+    review = client.get(f"/api/specs/{spec['id']}").json()["review"]
+    assert review is None or review["run_id"] == run2

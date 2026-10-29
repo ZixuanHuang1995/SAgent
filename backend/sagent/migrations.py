@@ -69,7 +69,16 @@ def _add_project_glossary(engine: Engine) -> None:
             conn.execute(text("ALTER TABLE projects ADD COLUMN glossary JSON NOT NULL DEFAULT '[]'"))
 
 
+def _add_run_review_checked(engine: Engine) -> None:
+    """agent_runs 加上 review_checked（審查項目哪些已經處理，JSON）。"""
+    with engine.begin() as conn:
+        columns = _columns(conn, "agent_runs")
+        if columns and "review_checked" not in columns:
+            conn.execute(text("ALTER TABLE agent_runs ADD COLUMN review_checked JSON NOT NULL DEFAULT '[]'"))
+
+
 def migrate(engine: Engine) -> None:
     _add_version_line_stats(engine)
     _add_spec_source(engine)
     _add_project_glossary(engine)
+    _add_run_review_checked(engine)

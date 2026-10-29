@@ -104,6 +104,15 @@ class SpecUpdate(BaseModel):
     doc_type: str | None = None
 
 
+class ReviewSummary(BaseModel):
+    """最近一次成功的 AI 工作的審查結果：項目總數、還沒處理的數量。"""
+
+    run_id: int
+    version_no: int | None
+    total: int
+    open: int
+
+
 class SpecOut(ORMModel):
     id: int
     project_id: int
@@ -116,6 +125,8 @@ class SpecOut(ORMModel):
     source_spec_id: int | None = None
     created_at: datetime
     updated_at: datetime
+    # 只有專案清單和單一 Spec 會填
+    review: ReviewSummary | None = None
 
 
 class VersionMeta(ORMModel):
@@ -270,7 +281,13 @@ class EventOut(BaseModel):
 class RunDetail(RunOut):
     plan: dict[str, Any] | None
     review: dict[str, Any] | None
+    review_checked: list[str] = []
     events: list[EventOut]
+
+
+class ReviewCheckIn(BaseModel):
+    key: str = Field(max_length=40)
+    done: bool
 
 
 class RenderIn(BaseModel):

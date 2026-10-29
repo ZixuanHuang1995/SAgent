@@ -8,7 +8,13 @@ import { keys, useTemplates } from '../queries'
 import { RunProgress } from './RunProgress'
 import { Modal, Spinner } from './ui'
 
-export function RunDetailModal(props: { runId: number; onClose: () => void; onDiff?: (versionNo: number) => void }) {
+export function RunDetailModal(props: {
+  runId: number
+  onClose: () => void
+  onDiff?: (versionNo: number) => void
+  /** 點審查結果裡的章節名稱：關掉對話框、跳到文件裡的這一節 */
+  onJump?: (heading: string) => void
+}) {
   const q = useQuery({ queryKey: keys.run(props.runId), queryFn: () => api.run(props.runId) })
   const stream = useRunStream(props.runId)
   const templates = useTemplates()
@@ -49,7 +55,7 @@ export function RunDetailModal(props: { runId: number; onClose: () => void; onDi
             {run.error && <div className="error-box">{run.error}</div>}
           </aside>
           <div className="run-detail-main">
-            <RunProgress run={run} state={stream} onDiff={props.onDiff} />
+            <RunProgress run={run} state={stream} onDiff={props.onDiff} onJumpToSection={props.onJump} />
           </div>
         </div>
       )}

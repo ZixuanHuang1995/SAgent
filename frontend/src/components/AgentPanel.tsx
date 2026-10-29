@@ -148,6 +148,13 @@ export function AgentPanel(props: {
             setDetailRunId(null)
             props.onOpenDiff(v - 1, v)
           }}
+          onJump={
+            props.onJumpToSection &&
+            ((heading) => {
+              setDetailRunId(null)
+              props.onJumpToSection!(heading)
+            })
+          }
         />
       )}
     </div>

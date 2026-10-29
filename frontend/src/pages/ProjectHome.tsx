@@ -128,6 +128,7 @@ export function ProjectHome() {
                   <th>標題</th>
                   <th>類型</th>
                   <th>狀態</th>
+                  <th title="最近一次 AI 審查還沒處理的項目">待確認</th>
                   <th>版本</th>
                   <th>更新</th>
                 </tr>
@@ -143,6 +144,15 @@ export function ProjectHome() {
                     </td>
                     <td>
                       <span className={`status-dot status-${s.status}`} /> {SPEC_STATUS[s.status]}
+                    </td>
+                    <td>
+                      {s.review && s.review.open > 0 ? (
+                        <Badge tone="amber">{s.review.open}</Badge>
+                      ) : s.review ? (
+                        <span className="muted small">已處理</span>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
                     </td>
                     <td>{s.head_version_no > 0 ? `v${s.head_version_no}` : '—'}</td>
                     <td className="muted">{relativeTime(s.updated_at)}</td>

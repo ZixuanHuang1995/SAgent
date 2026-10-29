@@ -21,6 +21,7 @@ from ..schemas import (
     VersionDetail,
     VersionMeta,
 )
+from ..services import reviews as review_service
 from ..services import specs as spec_service
 from ..services.errors import BadRequest
 from ..services.export import safe_filename
@@ -39,6 +40,7 @@ def spec_detail(s: Session, spec: Spec) -> SpecDetail:
             "content": head.content if head else "",
             "head": VersionMeta.model_validate(head) if head else None,
             "active_run_id": run.id if run else None,
+            "review": review_service.summaries(s, [spec.id])[spec.id],
             "source_spec": SpecLink.model_validate(origin) if origin else None,
             "derived_specs": [SpecLink.model_validate(d) for d in spec_service.derived_specs(s, spec)],
         }

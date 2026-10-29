@@ -49,6 +49,17 @@ export interface Spec {
   source_spec_id: number | null
   created_at: string
   updated_at: string
+  /** 最近一次成功的 AI 工作的審查項目數。只有專案清單和單一 Spec 會填 */
+  review?: ReviewSummary | null
+}
+
+export interface ReviewSummary {
+  run_id: number
+  /** 審查的是哪一版；AI 結果跟原本內容一樣時是 null */
+  version_no: number | null
+  total: number
+  /** 還沒標成已處理的項目數 */
+  open: number
 }
 
 export interface SpecLink {
@@ -307,6 +318,8 @@ export interface RunEvent {
 export interface RunDetail extends Run {
   plan: PlanOut | null
   review: { final: ReviewOut | null; rounds: ReviewOut[] } | null
+  /** 最後一次審查裡已經處理的項目："issue:0"、"point:3"（數字是在 issues、review_points 的位置） */
+  review_checked: string[]
   events: RunEvent[]
 }
 
@@ -458,6 +471,8 @@ export const api = {
   run: (id: number) => request<RunDetail>('GET', `/api/agent/runs/${id}`),
   cancelRun: (id: number) => request<{ cancelled: boolean }>('POST', `/api/agent/runs/${id}/cancel`),
   continueRun: (id: number, body: RunContinue) => request<Run>('POST', `/api/agent/runs/${id}/continue`, body),
+  setReviewCheck: (id: number, key: string, done: boolean) =>
+    request<{ checked: string[] }>('PUT', `/api/agent/runs/${id}/review-checks`, { key, done }),
   runEventsUrl: (id: number) => `/api/agent/runs/${id}/events`,
 
   // 系統

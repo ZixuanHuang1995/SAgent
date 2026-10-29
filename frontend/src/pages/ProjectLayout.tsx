@@ -338,6 +338,11 @@ function SpecLink({ projectId, spec }: { projectId: number; spec: Spec }) {
       <span className={`status-dot status-${spec.status}`} title={SPEC_STATUS[spec.status]} />
       {tag && <span className={`tree-spec-cat cat-${category}`}>{tag}</span>}
       <span className="tree-spec-title">{spec.title}</span>
+      {spec.review && spec.review.open > 0 && (
+        <span className="tree-spec-review" title={`AI 審查還有 ${spec.review.open} 項沒處理`}>
+          {spec.review.open}
+        </span>
+      )}
       <span className="tree-spec-ver">{spec.head_version_no > 0 ? `v${spec.head_version_no}` : '—'}</span>
     </NavLink>
   )

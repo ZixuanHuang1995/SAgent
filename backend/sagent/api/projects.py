@@ -23,11 +23,13 @@ from ..schemas import (
     ProjectOut,
     ProjectTree,
     ProjectUpdate,
+    ReviewSummary,
     SpecCreate,
     SpecDetail,
     SpecOut,
 )
 from ..services import baselines as baseline_service
+from ..services import reviews as review_service
 from ..services import specs as spec_service
 from ..services.errors import BadRequest
 from ..services.export import safe_filename
@@ -74,11 +76,16 @@ def create_project(body: ProjectCreate, state: AppState = Depends(get_state)):
 def project_tree(project_id: int, archived: bool = False, state: AppState = Depends(get_state)):
     with state.db() as s:
         project = spec_service.get_project(s, project_id)
+        specs = spec_service.list_specs(s, project.id, archived=archived)
+        reviews = review_service.summaries(s, [sp.id for sp in specs])
         return ProjectTree(
             project=project_out(s, project),
             phases=[PhaseOut.model_validate(ph) for ph in project.phases],
             specs=[
-                SpecOut.model_validate(sp) for sp in spec_service.list_specs(s, project.id, archived=archived)
+                SpecOut.model_validate(sp).model_copy(
+                    update={"review": ReviewSummary(**reviews[sp.id]) if reviews[sp.id] else None}
+                )
+                for sp in specs
             ],
         )
 

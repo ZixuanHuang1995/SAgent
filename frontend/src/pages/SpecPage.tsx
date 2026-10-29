@@ -9,6 +9,7 @@ import { DiagramMenu, type DiagramLang } from '../components/DiagramMenu'
 import { DiffModal } from '../components/DiffView'
 import { MarkdownEditor, type EditorHandle } from '../components/Editor'
 import { MarkdownView } from '../components/MarkdownView'
+import { ReviewChecklist } from '../components/ReviewChecklist'
 import { VersionPanel } from '../components/VersionPanel'
 import { Badge, CategoryBadge, ConfirmDialog, Empty, errorText, Menu, MenuItem, MenuSeparator, Popover, Skeleton, Spinner, Splitter, useToast } from '../components/ui'
 import { useElementWidth, useMediaQuery, usePersistent, usePersistentNumber } from '../hooks/layout'
@@ -25,7 +26,7 @@ function normalizeContent(text: string): string {
   return t ? `${t}\n` : ''
 }
 
-type PanelTab = 'agent' | 'versions' | 'outline'
+type PanelTab = 'agent' | 'review' | 'versions' | 'outline'
 
 // 欄寬設定
 const STATUS_TONE: Record<SpecStatus, 'neutral' | 'amber' | 'green' | 'red'> = {
@@ -37,6 +38,8 @@ const STATUS_TONE: Record<SpecStatus, 'neutral' | 'amber' | 'green' | 'red'> = {
 
 const PANEL_TABS: { key: PanelTab; icon: IconName; label: string }[] = [
   { key: 'agent', icon: 'bot', label: 'AI 代理' },
+  // 只有 AI 審查列出項目的文件才有這個分頁
+  { key: 'review', icon: 'review', label: '審查' },
   { key: 'versions', icon: 'history', label: '版本' },
   { key: 'outline', icon: 'list', label: '大綱' },
 ]
@@ -71,7 +74,7 @@ export function SpecPage() {
   // 構想 → 功能規格：開新增 Spec 對話框，帶入這份文件的內容
   const [converting, setConverting] = useState(false)
   const [savedMode, setMode] = usePersistent<ViewMode>('sagent:view', window.innerWidth > 1280 ? 'split' : 'preview')
-  const [tab, setTab] = usePersistent<PanelTab>('sagent:panel', 'agent')
+  const [savedTab, setTab] = usePersistent<PanelTab>('sagent:panel', 'agent')
   const [panelOpen, setPanelOpen] = useState(true)
   const [panelWidth, setPanelWidth] = usePersistentNumber('sagent:panel-width', PANEL_DEFAULT, PANEL_MIN, PANEL_MAX)
   const [editorPct, setEditorPct] = usePersistentNumber('sagent:editor-pct', EDITOR_DEFAULT, 20, 80)
@@ -97,6 +100,13 @@ export function SpecPage() {
 
   const data = spec.data
   const content = draft ?? data?.content ?? ''
+  const review = data?.review ?? null
+  const panelTabs = PANEL_TABS.filter((t) => t.key !== 'review' || review)
+  const tab: PanelTab = savedTab === 'review' && !review ? 'agent' : savedTab
+  const openReview = () => {
+    setPanelOpen(true)
+    setTab('review')
+  }
   const dirty = draft !== null && draft !== data?.content
   const headChanged = dirty && baseNo !== null && data !== undefined && data.head_version_no !== baseNo
 
@@ -357,6 +367,15 @@ export function SpecPage() {
           </Badge>
           {data.head?.label && <Badge tone="green"><Icon name="tag" size={12} /> {data.head.label}</Badge>}
           {dirty && <Badge tone="amber">未儲存</Badge>}
+          {review && review.open > 0 && (
+            <button
+              className="badge badge-amber badge-btn"
+              title={`最近一次 AI 審查還有 ${review.open} 項沒處理，按一下查看`}
+              onClick={openReview}
+            >
+              <Icon name="review" size={12} /> 待確認 {review.open}
+            </button>
+          )}
           <span className="spacer" />
           {dirty && (
             <input
@@ -597,15 +616,15 @@ export function SpecPage() {
               aria-label="右側欄"
               onKeyDown={(e) => {
                 // 左右方向鍵切換分頁
-                const i = PANEL_TABS.findIndex((t) => t.key === tab)
+                const i = panelTabs.findIndex((t) => t.key === tab)
                 const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
                 if (!d) return
-                const next = PANEL_TABS[(i + d + PANEL_TABS.length) % PANEL_TABS.length]
+                const next = panelTabs[(i + d + panelTabs.length) % panelTabs.length]
                 setTab(next.key)
                 document.getElementById(`tab-${next.key}`)?.focus()
               }}
             >
-              {PANEL_TABS.map((t) => (
+              {panelTabs.map((t) => (
                 <button
                   key={t.key}
                   id={`tab-${t.key}`}
@@ -617,6 +636,11 @@ export function SpecPage() {
                   onClick={() => setTab(t.key)}
                 >
                   <Icon name={t.icon} /> {t.label}
+                  {t.key === 'review' && review && review.open > 0 && (
+                    <span className="tab-count" aria-label={`${review.open} 項沒處理`}>
+                      {review.open}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
@@ -628,6 +652,9 @@ export function SpecPage() {
                   onOpenDiff={(from, to) => setDiff({ from, to })}
                   onJumpToSection={jumpToHeading}
                 />
+              )}
+              {tab === 'review' && review && (
+                <ReviewChecklist key={review.run_id} spec={data} onJump={jumpToHeading} onOpenDiff={(from, to) => setDiff({ from, to })} />
               )}
               {tab === 'versions' && (
                 <VersionPanel specId={specId} headNo={data.head_version_no} archived={data.archived} dirty={dirty} />

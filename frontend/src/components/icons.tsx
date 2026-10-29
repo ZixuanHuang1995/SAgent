@@ -89,6 +89,13 @@ const PATHS: Record<string, ReactNode> = {
   ),
   'chevron-down': <path d="m6 9 6 6 6-6" />,
   check: <path d="M20 6 9 17l-5-5" />,
+  review: (
+    <>
+      <rect x="8" y="2" width="8" height="4" rx="1" />
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+      <path d="m9 14 2 2 4-4" />
+    </>
+  ),
   download: <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />,
   diff: <path d="M8 3v13M4 12l4 4 4-4M16 21V8M12 12l4-4 4 4" />,
   restore: (

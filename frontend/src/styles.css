@@ -1506,9 +1506,11 @@ body.is-resizing .cm-editor {
 }
 .tabs button {
   flex: 1;
+  justify-content: center;
+  white-space: nowrap;
   border: none;
   background: none;
-  padding: 10px 6px;
+  padding: 10px 4px;
   font: inherit;
   color: var(--muted);
   cursor: pointer;
@@ -2449,4 +2451,99 @@ kbd {
 .review-score,
 .step-meta {
   font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 審查結果清單 ---------- */
+
+.badge-btn {
+  border: none;
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.badge-btn:hover {
+  filter: brightness(0.95);
+}
+.tab-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.tree-spec-review {
+  flex: none;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: var(--fs-xs);
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.review-progress {
+  margin-bottom: 6px;
+}
+.review-progress-text {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.review-progress-text .check-row input {
+  margin-top: 0;
+}
+.review-progress-text .check-row {
+  align-items: center;
+}
+.review-progress-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.review-progress-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--success);
+  transition: width 0.2s;
+}
+.check-list {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 0;
+}
+.check-list li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.check-list input[type='checkbox'] {
+  flex: none;
+  margin-top: 4px;
+  cursor: pointer;
+}
+.check-item {
+  flex: 1;
+  min-width: 0;
+}
+.check-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin-bottom: 2px;
+}
+.check-list li.is-done .check-item {
+  opacity: 0.5;
 }

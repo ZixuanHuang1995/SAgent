@@ -21,7 +21,8 @@ from ..agents.planner import parse_terms
 from ..app_state import AppState
 from ..db import utcnow
 from ..models import AgentEvent, AgentRun, Spec
-from ..schemas import EventOut, RunContinue, RunCreate, RunDetail, RunOut
+from ..schemas import EventOut, ReviewCheckIn, RunContinue, RunCreate, RunDetail, RunOut
+from ..services import reviews as review_service
 from ..services import specs as spec_service
 from ..services.diagram_snippets import SNIPPETS
 from ..services.errors import BadRequest, Conflict, NotFound, Unavailable
@@ -168,9 +169,17 @@ def get_run(run_id: int, state: AppState = Depends(get_state)):
                 **run_out(s, run, state).model_dump(),
                 "plan": run.plan,
                 "review": run.review,
+                "review_checked": run.review_checked or [],
                 "events": [_event_out(e) for e in events],
             }
         )
+
+
+@router.put("/runs/{run_id}/review-checks")
+def set_review_check(run_id: int, body: ReviewCheckIn, state: AppState = Depends(get_state)) -> dict[str, list[str]]:
+    """把審查列出的一個項目標成已處理（或取消）。"""
+    with state.db() as s:
+        return {"checked": review_service.set_checked(s, run_id, body.key, body.done)}
 
 
 @router.post("/runs/{run_id}/continue", response_model=RunOut)

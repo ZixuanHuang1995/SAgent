@@ -194,7 +194,7 @@ export function PlanView({ plan }: { plan: PlanOut }) {
   )
 }
 
-const SEVERITY = {
+export const SEVERITY = {
   high: { text: '重要', tone: 'red' },
   medium: { text: '一般', tone: 'amber' },
   low: { text: '建議', tone: 'neutral' },
