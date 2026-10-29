@@ -59,6 +59,21 @@ class StepInfo:
     output: dict[str, Any] = field(default_factory=dict)
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    prompt_eval_s: float = 0.0
+    eval_s: float = 0.0
+    load_s: float = 0.0
+    context_length: int = 0
+
+    def usage(self) -> dict[str, Any]:
+        """步驟結束時記進紀錄的用量。時間拆解用來看花在讀提示詞（prefill）還是生成（decode）。"""
+        return {
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+            "prompt_eval_ms": int(self.prompt_eval_s * 1000),
+            "eval_ms": int(self.eval_s * 1000),
+            "load_ms": int(self.load_s * 1000),
+            "context_length": self.context_length,
+        }
 
 
 class AgentBase:
@@ -92,8 +107,7 @@ class AgentBase:
                     "ok": False,
                     "error": str(exc),
                     "duration_ms": int((time.monotonic() - started) * 1000),
-                    "prompt_tokens": info.prompt_tokens,
-                    "completion_tokens": info.completion_tokens,
+                    **info.usage(),
                 },
             )
             raise
@@ -106,8 +120,7 @@ class AgentBase:
                 "step": step_id,
                 "ok": True,
                 "duration_ms": int((time.monotonic() - started) * 1000),
-                "prompt_tokens": info.prompt_tokens,
-                "completion_tokens": info.completion_tokens,
+                **info.usage(),
                 "output": info.output,
             },
         )
@@ -138,12 +151,43 @@ class AgentBase:
         self.stats.prompt_tokens += result.prompt_tokens
         self.stats.completion_tokens += result.completion_tokens
         self.stats.seconds += result.duration_s
+        self.stats.prompt_eval_seconds += result.prompt_eval_s
+        self.stats.eval_seconds += result.eval_s
+        self.stats.load_seconds += result.load_s
         if self._step is not None:
             self._step.prompt_tokens += result.prompt_tokens
             self._step.completion_tokens += result.completion_tokens
+            self._step.prompt_eval_s += result.prompt_eval_s
+            self._step.eval_s += result.eval_s
+            self._step.load_s += result.load_s
+            self._step.context_length = result.context_length or self._step.context_length
+        await self._check_context(step_id, result, max_tokens)
         if result.truncated:
-            await self.log("模型輸出達到長度上限，內容可能不完整", "warn", step=step_id)
+            # 記下結尾，才看得出是內容真的太長，還是模型一直重複同一段
+            await self.log(
+                "模型輸出達到長度上限，內容可能不完整", "warn", step=step_id, tail=result.text[-300:]
+            )
         return result
+
+    async def _check_context(self, step_id: str, result: LLMResult, max_tokens: int | None) -> None:
+        """單次呼叫的輸入加上輸出上限超過上下文長度時警告。
+
+        超過時 Ollama 會截掉提示詞或提早停止輸出，不會報錯；
+        qwen3.6 這類混合架構也不能滑動上下文。只看單次呼叫，步驟的 token 數會把重試加在一起。
+        """
+        limit = result.context_length
+        if not limit:
+            return
+        need = result.prompt_tokens + (max_tokens or 0)
+        if need > limit:
+            await self.log(
+                f"輸入 {result.prompt_tokens} tokens 加上輸出上限 {max_tokens or 0}，"
+                f"超過模型的上下文長度 {limit}，內容可能被截斷。請在設定頁調高 Context 長度",
+                "warn",
+                step=step_id,
+                prompt_tokens=result.prompt_tokens,
+                context_length=limit,
+            )
 
     async def chat_json(
         self,

@@ -63,6 +63,16 @@ export function SettingsPage() {
     )
   const set = <K extends keyof Settings>(k: K, v: Settings[K]) => setForm({ ...form, [k]: v })
   const h = health.data
+  // Context 長度設 0 時，實際用多少由 Ollama 決定（環境變數或 VRAM，沒有 GPU 只有 4096），從已載入的模型讀出來
+  const loaded = h?.ollama.loaded?.find((m) => m.name === form.default_model)
+  const actualCtx =
+    h?.llm_provider !== 'ollama' || !h.ollama.reachable
+      ? ''
+      : loaded
+        ? loaded.context_length
+          ? `目前實際：${loaded.context_length}`
+          : '目前實際：Ollama 沒有回報'
+        : '目前實際：模型還沒載入，跑過 AI 工作後才看得到'
 
   return (
     <>
@@ -134,7 +144,10 @@ export function SettingsPage() {
             <Field label="溫度（0～1.5）" hint="越低越穩定，越高越有變化">
               <input className="input" type="number" step={0.1} min={0} max={1.5} value={form.temperature} onChange={(e) => set('temperature', Number(e.target.value))} />
             </Field>
-            <Field label="Context 長度" hint="0 = 用 Ollama 的設定。改了會讓 Ollama 重新載入模型">
+            <Field
+              label="Context 長度"
+              hint={`0 = 用 Ollama 的設定（沒有 GPU 時預設只有 4096）。改了會讓 Ollama 重新載入模型${actualCtx ? `。${actualCtx}` : ''}`}
+            >
               <input className="input" type="number" step={1024} min={0} value={form.num_ctx} onChange={(e) => set('num_ctx', Number(e.target.value))} />
             </Field>
           </div>

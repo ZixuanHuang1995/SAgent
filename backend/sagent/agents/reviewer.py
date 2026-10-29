@@ -11,7 +11,7 @@ from typing import Any
 
 from ..services.diagrams import extract_diagrams, lint_mermaid, lint_plantuml
 from .base import AgentBase
-from .prompts import ISSUE_KINDS, REVIEW_SCHEMA, reviewer_messages
+from .prompts import ISSUE_KINDS, review_schema, reviewer_messages
 from .textutil import normalize_sid, text_length
 from .types import Draft, Issue, Plan, Review, ReviewPoint, RunInput
 
@@ -396,7 +396,7 @@ class Reviewer(AgentBase):
                 reviewer_messages(
                     inp, plan, draft_for_review(plan, draft, focus), notes, partial=bool(focus)
                 ),
-                REVIEW_SCHEMA,
+                review_schema(partial=bool(focus)),
                 temperature=0.1,
                 # 真模型實測審查輸出平均約 1500 tokens，2000 常被截斷
                 max_tokens=3000,

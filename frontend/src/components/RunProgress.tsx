@@ -429,6 +429,8 @@ export function RunProgress(props: {
                 <th>輸入</th>
                 <th>輸出</th>
                 <th>時間</th>
+                <th title="Ollama 讀提示詞（prefill）的時間">讀提示詞</th>
+                <th title="Ollama 生成輸出（decode）的時間">生成</th>
               </tr>
             </thead>
             <tbody>
@@ -441,6 +443,9 @@ export function RunProgress(props: {
                   <td>{s.prompt_tokens}</td>
                   <td>{s.completion_tokens}</td>
                   <td>{formatDuration(s.seconds * 1000)}</td>
+                  {/* 舊紀錄和假模型沒有時間拆解 */}
+                  <td>{s.prompt_eval_seconds ? formatDuration(s.prompt_eval_seconds * 1000) : '—'}</td>
+                  <td>{s.eval_seconds ? formatDuration(s.eval_seconds * 1000) : '—'}</td>
                 </tr>
               ))}
             </tbody>

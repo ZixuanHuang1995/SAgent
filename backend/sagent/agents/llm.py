@@ -31,6 +31,12 @@ class LLMResult:
     completion_tokens: int = 0
     duration_s: float = 0.0
     truncated: bool = False  # 達到長度上限被截斷
+    # Ollama 回報的時間拆解：讀提示詞（prefill）、生成（decode）、載入模型。假模型都是 0
+    prompt_eval_s: float = 0.0
+    eval_s: float = 0.0
+    load_s: float = 0.0
+    # 模型實際的上下文長度（tokens），0 = 不知道
+    context_length: int = 0
 
 
 class LLMClient(Protocol):
@@ -73,6 +79,7 @@ class OllamaClient:
             transport=transport,
         )
         self._capabilities: list[str] | None = None
+        self._context_length = 0
 
     async def close(self) -> None:
         await self._client.aclose()
@@ -89,6 +96,23 @@ class OllamaClient:
                 raise LLMError(f"Ollama 回應錯誤：HTTP {resp.status_code} {resp.text[:200]}")
             self._capabilities = list(resp.json().get("capabilities") or [])
         return self._capabilities
+
+    async def context_length(self) -> int:
+        """模型實際的上下文長度。有設定 num_ctx 就是它，否則問 Ollama 已載入的模型（/api/ps）。
+
+        沒設定時由 Ollama 決定：環境變數 OLLAMA_CONTEXT_LENGTH，沒有的話依 VRAM，沒有 GPU 只有 4096。
+        模型還沒載入或查不到時回傳 0，下次再查。
+        """
+        if self.num_ctx:
+            return self.num_ctx
+        if not self._context_length:
+            try:
+                for m in await ollama_loaded_models(self._client):
+                    if m["name"] == self.model:
+                        self._context_length = m["context_length"]
+            except httpx.HTTPError:
+                return 0
+        return self._context_length
 
     async def chat(
         self,
@@ -142,12 +166,18 @@ class OllamaClient:
                         result.prompt_tokens = int(data.get("prompt_eval_count") or 0)
                         result.completion_tokens = int(data.get("eval_count") or 0)
                         result.truncated = data.get("done_reason") == "length"
+                        # Ollama 的時間單位是奈秒
+                        result.prompt_eval_s = int(data.get("prompt_eval_duration") or 0) / 1e9
+                        result.eval_s = int(data.get("eval_duration") or 0) / 1e9
+                        result.load_s = int(data.get("load_duration") or 0) / 1e9
         except httpx.TimeoutException as exc:
             raise LLMError("模型回應逾時，CPU 推論可能太慢，可以改用較小的模型") from exc
         except httpx.HTTPError as exc:
             raise LLMError(f"連不到 Ollama（{self.base_url}）：{exc}") from exc
         result.text = "".join(parts)
         result.duration_s = time.monotonic() - started
+        # 呼叫完模型一定已經載入，這時才查得到上下文長度
+        result.context_length = await self.context_length()
         return result
 
 
@@ -169,6 +199,16 @@ async def ollama_list_models(base_url: str) -> list[dict[str, Any]]:
                 }
             )
         return models
+
+
+async def ollama_loaded_models(client: httpx.AsyncClient) -> list[dict[str, Any]]:
+    """目前載入在記憶體的模型和它們實際的上下文長度（/api/ps）。"""
+    resp = await client.get("/api/ps")
+    resp.raise_for_status()
+    return [
+        {"name": m.get("name") or m.get("model") or "", "context_length": int(m.get("context_length") or 0)}
+        for m in resp.json().get("models", [])
+    ]
 
 
 async def ollama_version(base_url: str) -> str:

@@ -57,7 +57,7 @@ class FakeLLM:
             await asyncio.sleep(self.call_delay)
         prompt = messages[-1]["content"]
         full = "\n".join(m["content"] for m in messages)
-        self.calls.append({"purpose": purpose, "schema": schema is not None, "messages": messages})
+        self.calls.append({"purpose": purpose, "schema": schema, "messages": messages})
         text = self._respond(purpose, prompt, full, schema)
         for i in range(0, len(text), 4):
             if on_token:

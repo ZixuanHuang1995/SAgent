@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Response
 from fastapi.concurrency import run_in_threadpool
 
 from .. import __version__
-from ..agents.llm import ollama_version
+from ..agents.llm import ollama_loaded_models, ollama_version
 from ..app_state import AppState
 from ..schemas import RenderIn
 from ..services import settings as settings_service
@@ -23,11 +23,20 @@ router = APIRouter(prefix="/api", tags=["system"])
 @router.get("/health")
 async def health(state: AppState = Depends(get_state)) -> dict[str, Any]:
     current = await run_in_threadpool(state.settings)
-    ollama: dict[str, Any] = {"url": current.ollama_url, "reachable": False, "version": "", "error": ""}
+    ollama: dict[str, Any] = {
+        "url": current.ollama_url,
+        "reachable": False,
+        "version": "",
+        "error": "",
+        # 已載入的模型和實際的上下文長度。Context 長度設 0 時，設定頁靠這個顯示實際值
+        "loaded": [],
+    }
     if state.cfg.llm_provider == "ollama":
         try:
             ollama["version"] = await ollama_version(current.ollama_url)
             ollama["reachable"] = True
+            async with httpx.AsyncClient(base_url=current.ollama_url.rstrip("/"), timeout=5) as client:
+                ollama["loaded"] = await ollama_loaded_models(client)
         except httpx.HTTPError as exc:
             ollama["error"] = str(exc) or exc.__class__.__name__
     return {

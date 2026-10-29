@@ -6,6 +6,7 @@ from sagent.agents.doc_templates import load_templates
 from sagent.agents.fake_llm import FakeLLM
 from sagent.agents.pipeline import SpecPipeline
 from sagent.agents.planner import Planner
+from sagent.agents.prompts import PARTIAL_REVIEW_LIMITS, REVIEW_LIMITS
 from sagent.agents.reviewer import (
     marked_points,
     mismatched_ids,
@@ -636,6 +637,55 @@ def test_truncated_json_retries_with_shorter_request():
     assert second[-2]["role"] != "assistant"  # 截斷的輸出不放回去
     logs = [e["message"] for e in emitter.events if e["type"] == "log"]
     assert any("精簡後重試" in m for m in logs)
+    # 被截斷的輸出要記下結尾，才看得出是不是模型一直重複
+    cut = [e for e in emitter.events if e["type"] == "log" and "達到長度上限" in e["message"]]
+    assert cut and cut[0]["data"]["tail"]
+
+
+def test_second_review_uses_smaller_limits():
+    llm = FakeLLM()
+    run(llm, make_input())
+    first, second = [c for c in llm.calls if c["purpose"].startswith("reviewer:")][:2]
+    # 提示詞寫的上限要跟 schema 一致，約束解碼只會強制 schema
+    assert first["schema"]["properties"]["issues"]["maxItems"] == REVIEW_LIMITS[0]
+    assert first["schema"]["properties"]["review_points"]["maxItems"] == REVIEW_LIMITS[1]
+    assert f"issues 最多 {REVIEW_LIMITS[0]} 個" in first["messages"][0]["content"]
+    assert second["schema"]["properties"]["issues"]["maxItems"] == PARTIAL_REVIEW_LIMITS[0]
+    assert second["schema"]["properties"]["review_points"]["maxItems"] == PARTIAL_REVIEW_LIMITS[1]
+    assert f"issues 最多 {PARTIAL_REVIEW_LIMITS[0]} 個" in second["messages"][-1]["content"]
+
+
+class _TimedLLM(FakeLLM):
+    """模擬 Ollama 回報的時間拆解和上下文長度。"""
+
+    def __init__(self, context_length):
+        super().__init__()
+        self.context_length = context_length
+
+    async def chat(self, messages, **kwargs):
+        result = await super().chat(messages, **kwargs)
+        result.prompt_eval_s, result.eval_s, result.load_s = 1.0, 2.0, 0.5
+        result.context_length = self.context_length
+        return result
+
+
+def test_usage_records_prefill_decode_and_context_length():
+    llm = _TimedLLM(context_length=32768)
+    result, emitter = run(llm, make_input(max_revisions=0))
+    ends = [e["data"] for e in emitter.events if e["type"] == "step_end"]
+    assert ends and all(d["prompt_eval_ms"] >= 1000 and d["eval_ms"] >= 2000 for d in ends)
+    assert all(d["context_length"] == 32768 for d in ends)
+    planner = result.stats["planner"]
+    assert planner.prompt_eval_seconds == planner.calls * 1.0
+    assert planner.eval_seconds == planner.calls * 2.0 and planner.load_seconds == planner.calls * 0.5
+    assert not any("上下文長度" in e["message"] for e in emitter.events if e["type"] == "log")
+
+
+def test_warns_when_prompt_and_output_exceed_context_length():
+    llm = _TimedLLM(context_length=1000)
+    _, emitter = run(llm, make_input(max_revisions=0))
+    warns = [e for e in emitter.events if e["type"] == "log" and "超過模型的上下文長度 1000" in e["message"]]
+    assert warns and all(w["data"]["level"] == "warn" and w["data"]["step"] for w in warns)
 
 
 def test_failed_second_review_keeps_previous_issues_as_points():

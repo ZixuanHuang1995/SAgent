@@ -191,6 +191,10 @@ export interface AgentStat {
   prompt_tokens: number
   completion_tokens: number
   seconds: number
+  // seconds 的拆解：讀提示詞（prefill）、生成（decode）、載入模型。舊紀錄沒有
+  prompt_eval_seconds?: number
+  eval_seconds?: number
+  load_seconds?: number
 }
 
 export interface RunOptions {
@@ -320,7 +324,14 @@ export interface Health {
   version: string
   llm_provider: string
   default_model: string
-  ollama: { url: string; reachable: boolean; version: string; error: string }
+  ollama: {
+    url: string
+    reachable: boolean
+    version: string
+    error: string
+    // 已載入的模型和實際的上下文長度（0 = Ollama 沒有回報）
+    loaded?: { name: string; context_length: number }[]
+  }
   plantuml: { mode: 'server' | 'jar' | 'off'; available: boolean }
 }
 

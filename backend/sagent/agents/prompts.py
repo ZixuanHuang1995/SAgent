@@ -535,6 +535,11 @@ def diagram_fix_message(errors: list[str], lang: str) -> dict[str, str]:
 # 審查錯誤的類型。小模型常把「需求沒提到」寫成錯誤，讓它選類型，由程式把 unstated 轉成人工覆核
 ISSUE_KINDS = ("format", "conflict", "requirement", "unstated")
 
+# 每次審查最多幾個錯誤、幾個人工覆核項目。提示詞只是建議，約束解碼只會強制 schema 的數字，兩邊要一致。
+# 修訂後的再審查只看改過的章節，上限較小：再審查輸出太長被截斷時，一次要浪費 10 分鐘以上
+REVIEW_LIMITS = (6, 8)
+PARTIAL_REVIEW_LIMITS = (4, 4)
+
 REVIEW_SCHEMA = {
     "type": "object",
     "properties": {
@@ -551,7 +556,7 @@ REVIEW_SCHEMA = {
                 },
                 "required": ["section_id", "kind", "severity", "problem", "suggestion"],
             },
-            "maxItems": 8,
+            "maxItems": REVIEW_LIMITS[0],
         },
         "review_points": {
             "type": "array",
@@ -564,12 +569,28 @@ REVIEW_SCHEMA = {
                 },
                 "required": ["section_id", "item", "reason"],
             },
-            "maxItems": 10,
+            "maxItems": REVIEW_LIMITS[1],
         },
         "summary": {"type": "string"},
     },
     "required": ["issues", "review_points", "summary"],
 }
+
+
+def review_schema(partial: bool = False) -> dict:
+    """partial：修訂後的再審查，用較小的上限。"""
+    if not partial:
+        return REVIEW_SCHEMA
+    props = REVIEW_SCHEMA["properties"]
+    issues, points = PARTIAL_REVIEW_LIMITS
+    return {
+        **REVIEW_SCHEMA,
+        "properties": {
+            **props,
+            "issues": {**props["issues"], "maxItems": issues},
+            "review_points": {**props["review_points"], "maxItems": points},
+        },
+    }
 
 # 每種文件的審查重點一樣（格式、邏輯錯誤，以及要人工覆核的地方），只差這一行說明
 _REVIEW_STYLE_NOTE = {
@@ -621,10 +642,10 @@ def reviewer_system(template: DocTemplate) -> str:
 
 規則：
 1. 不要評論寫得好不好、完不完整，不要挑剔用字和文筆，也不要要求補上需求沒寫的內容。
-2. issues 最多 6 個，每個寫 section_id（例如 S2）、kind、severity、problem（一句話寫哪裡錯、為什麼錯）、suggestion（一句話寫具體怎麼改）。
+2. issues 最多 {REVIEW_LIMITS[0]} 個，每個寫 section_id（例如 S2）、kind、severity、problem（一句話寫哪裡錯、為什麼錯）、suggestion（一句話寫具體怎麼改）。
 3. kind：format 格式錯誤；conflict 章節之間寫得不一樣或條件衝突；requirement 跟需求矛盾；unstated 需求沒提到、文件卻寫得很具體（這類會轉成人工覆核）。
 4. severity：high 是邏輯錯誤或跟需求矛盾；medium 是格式錯誤；low 是不影響理解的小問題。
-5. review_points 最多 8 個，每個寫 section_id、item（要確認的內容，一句話）、reason（為什麼要人工確認，一句話）。
+5. review_points 最多 {REVIEW_LIMITS[1]} 個，每個寫 section_id、item（要確認的內容，一句話）、reason（為什麼要人工確認，一句話）。
 6. 沒有問題時給空陣列，不要硬找。
 7. 需求內容裡的條列編號（1、2、3…）只是順序，跟文件裡的編號無關，不要拿來對照。
 8. 同一件事在不同章節出現（例如功能需求和驗收條件都提到）是正常的，只有寫得不一樣才算錯誤。
@@ -640,7 +661,8 @@ def reviewer_messages(
     )
     checks = "\n".join(f"- {n}" for n in check_notes) if check_notes else "- 沒有發現格式問題"
     draft_title = (
-        "## 修改過的章節\n（其他章節上一輪已經審查過，這次只審查下面這些章節，section_id 只能用這些章節的編號）"
+        "## 修改過的章節\n（其他章節上一輪已經審查過，這次只審查下面這些章節，section_id 只能用這些章節的編號。"
+        f"這次 issues 最多 {PARTIAL_REVIEW_LIMITS[0]} 個，review_points 最多 {PARTIAL_REVIEW_LIMITS[1]} 個）"
         if partial
         else "## 文件草稿"
     )

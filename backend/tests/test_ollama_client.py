@@ -80,6 +80,60 @@ def test_no_think_param_for_models_without_thinking():
     assert "num_ctx" not in seen[0]["options"]
 
 
+def test_timings_and_context_length_from_ps():
+    chunks = [
+        {"message": {"content": "ok"}, "done": False},
+        {
+            "message": {"content": ""},
+            "done": True,
+            "prompt_eval_count": 900,
+            "eval_count": 10,
+            "prompt_eval_duration": 40_000_000_000,
+            "eval_duration": 2_500_000_000,
+            "load_duration": 500_000_000,
+        },
+    ]
+    ps_calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/show":
+            return httpx.Response(200, json={"capabilities": ["completion"]})
+        if request.url.path == "/api/ps":
+            ps_calls.append(1)
+            models = [{"name": "other", "context_length": 4096}, {"name": "m", "context_length": 32768}]
+            return httpx.Response(200, json={"models": models})
+        body = "\n".join(json.dumps(c) for c in chunks)
+        return httpx.Response(200, content=body.encode("utf-8"))
+
+    client = OllamaClient("http://x", "m", transport=httpx.MockTransport(handler))
+
+    async def go():
+        try:
+            first = await client.chat([{"role": "user", "content": "hi"}])
+            second = await client.chat([{"role": "user", "content": "hi"}])
+            return first, second
+        finally:
+            await client.close()
+
+    first, second = asyncio.run(go())
+    assert (first.prompt_eval_s, first.eval_s, first.load_s) == (40.0, 2.5, 0.5)
+    assert first.context_length == second.context_length == 32768
+    assert len(ps_calls) == 1  # 查到後就記住
+
+
+def test_context_length_unknown_when_ps_fails():
+    chunks = [{"message": {"content": "ok"}, "done": True}]
+    client = OllamaClient("http://x", "m", transport=make_transport([], chunks, []))
+
+    async def go():
+        try:
+            return await client.chat([{"role": "user", "content": "hi"}])
+        finally:
+            await client.close()
+
+    assert asyncio.run(go()).context_length == 0
+
+
 def test_error_in_stream():
     chunks = [{"error": "model crashed"}]
     client = OllamaClient("http://x", "m", transport=make_transport([], chunks, []))

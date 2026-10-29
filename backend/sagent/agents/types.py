@@ -206,6 +206,10 @@ class AgentStats:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     seconds: float = 0.0
+    # seconds 的拆解（Ollama 回報）：讀提示詞、生成、載入模型。舊紀錄沒有這些欄位
+    prompt_eval_seconds: float = 0.0
+    eval_seconds: float = 0.0
+    load_seconds: float = 0.0
 
 
 @dataclass
