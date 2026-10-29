@@ -8,6 +8,7 @@ from sagent.agents.pipeline import SpecPipeline
 from sagent.agents.planner import Planner
 from sagent.agents.reviewer import (
     marked_points,
+    mismatched_ids,
     parse_llm_issues,
     parse_llm_points,
     static_checks,
@@ -675,3 +676,18 @@ def test_unstated_issue_duplicating_review_point_is_dropped():
     }
     points = parse_llm_points(data, plan)
     assert [(p.section_id, p.item[:6]) for p in points] == [("S2", "AC-01 "), ("S1", "S1 也寫了")]
+
+
+def test_reviewer_checks_id_title_mismatch():
+    plan, draft = _draft(
+        "| 角色 | 編號 | 使用案例 |\n|---|---|---|\n"
+        "| 報修人 | UC-01 | 提交報修申請 |\n| 總務 | UC-02 | 審核與退回報修單 |\n| 總務 | UC-03 | 指派維修人員 |",
+        "1. 總務執行 [UC-03] 審核與退回報修單。\n2. 接著執行 [UC-03] 指派維修人員。\n"
+        "3. 報修人執行 [UC-01] 確認結案（對應 UC-02）。",
+    )
+    # 編號在表格第二欄也算定義，不會被當成沒定義
+    assert undefined_ids(draft) == {}
+    # 只有名稱剛好是另一個編號的名稱才算錯；「確認結案」對不到其他編號，不算
+    assert mismatched_ids(draft) == {"S2": ["UC-03 後面寫「審核與退回報修單」，這是 UC-02 的名稱（UC-03 是「指派維修人員」）"]}
+    issues = static_checks(plan, draft)
+    assert [(i.section_id, i.severity, i.kind) for i in issues] == [("S2", "medium", "conflict")]

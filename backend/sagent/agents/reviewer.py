@@ -21,6 +21,7 @@ _FENCE_RE = re.compile(r"```.*?```", re.S)
 _ID_RE = re.compile(r"\b([A-Z]{1,4})-(\d{2,3})\b")
 # 一行的開頭（條列、標題、粗體之後）或表格第一欄出現的編號，算是「定義」
 _ID_DEF_RE = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)]\s+|#+\s+|\|\s*)?(?:\*\*|`)?([A-Z]{1,4}-\d{2,3})\b", re.M)
+_ID_CELL_RE = re.compile(r"(?:\*\*|`)?([A-Z]{1,4}-\d{2,3})(?:\*\*|`)?")
 _MARK_RE = re.compile(r"[（(](假設|待確認)[）)]")
 _QUOTED_RE = re.compile(r"「([^」]{2,30})」")
 MAX_CHECK_POINTS = 20
@@ -61,6 +62,98 @@ def table_problems(body: str) -> list[str]:
     return problems
 
 
+def _table_cells(line: str) -> list[str] | None:
+    """表格的一列拆成格子；不是表格或是分隔列（|---|）回傳 None。"""
+    s = line.strip()
+    if not s.startswith("|") or re.fullmatch(r"[|\s:\-]+", s):
+        return None
+    return [c.strip() for c in s.replace("\\|", "").strip("|").split("|")]
+
+
+def _id_cell(cell: str) -> str | None:
+    m = _ID_CELL_RE.fullmatch(cell)
+    return m.group(1) if m else None
+
+
+def defined_ids(text: str) -> list[str]:
+    """文件裡「定義」的編號：條列、標題、一行開頭的編號，或表格一列裡第一個只寫編號的格子。
+
+    表格的編號不一定在第一欄，例如「| 報修人 | UC-01 | 提交報修申請 |」。
+    """
+    ids = _ID_DEF_RE.findall(text)
+    for line in text.splitlines():
+        cells = _table_cells(line)
+        found = next((i for i in map(_id_cell, cells or []) if i), None)
+        if found:
+            ids.append(found)
+    return ids
+
+
+def _phrase(rest: str) -> str:
+    """編號後面接的名稱，例如「[UC-04] 審核與退回報修單。」的「審核與退回報修單」。"""
+    rest = rest.lstrip(" \t*`]）)：:|-–")
+    return re.split(r"[。，,；;（(|\n*`]", rest, maxsplit=1)[0].strip()[:30]
+
+
+def _similar(a: str, b: str) -> bool:
+    if a == b or (min(len(a), len(b)) >= 3 and (a in b or b in a)):
+        return True
+    x, y = {a[i : i + 2] for i in range(len(a) - 1)}, {b[i : i + 2] for i in range(len(b) - 1)}
+    return bool(x and y) and 2 * len(x & y) / (len(x) + len(y)) >= 0.8
+
+
+def id_titles(draft: Draft) -> dict[str, str]:
+    """每個編號第一次定義時的名稱，例如 {"UC-04": "查看統計報表"}。"""
+    titles: dict[str, str] = {}
+    for sec in draft.sections:
+        for line in _without_code(sec.body).splitlines():
+            cells = _table_cells(line)
+            if cells is not None:
+                for k, cell in enumerate(cells):
+                    item_id = _id_cell(cell)
+                    if item_id:
+                        if k + 1 < len(cells):
+                            titles.setdefault(item_id, _phrase(cells[k + 1]))
+                        break
+                continue
+            m = _ID_DEF_RE.match(line)
+            if m:
+                titles.setdefault(m.group(1), _phrase(line[m.end() :]))
+    return {k: v for k, v in titles.items() if len(v) >= 2}
+
+
+def mismatched_ids(draft: Draft) -> dict[str, list[str]]:
+    """引用編號時寫的名稱，其實是另一個編號的名稱（例如寫「[UC-04] 審核與退回」，但審核與退回是 UC-02）。
+
+    小模型寫後面的章節時常把編號對錯，真模型實測這是最常見的邏輯錯誤。
+    只在名稱跟另一個同種編號的名稱一樣、又跟自己的名稱不像時才算，避免誤判。
+    """
+    titles = id_titles(draft)
+    result: dict[str, list[str]] = {}
+    for sec in draft.sections:
+        found: list[str] = []
+        for line in _without_code(sec.body).splitlines():
+            for m in _ID_RE.finditer(line):
+                item_id, phrase = m.group(0), _phrase(line[m.end() :])
+                own = titles.get(item_id, "")
+                if len(phrase) < 2 or (own and _similar(phrase, own)):
+                    continue
+                others = [
+                    other
+                    for other, title in titles.items()
+                    if other != item_id and other.split("-")[0] == m.group(1) and _similar(phrase, title)
+                ]
+                if len(others) != 1:
+                    continue
+                note = f"（{item_id} 是「{own}」）" if own else f"（{item_id} 沒有定義）"
+                text = f"{item_id} 後面寫「{phrase}」，這是 {others[0]} 的名稱{note}"
+                if text not in found:
+                    found.append(text)
+        if found:
+            result[sec.id] = found
+    return result
+
+
 def undefined_ids(draft: Draft) -> dict[str, list[str]]:
     """引用了整份文件都沒有定義的編號，回傳 {章節編號: [編號, …]}。
 
@@ -69,7 +162,7 @@ def undefined_ids(draft: Draft) -> dict[str, list[str]]:
     """
     defined: set[str] = set()
     for sec in draft.sections:
-        defined.update(_ID_DEF_RE.findall(_without_code(sec.body)))
+        defined.update(defined_ids(_without_code(sec.body)))
     prefixes = {d.split("-")[0] for d in defined}
     result: dict[str, list[str]] = {}
     for sec in draft.sections:
@@ -85,12 +178,13 @@ def undefined_ids(draft: Draft) -> dict[str, list[str]]:
 
 def has_item_ids(body: str, prefix: str) -> bool:
     """這一節有沒有定義範本指定的編號（例如功能需求一節要有 FR-01）。"""
-    return any(d.split("-")[0] == prefix for d in _ID_DEF_RE.findall(_without_code(body)))
+    return any(d.split("-")[0] == prefix for d in defined_ids(_without_code(body)))
 
 
 def static_checks(plan: Plan, draft: Draft) -> list[Issue]:
     issues: list[Issue] = []
     undefined = undefined_ids(draft)
+    mismatched = mismatched_ids(draft)
     for sec in draft.sections:
         sec_plan = plan.section(sec.id)
         if sec_plan is not None and sec_plan.action == "keep":
@@ -123,6 +217,17 @@ def static_checks(plan: Plan, draft: Draft) -> list[Issue]:
             )
         for problem in table_problems(sec.body):
             issues.append(Issue(sec.id, "medium", problem, "補齊或合併欄位，讓每一列的欄位數一致", source="check"))
+        for problem in mismatched.get(sec.id, [])[:5]:
+            issues.append(
+                Issue(
+                    sec.id,
+                    "medium",
+                    f"引用的編號跟名稱對不上：{problem}",
+                    "改成名稱對應的編號，或改成這個編號定義的名稱",
+                    source="check",
+                    kind="conflict",
+                )
+            )
         if sec.id in undefined:
             ids = "、".join(undefined[sec.id][:5])
             issues.append(

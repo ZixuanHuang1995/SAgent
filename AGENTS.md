@@ -26,6 +26,8 @@
 | 重新產生示範資料（腳本模型，約 2 分鐘） | `uv run --project backend python scripts/seed_demo.py --data-dir data-demo-build --script scripts/demo_content`，確認後改名成 `data-demo`。內容檔格式見 `DEMO_DATA_PLAN.md` |
 | 重新產生示範資料（真模型，約 29～34 小時） | 上一行去掉 `--script …`。四個情境的需求內容在 `scripts/demo_scenarios.py`，模型預設讀 `data/sagent.db` 的設定 |
 | 用真模型跑一次 AI 流程 | `uv run --project backend python scripts/run_pipeline.py --requirement-file 需求.txt --out 輸出.md` |
+| 分析 AI 工作紀錄（時間佔比、JSON 和截斷出錯、修訂前後錯誤數） | `uv run --project backend python scripts/analyze_runs.py --db data-demo/sagent.db`（不跑模型，資料庫只讀；可加 `--model`、`--doc-type`、`--from-run`） |
+| 真模型可靠度（跨次一致、換句話說、資訊不夠） | `uv run --project backend python scripts/eval_reliability.py --requirement-file 需求.txt --times 3 --rephrased-file 換句話說.txt --sparse-file 資訊不夠.txt --out-dir 輸出資料夾`（每次約 20 分鐘，先問使用者；加 `--fake` 只檢查流程） |
 | 審查一致性（同一份文件審查好幾次，比較錯誤重疊多少） | `uv run --project backend python scripts/review_consistency.py --db data-demo/sagent.db --run-id 6 --times 3`（資料庫只讀；功能規格書一次審查約 10 分鐘） |
 
 ## 改完程式要做的檢查
@@ -35,7 +37,7 @@
 | 後端 | `uv run pytest` 和 `uv run ruff check`，都要通過 |
 | 前端 | `npm run build`。後端提供的是 `dist`，沒有重新打包，畫面不會更新 |
 | 畫面 | 用 `.claude/launch.json` 的 `sagent-demo` 開預覽（埠 8766、假模型、資料在 `data-demo/`）實際操作確認 |
-| 提示詞、agent 流程 | pytest 用假模型，只能測流程。要看真模型的結果用 `run_pipeline.py`，但 CPU 上一份文件要 30～70 分鐘，先問使用者再跑 |
+| 提示詞、agent 流程 | pytest 用假模型，只能測流程。要看真模型的結果用 `run_pipeline.py`，但 CPU 上一份文件要 30～70 分鐘，先問使用者再跑。改之前和之後用 `analyze_runs.py` 比較 |
 | 圖表語法規則（`diagram_kinds.py`、`services/diagrams.py`） | 跑 `tests/test_diagrams.py`。它用前端同版本 Mermaid 產生的標準答案比對 |
 | 插入圖表的骨架（`services/diagram_snippets.py`） | 用 `mermaid-validate.mjs` 檢查改過的骨架，更新 `mermaid_cases.json` 裡對應的 `snippet_*` 案例，再跑 `tests/test_diagrams.py`（會比對案例和骨架是否一致） |
 | 升級 Mermaid | 用 `frontend/scripts/mermaid-validate.mjs` 重新產生 `backend/tests/data/mermaid_cases.json`，再跑測試 |
