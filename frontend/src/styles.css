@@ -535,6 +535,19 @@ select.input:disabled {
   padding: 3px 10px;
   font-size: var(--fs-sm);
 }
+/* 只有圖示的切換鈕，高度跟 btn-sm 一樣（外框 1px 算在 seg 上） */
+.seg-icon button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 0 8px;
+}
+/* 只有圖示的按鈕：接近正方形 */
+.btn-sm.btn-icon {
+  width: 30px;
+  padding: 0;
+}
 .seg-wrap {
   flex-wrap: wrap;
 }

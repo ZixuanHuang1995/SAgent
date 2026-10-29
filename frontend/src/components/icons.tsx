@@ -114,6 +114,18 @@ const PATHS: Record<string, ReactNode> = {
   trash: <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 6M10 11v6M14 11v6" />,
   'arrow-up': <path d="M12 19V5M5 12l7-7 7 7" />,
   'arrow-down': <path d="M12 5v14M19 12l-7 7-7-7" />,
+  columns: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M12 4v16" />
+    </>
+  ),
+  eye: (
+    <>
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
 }
 
 export type IconName = keyof typeof PATHS

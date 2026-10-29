@@ -20,6 +20,12 @@ import { Icon, type IconName } from '../components/icons'
 
 type ViewMode = 'edit' | 'split' | 'preview'
 
+const VIEW_MODES: { key: ViewMode; icon: IconName; label: string }[] = [
+  { key: 'edit', icon: 'edit', label: '編輯' },
+  { key: 'split', icon: 'columns', label: '左右分割（編輯和預覽）' },
+  { key: 'preview', icon: 'eye', label: '預覽' },
+]
+
 /** 跟後端存檔時的整理方式一樣：統一換行符號、去掉結尾空白、最後留一個換行 */
 function normalizeContent(text: string): string {
   const t = text.replace(/\r\n?/g, '\n').trimEnd()
@@ -496,31 +502,33 @@ export function SpecPage() {
           )}
           <span className="spacer" />
           {!data.archived && <DiagramMenu template={template} onInsert={insertDiagram} />}
-          <div className="seg seg-sm">
-            {(
-              [
-                ['edit', '編輯'],
-                ['split', '分割'],
-                ['preview', '預覽'],
-              ] as const
-            ).map(([k, label]) => {
-              const blocked = k === 'split' && !canSplit
+          {/* 只有圖示，名稱放在滑鼠提示和 aria-label */}
+          <div className="seg seg-sm seg-icon" role="group" aria-label="顯示方式">
+            {VIEW_MODES.map(({ key, icon, label }) => {
+              const blocked = key === 'split' && !canSplit
               return (
                 <button
-                  key={k}
-                  className={mode === k ? 'active' : ''}
-                  aria-pressed={mode === k}
+                  key={key}
+                  className={mode === key ? 'active' : ''}
+                  aria-pressed={mode === key}
+                  aria-label={label}
                   disabled={blocked}
-                  title={blocked ? (narrow ? '螢幕太窄，不能左右分割' : '畫面太窄，收起左右側欄後可以分割') : undefined}
-                  onClick={() => setMode(k)}
+                  title={blocked ? (narrow ? '螢幕太窄，不能左右分割' : '畫面太窄，收起左右側欄後可以分割') : label}
+                  onClick={() => setMode(key)}
                 >
-                  {label}
+                  <Icon name={icon} />
                 </button>
               )
             })}
           </div>
-          <button className="btn btn-sm" aria-expanded={panelOpen} onClick={() => setPanelOpen((o) => !o)}>
-            <Icon name={panelOpen ? 'panel-close' : 'panel-open'} /> {panelOpen ? '收起側欄' : '展開側欄'}
+          <button
+            className="btn btn-sm btn-icon"
+            aria-expanded={panelOpen}
+            aria-label={panelOpen ? '收起右側欄' : '展開右側欄'}
+            title={panelOpen ? '收起右側欄' : '展開右側欄'}
+            onClick={() => setPanelOpen((o) => !o)}
+          >
+            <Icon name={panelOpen ? 'panel-close' : 'panel-open'} />
           </button>
         </div>
       </div>
