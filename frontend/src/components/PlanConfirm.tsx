@@ -1,24 +1,9 @@
 // 先確認大綱：Planner 規劃完先停下來，使用者回答待確認問題、調整名詞表和各節要點，再繼續撰寫
 
 import { useState } from 'react'
-import type { PlanOut, PlanTerm, RunContinue } from '../api'
+import type { PlanOut, RunContinue } from '../api'
+import { termsToText, textToTerms } from '../format'
 import { Field, Spinner } from './ui'
-
-function termsToText(terms: PlanTerm[]): string {
-  return terms.map((t) => `${t.name}${t.kind ? `（${t.kind}）` : ''}${t.note ? `：${t.note}` : ''}`).join('\n')
-}
-
-/** 一行一個：「名稱（類型）：說明」，類型和說明可以省略 */
-function textToTerms(text: string): PlanTerm[] {
-  return text
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const m = line.match(/^(.+?)(?:（(.+?)）)?(?:[：:](.*))?$/)
-      return { name: (m?.[1] ?? line).trim(), kind: (m?.[2] ?? '').trim(), note: (m?.[3] ?? '').trim() }
-    })
-}
 
 export function PlanConfirm(props: { plan: PlanOut; onContinue: (body: RunContinue) => Promise<void>; onCancel: () => void }) {
   const { plan } = props

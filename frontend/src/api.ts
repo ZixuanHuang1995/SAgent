@@ -20,6 +20,8 @@ export interface Project {
   /** 執行中、排隊中的 AI 工作數量 */
   running_runs: number
   queued_runs: number
+  /** 專案詞彙表：這個專案的文件都用這些名稱，AI 撰寫時會沿用 */
+  glossary: PlanTerm[]
 }
 
 export interface Phase {
@@ -385,7 +387,7 @@ export const api = {
   createProject: (body: { name: string; code?: string; description?: string; phases?: string[] }) =>
     request<Project>('POST', '/api/projects', body),
   projectTree: (id: number, archived = false) => request<ProjectTree>('GET', `/api/projects/${id}${qs({ archived })}`),
-  updateProject: (id: number, body: Partial<Pick<Project, 'name' | 'code' | 'description'>>) =>
+  updateProject: (id: number, body: Partial<Pick<Project, 'name' | 'code' | 'description' | 'glossary'>>) =>
     request<Project>('PATCH', `/api/projects/${id}`, body),
   deleteProject: (id: number) => request<void>('DELETE', `/api/projects/${id}`),
 

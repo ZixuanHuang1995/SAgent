@@ -28,6 +28,8 @@ class Project(Base):
     name: Mapped[str] = mapped_column(String(200), unique=True)
     code: Mapped[str] = mapped_column(String(40), default="")
     description: Mapped[str] = mapped_column(Text, default="")
+    # 專案詞彙表：[{name, kind, note}]。這個專案的文件都用這些角色、狀態、資料的名稱，AI 撰寫時會沿用
+    glossary: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow)
 

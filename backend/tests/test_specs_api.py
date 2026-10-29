@@ -242,3 +242,39 @@ def test_template_categories_api(client):
     assert templates["experiment_design"]["style"] == "experiment"
     assert templates["tech_decision"]["category"] == "design"
     assert templates["tech_decision"]["style"] == "decision"
+
+
+def test_migration_adds_project_glossary(tmp_path):
+    from sqlalchemy import create_engine, text
+
+    from sagent.migrations import migrate
+
+    engine = create_engine(f"sqlite:///{(tmp_path / 'old.db').as_posix()}")
+    with engine.begin() as conn:
+        conn.execute(text("CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT)"))
+        conn.execute(text("CREATE TABLE specs (id INTEGER PRIMARY KEY, title TEXT)"))
+        conn.execute(text("CREATE TABLE spec_versions (id INTEGER PRIMARY KEY, spec_id INTEGER, version_no INTEGER, content TEXT)"))
+        conn.execute(text("INSERT INTO projects (id, name) VALUES (1, '舊專案')"))
+    migrate(engine)
+    migrate(engine)
+    with engine.begin() as conn:
+        row = conn.execute(text("SELECT glossary FROM projects WHERE id = 1")).one()
+    engine.dispose()
+    assert row[0] == "[]"
+
+
+def test_project_glossary(client, project):
+    pid = project["project"]["id"]
+    terms = [
+        {"name": "報修人", "kind": "角色", "note": "提出報修的員工"},
+        {"name": "報修人", "kind": "角色", "note": "重複的只留第一個"},
+        {"name": "已派工", "kind": "怪類型", "note": ""},
+    ]
+    r = client.patch(f"/api/projects/{pid}", json={"glossary": terms})
+    assert r.status_code == 200, r.text
+    assert r.json()["glossary"] == [
+        {"name": "報修人", "kind": "角色", "note": "提出報修的員工"},
+        {"name": "已派工", "kind": "其他", "note": ""},
+    ]
+    # 只改名稱不會清掉詞彙表
+    assert client.patch(f"/api/projects/{pid}", json={"name": "新名稱"}).json()["glossary"][0]["name"] == "報修人"

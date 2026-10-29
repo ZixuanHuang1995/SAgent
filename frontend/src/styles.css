@@ -1648,6 +1648,14 @@ body.is-resizing .cm-editor {
 .run-form .seg button {
   flex: 1;
 }
+.glossary-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
 .check-row {
   display: flex;
   gap: 8px;

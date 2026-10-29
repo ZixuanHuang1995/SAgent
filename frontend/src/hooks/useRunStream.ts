@@ -109,6 +109,9 @@ function reducer(state: RunStreamState, action: Action): RunStreamState {
       if (typeof d.step === 'string' && d.step.startsWith('review:') && d.output) reviews = [...reviews, d.output as ReviewOut]
       return { ...next, steps, plan, reviews }
     }
+    case 'plan_update':
+      // 先確認大綱的工作繼續時，換成使用者確認過的大綱
+      return { ...next, plan: (d.plan as PlanOut) ?? next.plan }
     case 'section':
       return { ...next, sections: { ...next.sections, [d.section_id]: { heading: d.heading, body: d.body } } }
     case 'log':

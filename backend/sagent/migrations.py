@@ -61,6 +61,15 @@ def _add_spec_source(engine: Engine) -> None:
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_specs_source_spec_id ON specs (source_spec_id)"))
 
 
+def _add_project_glossary(engine: Engine) -> None:
+    """projects 加上 glossary（專案詞彙表，JSON）。"""
+    with engine.begin() as conn:
+        columns = _columns(conn, "projects")
+        if columns and "glossary" not in columns:  # 沒有 projects 資料表時，啟動時會照新的定義建立
+            conn.execute(text("ALTER TABLE projects ADD COLUMN glossary JSON NOT NULL DEFAULT '[]'"))
+
+
 def migrate(engine: Engine) -> None:
     _add_version_line_stats(engine)
     _add_spec_source(engine)
+    _add_project_glossary(engine)

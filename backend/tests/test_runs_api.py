@@ -267,3 +267,28 @@ def test_plan_first_ignored_in_revise_mode(client, project):
     run_id = client.post("/api/agent/runs", json=body).json()["id"]
     run = wait_run(client, run_id)
     assert run["status"] == "succeeded" and run["options"]["plan_first"] is False
+
+
+def test_project_glossary_reaches_prompts(client, project, fake_llms):
+    pid = project["project"]["id"]
+    client.patch(f"/api/projects/{pid}", json={"glossary": [{"name": "報修人", "kind": "角色", "note": "提出報修的員工"}]})
+    spec = _spec(client, project)
+    run = wait_run(client, client.post("/api/agent/runs", json={"spec_id": spec["id"], "requirement": "需求"}).json()["id"])
+    # 專案詞彙表放前面，Planner 新列的接在後面
+    assert [t["name"] for t in run["plan"]["terms"]] == ["報修人", "客戶", "已送出"]
+    calls = fake_llms[-1].calls
+    planner = next(c for c in calls if c["purpose"].startswith("planner:"))["messages"][-1]["content"]
+    assert "## 專案詞彙表" in planner and "- 報修人（角色）：提出報修的員工" in planner
+    writer = next(c for c in calls if ":section:" in c["purpose"])["messages"][-1]["content"]
+    assert "- 報修人（角色）：提出報修的員工" in writer
+
+
+def test_continue_sends_confirmed_plan(client, project):
+    spec = _spec(client, project)
+    body = {"spec_id": spec["id"], "requirement": "需求", "options": {"plan_first": True}}
+    run_id = client.post("/api/agent/runs", json=body).json()["id"]
+    _wait_paused(client, run_id)
+    client.post(f"/api/agent/runs/{run_id}/continue", json={"terms": [{"name": "會員", "kind": "角色", "note": ""}]})
+    run = wait_run(client, run_id)
+    update = next(e for e in run["events"] if e["type"] == "plan_update")
+    assert [t["name"] for t in update["data"]["plan"]["terms"]] == ["會員"]

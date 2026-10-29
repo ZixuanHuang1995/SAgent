@@ -1,12 +1,14 @@
 // AI 工作的進度畫面：階段、每個步驟、即時輸出、大綱、審查結果
 
 import { useEffect, useRef, useState } from 'react'
-import type { PlanOut, ReviewIssue, ReviewOut, ReviewPoint, Run, RunContinue } from '../api'
+import { useQueryClient } from '@tanstack/react-query'
+import { api, type PlanOut, type PlanTerm, type ReviewIssue, type ReviewOut, type ReviewPoint, type Run, type RunContinue } from '../api'
 import { AGENT_NAME, formatDuration, RUN_STATUS } from '../format'
 import { assemblePreview, type RunStreamState, type StepState } from '../hooks/useRunStream'
 import { MarkdownView } from './MarkdownView'
 import { PlanConfirm } from './PlanConfirm'
-import { Badge, Modal, Spinner } from './ui'
+import { useProjectTree } from '../queries'
+import { Badge, errorText, Modal, Spinner, useToast } from './ui'
 import { Icon } from './icons'
 
 const PHASES = [
@@ -290,6 +292,42 @@ function UnresolvedNote(props: { run: Run; state: RunStreamState; review: Review
   )
 }
 
+/** AI 工作完成後，把這次名詞表裡專案詞彙表還沒有的名詞，提議加進專案詞彙表 */
+function GlossarySuggest({ projectId, terms }: { projectId: number; terms: PlanTerm[] }) {
+  const tree = useProjectTree(projectId)
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [busy, setBusy] = useState(false)
+  const glossary = tree.data?.project.glossary
+  if (!glossary) return null
+  const known = new Set(glossary.map((t) => t.name))
+  const fresh = terms.filter((t) => !known.has(t.name))
+  if (fresh.length === 0) return null
+  const room = Math.max(40 - glossary.length, 0)
+  const add = async () => {
+    setBusy(true)
+    try {
+      await api.updateProject(projectId, { glossary: [...glossary, ...fresh.slice(0, room)] })
+      qc.invalidateQueries({ queryKey: ['tree', projectId] })
+      toast(`已加進專案詞彙表：${fresh.slice(0, room).length} 個`, 'success')
+    } catch (e) {
+      toast(errorText(e), 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="info-box small">
+      這次的名詞表有 {fresh.length} 個專案詞彙表還沒有的名詞：{fresh.map((t) => t.name).join('、')}。加進去之後，這個專案的其他文件也會用一樣的名稱。
+      <div className="mt-sm">
+        <button className="btn btn-sm" onClick={add} disabled={busy || room === 0}>
+          {room === 0 ? '專案詞彙表已滿（40 個）' : '加進專案詞彙表'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function RunProgress(props: {
   run: Run
   state: RunStreamState
@@ -372,6 +410,7 @@ export function RunProgress(props: {
           )}
         </div>
       )}
+      {state.end?.status === 'succeeded' && state.plan?.terms && <GlossarySuggest projectId={run.project_id} terms={state.plan.terms} />}
       {state.end?.status === 'succeeded' && lastReview && lastReview.verdict !== 'pass' && (
         <UnresolvedNote run={run} state={state} review={lastReview} canJump={!!props.onJumpToSection} />
       )}

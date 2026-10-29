@@ -27,6 +27,7 @@ from ..services import specs as spec_service
 from .doc_templates import DocTemplate, get_template
 from .llm import LLMClient
 from .pipeline import SpecPipeline
+from .planner import GLOSSARY_LIMIT, parse_terms
 from .types import AgentStats, PipelineOptions, Plan, RunInput
 
 log = logging.getLogger("sagent.runner")
@@ -272,6 +273,7 @@ class RunManager:
                 mode="revise" if run.mode == "revise" else "draft",
                 project_name=project.name,
                 project_description=project.description,
+                project_terms=parse_terms(project.glossary or [], limit=GLOSSARY_LIMIT),
                 phase_name=phase.name if phase else "",
                 spec_title=spec.title,
                 template=template,

@@ -261,6 +261,63 @@ def _plain(line: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+_CJK = "[一-鿿]"
+# 需求裡帶單位的數字（「3 天」「5 個工作天」「5MB」），或三位數以上的數字（「409」）
+_FACT_RE = re.compile(
+    r"(?<![\d/.-])(\d+(?:\.\d+)?)\s*(個工作天|工作天|個月|小時|分鐘|天|週|年|次|張|件|筆|MB|GB|KB|%|秒|字元)?(?![\d/])"
+)
+MAX_GAP_POINTS = 5
+_NUMBER_GAP_REASON = "文件裡找不到這個數字，要確認有沒有漏寫或寫錯"
+_ITEM_GAP_REASON = "文件裡幾乎找不到對應的內容，要確認有沒有漏寫"
+
+
+def requirement_items(requirement: str) -> list[str]:
+    """需求拆成一句一句：每行去掉條列記號，長的再依句號、分號拆開。太短的和結尾是「：」的引言不算。"""
+    items: list[str] = []
+    for line in requirement.splitlines():
+        if line.lstrip().startswith("#"):
+            continue
+        line = re.sub(r"^\s*(?:[-*+]|\d+[.)、]|[（(]\d+[）)])\s*", "", line).strip()
+        for part in re.split(r"(?<=[。；;！？])", line):
+            part = part.strip()
+            if len(re.findall(_CJK, part)) >= 8 and not part.endswith(("：", ":")):
+                items.append(part)
+    return items
+
+
+def _grams(text: str) -> set[str]:
+    text = re.sub(r"\s+", "", text)
+    grams = {text[i : i + 2] for i in range(len(text) - 1) if re.fullmatch(_CJK + "{2}", text[i : i + 2])}
+    return grams | {w.lower() for w in re.findall(r"[A-Za-z0-9]{2,}", text)}
+
+
+def requirement_gaps(requirement: str, draft: Draft) -> list[ReviewPoint]:
+    """需求有、文件裡卻找不到的內容，列給使用者確認有沒有漏寫（D4：每條需求都要追溯得到）。
+
+    兩種情況：需求寫的數字（帶單位，例如「3 天」）文件裡沒有；或某一句需求跟文件幾乎沒有共同的字詞。
+    只是粗略的比對，換句話說也可能被當成沒寫到，所以只列人工覆核，不交給 Writer 修。
+    """
+    doc = _without_code("\n".join(sec.body for sec in draft.sections))
+    flat, doc_grams = re.sub(r"\s+", "", doc), _grams(doc)
+    points: list[ReviewPoint] = []
+    seen: set[str] = set()
+    for m in _FACT_RE.finditer(requirement):
+        number, unit = m.group(1), m.group(2) or ""
+        key = number + unit
+        if (not unit and len(number) < 3) or key in seen:
+            continue
+        # 數字和單位中間可以夾幾個字，例如需求「3 天」、文件寫「3 個日曆天」
+        if re.search(rf"(?<![\d.]){re.escape(number)}(?![\d.])[^\d]{{0,4}}{re.escape(unit[-1:])}", flat):
+            continue
+        seen.add(key)
+        points.append(ReviewPoint(None, f"需求提到「{m.group(0).strip()}」", _NUMBER_GAP_REASON, "check"))
+    for item in requirement_items(requirement):
+        grams = _grams(item)
+        if grams and len(grams & doc_grams) / len(grams) < 0.3:
+            points.append(ReviewPoint(None, f"需求：{item[:80]}", _ITEM_GAP_REASON, "check"))
+    return points[:MAX_GAP_POINTS]
+
+
 def marked_points(draft: Draft) -> list[ReviewPoint]:
     """文件裡標註（假設）、（待確認）的地方，都要人工確認。"""
     points: list[ReviewPoint] = []
@@ -390,6 +447,8 @@ class Reviewer(AgentBase):
         async with self.step(step, label) as info:
             checks = static_checks(plan, draft)
             marked = marked_points(draft)
+            if inp.mode == "draft":  # 修訂模式的需求是要改什麼，不用每一點都在文件裡找得到
+                marked += requirement_gaps(inp.requirement, draft)
             notes = [f"[{i.section_id}] {i.problem}" for i in checks if i.severity != "low"]
             data = await self.chat_json(
                 step,

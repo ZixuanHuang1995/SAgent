@@ -177,7 +177,7 @@ def get_run(run_id: int, state: AppState = Depends(get_state)):
 async def continue_run(run_id: int, body: RunContinue, state: AppState = Depends(get_state)):
     """先確認大綱的工作：帶入待確認問題的回答、改過的名詞表和要點，重新排隊繼續撰寫。"""
 
-    def _update() -> tuple[RunOut, int]:
+    def _update() -> tuple[RunOut, int, dict[str, Any]]:
         with state.db() as s:
             run = s.get(AgentRun, run_id)
             if run is None:
@@ -204,9 +204,11 @@ async def continue_run(run_id: int, body: RunContinue, state: AppState = Depends
             }
             run.status = "queued"
             s.flush()
-            return run_out(s, run, state), len(answered)
+            return run_out(s, run, state), len(answered), plan
 
-    out, n = await run_in_threadpool(_update)
+    out, n, plan = await run_in_threadpool(_update)
+    # 畫面上的大綱換成使用者確認過的版本（Planner 那一步記的是原本的）
+    await state.runner.publish(run_id, "plan_update", "system", "", {"plan": plan})
     message = f"已確認大綱（回答 {n} 個待確認問題），繼續撰寫" if n else "已確認大綱，繼續撰寫"
     await state.runner.publish(run_id, "log", "system", message, {"level": "info"})
     state.runner.submit(run_id)

@@ -12,7 +12,7 @@ import re
 
 from .diagram_kinds import KINDS, kinds_text
 from .doc_templates import DocTemplate
-from .types import Issue, Plan, RunInput, SectionPlan
+from .types import Issue, Plan, RunInput, SectionPlan, Term
 
 _COMMON_RULES = [
     "使用繁體中文（台灣用語），技術名詞可以保留英文。",
@@ -255,15 +255,18 @@ def planner_messages(inp: RunInput) -> list[dict[str, str]]:
 {diagram_rule}
 5. 需求中不清楚、缺少或互相矛盾的地方，寫進 open_questions，不要自己猜。
 6. summary 用一兩句話說明這份文件的內容。
-7. terms 是名詞表：列出文件會反覆提到的角色、狀態、主要資料，最多 12 個，名稱用需求裡的說法；有狀態的話要列出全部的狀態。每個寫 name、kind、note（一句話說明）。之後每一節都會照這份名詞表用名稱。
+7. terms 是名詞表：列出文件會反覆提到的角色、狀態、主要資料，最多 12 個，名稱用需求裡的說法；有狀態的話要列出全部的狀態。每個寫 name、kind、note（一句話說明）。之後每一節都會照這份名詞表用名稱。有「專案詞彙表」時，裡面的名稱照用、不要換說法，terms 只列專案詞彙表沒有的。
 8. 使用繁體中文。只輸出 JSON，不要縮排和多餘的空白。{advice_rule}"""
 
     suggested = []
     for sec in inp.template.sections:
         diagrams = "、".join(f"{d} {KINDS[d].name}" for d in sec.diagrams) if sec.diagrams else "無"
         suggested.append(f"- {sec.heading}：{sec.goal}（建議的圖：{diagrams}）")
+    glossary = ""
+    if inp.project_terms:
+        glossary = f"\n\n## 專案詞彙表（這個專案其他文件用的名稱，要沿用）\n{_term_lines(inp.project_terms)}"
     user = f"""## 文件資訊
-{_doc_info(inp)}
+{_doc_info(inp)}{glossary}
 
 ## 建議章節
 {chr(10).join(suggested)}
@@ -341,14 +344,17 @@ def _outline(plan: Plan) -> str:
     return "\n".join(f"{i}. {s.heading}" for i, s in enumerate(plan.sections, start=1))
 
 
+def _term_lines(terms: list[Term]) -> str:
+    return "\n".join(
+        f"- {t.name}" + (f"（{t.kind}）" if t.kind else "") + (f"：{t.note}" if t.note else "") for t in terms
+    )
+
+
 def _terms(plan: Plan) -> str:
     """名詞表。各節說法不一致（狀態名稱、角色名稱）是真模型最常見的邏輯錯誤，先定好名稱再寫。"""
     if not plan.terms:
         return ""
-    lines = "\n".join(
-        f"- {t.name}" + (f"（{t.kind}）" if t.kind else "") + (f"：{t.note}" if t.note else "") for t in plan.terms
-    )
-    return f"\n\n## 名詞表（提到這些角色、狀態、資料時都用這裡的名稱，不要換說法）\n{lines}"
+    return f"\n\n## 名詞表（提到這些角色、狀態、資料時都用這裡的名稱，不要換說法）\n{_term_lines(plan.terms)}"
 
 
 def _writer_context(inp: RunInput, plan: Plan) -> str:

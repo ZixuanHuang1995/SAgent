@@ -7,12 +7,22 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .agents.planner import GLOSSARY_LIMIT
+
 
 class ORMModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
 # --- 專案 / 階段 ---
+
+
+class TermIn(BaseModel):
+    """名詞表、專案詞彙表的一項。"""
+
+    name: str = Field(max_length=30)
+    kind: str = ""
+    note: str = Field("", max_length=100)
 
 
 class ProjectCreate(BaseModel):
@@ -26,6 +36,7 @@ class ProjectUpdate(BaseModel):
     name: str | None = Field(None, max_length=200)
     code: str | None = Field(None, max_length=40)
     description: str | None = None
+    glossary: list[TermIn] | None = Field(None, max_length=GLOSSARY_LIMIT)
 
 
 class ProjectOut(ORMModel):
@@ -33,6 +44,7 @@ class ProjectOut(ORMModel):
     name: str
     code: str
     description: str
+    glossary: list[dict[str, Any]] = []
     created_at: datetime
     updated_at: datetime
     phase_count: int = 0
@@ -210,12 +222,6 @@ class RunCreate(BaseModel):
 class AnswerIn(BaseModel):
     question: str
     answer: str = Field(max_length=2000)
-
-
-class TermIn(BaseModel):
-    name: str = Field(max_length=30)
-    kind: str = ""
-    note: str = Field("", max_length=100)
 
 
 class SectionPointsIn(BaseModel):

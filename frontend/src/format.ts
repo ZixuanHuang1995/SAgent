@@ -1,6 +1,6 @@
 // 顯示用的文字和格式
 
-import type { RunStatus, SpecStatus, VersionMeta } from './api'
+import type { PlanTerm, RunStatus, SpecStatus, VersionMeta } from './api'
 
 export const SPEC_STATUS: Record<SpecStatus, string> = {
   draft: '草稿',
@@ -120,4 +120,21 @@ export function extractOutline(markdown: string): OutlineItem[] {
     if (m) items.push({ level: m[1].length, text: m[2], line: i + 1 })
   })
   return items
+}
+
+/** 名詞表轉成一行一個的文字：「名稱（類型）：說明」 */
+export function termsToText(terms: PlanTerm[]): string {
+  return terms.map((t) => `${t.name}${t.kind ? `（${t.kind}）` : ''}${t.note ? `：${t.note}` : ''}`).join('\n')
+}
+
+/** 一行一個：「名稱（類型）：說明」，類型和說明可以省略 */
+export function textToTerms(text: string): PlanTerm[] {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const m = line.match(/^(.+?)(?:（(.+?)）)?(?:[：:](.*))?$/)
+      return { name: (m?.[1] ?? line).trim(), kind: (m?.[2] ?? '').trim(), note: (m?.[3] ?? '').trim() }
+    })
 }

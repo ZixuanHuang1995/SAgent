@@ -34,6 +34,8 @@ class RunInput:
     requirement: str
     existing_content: str = ""
     options: PipelineOptions = field(default_factory=PipelineOptions)
+    # 專案詞彙表：同一個專案的文件都用這些名稱
+    project_terms: list[Term] = field(default_factory=list)
 
 
 @dataclass

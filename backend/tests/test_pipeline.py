@@ -12,6 +12,7 @@ from sagent.agents.reviewer import (
     mismatched_ids,
     parse_llm_issues,
     parse_llm_points,
+    requirement_gaps,
     static_checks,
     table_problems,
     undefined_ids,
@@ -741,3 +742,17 @@ def test_reviewer_checks_id_title_mismatch():
     assert mismatched_ids(draft) == {"S2": ["UC-03 後面寫「審核與退回報修單」，這是 UC-02 的名稱（UC-03 是「指派維修人員」）"]}
     issues = static_checks(plan, draft)
     assert [(i.section_id, i.severity, i.kind) for i in issues] == [("S2", "medium", "conflict")]
+
+
+def test_requirement_gaps():
+    plan, draft = _draft("- 待確認超過 3 個日曆天自動結案。\n- 照片最多 5 張。", "狀態不允許的操作，回應碼用 409。")
+    requirement = (
+        "需求訪談補充（10/15）：\n"
+        "1. 待確認超過 3 天自動結案。\n"
+        "2. 照片最多 5 張，每張 10MB。\n"
+        "3. 狀態不允許的操作回 409。\n"
+        "4. 主管每個月要看各類故障的統計報表和匯出 Excel。"
+    )
+    items = [p.item for p in requirement_gaps(requirement, draft)]
+    # 「3 天」寫成「3 個日曆天」也算有；10MB 沒寫到；統計報表那一句文件完全沒提到；引言行不算
+    assert items == ["需求提到「10MB」", "需求：主管每個月要看各類故障的統計報表和匯出 Excel。"]

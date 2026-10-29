@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import difflib
 import hashlib
+from dataclasses import asdict
 from typing import Any
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, defer
 
+from ..agents.planner import GLOSSARY_LIMIT, parse_terms
 from ..db import utcnow
 from ..models import SPEC_STATUSES, VERSION_SOURCES, AgentRun, Phase, Project, Spec, SpecVersion
 from .errors import BadRequest, Conflict, NotFound
@@ -74,6 +76,8 @@ def update_project(s: Session, project: Project, **fields: Any) -> Project:
     for key in ("code", "description"):
         if fields.get(key) is not None:
             setattr(project, key, fields[key].strip())
+    if fields.get("glossary") is not None:
+        project.glossary = [asdict(t) for t in parse_terms(fields["glossary"], limit=GLOSSARY_LIMIT)]
     project.updated_at = utcnow()
     s.flush()
     return project
