@@ -120,6 +120,8 @@ _DIAGRAM_ITEM_SCHEMA = {
     "required": ["kind", "title", "description"],
 }
 
+TERM_KINDS = ("角色", "狀態", "資料", "其他")
+
 PLAN_SCHEMA = {
     "type": "object",
     "properties": {
@@ -140,8 +142,21 @@ PLAN_SCHEMA = {
             "maxItems": 12,
         },
         "open_questions": {"type": "array", "items": {"type": "string"}, "maxItems": 8},
+        "terms": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "kind": {"type": "string", "enum": list(TERM_KINDS)},
+                    "note": {"type": "string"},
+                },
+                "required": ["name", "kind", "note"],
+            },
+            "maxItems": 12,
+        },
     },
-    "required": ["title", "summary", "sections", "open_questions"],
+    "required": ["title", "summary", "sections", "open_questions", "terms"],
 }
 
 def plan_schema(template: DocTemplate) -> dict:
@@ -205,25 +220,25 @@ def planner_messages(inp: RunInput) -> list[dict[str, str]]:
     tpl = inp.template
     advice_rule = ""
     if tpl.advice:
-        advice_rule = "\n8. 這是建議文件：key_points 寫這一節要給的具體建議方向，要跟需求裡的使用者、工作或資料有關。"
+        advice_rule = "\n9. 這是建議文件：key_points 寫這一節要給的具體建議方向，要跟需求裡的使用者、工作或資料有關。"
     elif tpl.idea:
         advice_rule = (
-            f"\n8. 這是構想文件：{'內容' if tpl.fixed_sections else '章節少一點、內容'}短一點，"
+            f"\n9. 這是構想文件：{'內容' if tpl.fixed_sections else '章節少一點、內容'}短一點，"
             "不要規劃欄位、API、畫面細節這類細節規格的內容。想法還不清楚的地方，多寫進 open_questions。"
         )
     elif tpl.decision:
         advice_rule = (
-            "\n8. 這是技術決策文件：key_points 寫這一節具體的內容（限制、評估標準、方案名稱、比較重點），"
+            "\n9. 這是技術決策文件：key_points 寫這一節具體的內容（限制、評估標準、方案名稱、比較重點），"
             "需求沒寫的限制條件和評估標準寫進 open_questions。"
         )
     elif tpl.algorithm:
         advice_rule = (
-            "\n8. 這是演算法設計文件：key_points 寫這一節具體的設計內容（設計策略、資料結構、步驟、複雜度、測試重點），"
+            "\n9. 這是演算法設計文件：key_points 寫這一節具體的設計內容（設計策略、資料結構、步驟、複雜度、測試重點），"
             "需求沒寫的限制條件和效能數字寫進 open_questions。"
         )
     elif tpl.experiment:
         advice_rule = (
-            "\n8. 這是實驗設計文件：key_points 寫這一節具體的設計內容（假設、指標、分組、步驟、分析方法），"
+            "\n9. 這是實驗設計文件：key_points 寫這一節具體的設計內容（假設、指標、分組、步驟、分析方法），"
             "需求沒寫的人數、期間和判斷標準寫進 open_questions。"
         )
     section_rule = (
@@ -240,7 +255,8 @@ def planner_messages(inp: RunInput) -> list[dict[str, str]]:
 {diagram_rule}
 5. 需求中不清楚、缺少或互相矛盾的地方，寫進 open_questions，不要自己猜。
 6. summary 用一兩句話說明這份文件的內容。
-7. 使用繁體中文。只輸出 JSON，不要縮排和多餘的空白。{advice_rule}"""
+7. terms 是名詞表：列出文件會反覆提到的角色、狀態、主要資料，最多 12 個，名稱用需求裡的說法；有狀態的話要列出全部的狀態。每個寫 name、kind、note（一句話說明）。之後每一節都會照這份名詞表用名稱。
+8. 使用繁體中文。只輸出 JSON，不要縮排和多餘的空白。{advice_rule}"""
 
     suggested = []
     for sec in inp.template.sections:
@@ -325,6 +341,16 @@ def _outline(plan: Plan) -> str:
     return "\n".join(f"{i}. {s.heading}" for i, s in enumerate(plan.sections, start=1))
 
 
+def _terms(plan: Plan) -> str:
+    """名詞表。各節說法不一致（狀態名稱、角色名稱）是真模型最常見的邏輯錯誤，先定好名稱再寫。"""
+    if not plan.terms:
+        return ""
+    lines = "\n".join(
+        f"- {t.name}" + (f"（{t.kind}）" if t.kind else "") + (f"：{t.note}" if t.note else "") for t in plan.terms
+    )
+    return f"\n\n## 名詞表（提到這些角色、狀態、資料時都用這裡的名稱，不要換說法）\n{lines}"
+
+
 def _writer_context(inp: RunInput, plan: Plan) -> str:
     """同一次執行中每次寫章節都一樣的前段，讓 Ollama 重用快取。"""
     return f"""## 文件資訊
@@ -335,7 +361,7 @@ def _writer_context(inp: RunInput, plan: Plan) -> str:
 {inp.requirement.strip()}
 
 ## 文件大綱
-{_outline(plan)}"""
+{_outline(plan)}{_terms(plan)}"""
 
 
 def _numbering(sec: SectionPlan) -> str:
@@ -625,7 +651,7 @@ def reviewer_messages(
 {inp.requirement.strip()}
 
 ## 章節
-{outline}
+{outline}{_terms(plan)}{chr(10) + "文件裡的角色、狀態、資料跟名詞表的名稱不一樣，算 conflict。" if plan.terms else ""}
 
 ## 程式檢查找到的格式問題（已經列入，不用重複）
 {checks}

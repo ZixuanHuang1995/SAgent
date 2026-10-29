@@ -4,6 +4,7 @@
 - 執行過程的事件存進資料庫，並即時推給正在看的畫面（SSE）
 - 逐字串流不存資料庫，只即時推送，每 0.15 秒合併送一次
 - 伺服器重啟時：排隊中的工作重新排隊，執行到一半的標成失敗
+- 先確認大綱的工作：規劃完存成 planned 停下來（不占佇列），使用者確認後重新排隊，沿用存好的大綱繼續
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ from ..services import specs as spec_service
 from .doc_templates import DocTemplate, get_template
 from .llm import LLMClient
 from .pipeline import SpecPipeline
-from .types import PipelineOptions, RunInput
+from .types import AgentStats, PipelineOptions, Plan, RunInput
 
 log = logging.getLogger("sagent.runner")
 
@@ -138,7 +139,7 @@ class RunManager:
             self._queue._queue.remove(run_id)  # type: ignore[attr-defined]
         except ValueError:
             pass
-        return await self._mark_cancelled(run_id, statuses=("queued",))
+        return await self._mark_cancelled(run_id, statuses=("queued", "planned"))
 
     async def _mark_cancelled(
         self,
@@ -242,8 +243,13 @@ class RunManager:
             finally:
                 self._tasks.pop(run_id, None)
 
-    def _load_input(self, run_id: int) -> tuple[RunInput, str, dict[str, Any]] | str | None:
-        """讀取執行需要的資料並標成執行中。None：不用執行；字串：失敗原因。"""
+    def _load_input(
+        self, run_id: int
+    ) -> tuple[RunInput, str, dict[str, Any], dict[str, Any] | None, dict[str, Any]] | str | None:
+        """讀取執行需要的資料並標成執行中。None：不用執行；字串：失敗原因。
+
+        使用者確認過大綱的工作，另外回傳存好的大綱和規劃階段的用量。
+        """
         with session_scope(self.session_factory) as s:
             run = s.get(AgentRun, run_id)
             if run is None or run.status != "queued":
@@ -280,7 +286,13 @@ class RunManager:
                     max_diagrams=int(opts.get("max_diagrams", 4)),
                 ),
             )
-            return inp, run.model, opts
+            answers = [a for a in opts.get("answers") or [] if str(a.get("answer", "")).strip()]
+            if answers:
+                inp.requirement += "\n\n## 待確認問題的回答\n" + "\n".join(
+                    f"- 問：{a['question']}\n  答：{a['answer'].strip()}" for a in answers
+                )
+            saved_plan = run.plan if opts.get("plan_confirmed") and run.plan else None
+            return inp, run.model, opts, saved_plan, dict(run.stats or {}) if saved_plan else {}
 
     async def _in_thread(self, fn, *args):
         """在執行緒跑資料庫工作。被取消時先等執行緒裡的交易結束再往外丟，避免狀態事後被它蓋掉。"""
@@ -307,15 +319,26 @@ class RunManager:
                     "run_end", "system", f"失敗：{loaded}", {"status": "failed", "error": loaded}
                 )
                 return
-            inp, model, opts = loaded
-            await emitter.emit("run_status", "system", f"開始執行（模型：{model}）", {"status": "running"})
+            inp, model, opts, saved_plan, saved_stats = loaded
+            verb = "繼續執行" if saved_plan else "開始執行"
+            await emitter.emit("run_status", "system", f"{verb}（模型：{model}）", {"status": "running"})
             if inp.mode == "revise" and not inp.existing_content.strip():
                 inp.mode = "draft"
                 await emitter.emit("log", "system", "文件目前沒有內容，改用撰寫模式", {"level": "info"})
 
             llm = self.llm_factory(model, opts)
-            pipeline = SpecPipeline(llm, emitter)
-            result = await pipeline.run(inp)
+            pipeline = SpecPipeline(llm, emitter, {k: AgentStats(**v) for k, v in saved_stats.items()})
+            if saved_plan is None and opts.get("plan_first") and inp.mode == "draft":
+                plan = await pipeline.plan_only(inp)
+                await self._in_thread(self._save_planned, run_id, plan, pipeline)
+                await emitter.emit(
+                    "run_paused",
+                    "system",
+                    "大綱完成，請回答待確認問題、確認大綱後繼續撰寫",
+                    {"status": "planned"},
+                )
+                return
+            result = await pipeline.run(inp, plan=Plan.from_dict(saved_plan) if saved_plan else None)
             stats = {k: asdict(v) for k, v in pipeline.stats.items()}
 
             def _finish() -> tuple[int | None, bool, int]:
@@ -378,6 +401,13 @@ class RunManager:
         finally:
             if llm is not None:
                 await llm.close()
+
+    def _save_planned(self, run_id: int, plan: Plan, pipeline: SpecPipeline) -> None:
+        with session_scope(self.session_factory) as s:
+            run = s.get(AgentRun, run_id)
+            run.status = "planned"
+            run.plan = plan.to_dict()
+            run.stats = {k: asdict(v) for k, v in pipeline.stats.items()}
 
     def _mark(self, run_id: int, status: str, error: str, pipeline: SpecPipeline | None) -> None:
         with session_scope(self.session_factory) as s:

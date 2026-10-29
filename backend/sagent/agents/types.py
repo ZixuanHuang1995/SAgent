@@ -60,19 +60,54 @@ class SectionPlan:
 
 
 @dataclass
+class Term:
+    """名詞表的一項。Planner 先定好角色、狀態、主要資料的名稱，每一節和審查都照這份用，避免各節說法不同。"""
+
+    name: str
+    kind: str = ""  # 角色、狀態、資料、其他
+    note: str = ""
+
+
+@dataclass
 class Plan:
     title: str
     summary: str
     sections: list[SectionPlan]
     open_questions: list[str] = field(default_factory=list)
+    terms: list[Term] = field(default_factory=list)
     # 模型沒有給出可用的大綱，改用範本章節
     fallback: bool = False
     # 修訂模式：原文件開頭（標題、文件資訊）和原本「待確認事項」整段內容
     preamble: str = ""
     existing_questions_body: str = ""
+    # 先確認大綱時使用者回答過的問題：[(問題, 回答)]，寫進「待確認事項」當成已確認
+    answered: list[tuple[str, str]] = field(default_factory=list)
 
     def section(self, section_id: str) -> SectionPlan | None:
         return next((s for s in self.sections if s.id == section_id), None)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Plan:
+        """讀回存在資料庫的大綱（先確認大綱的工作繼續撰寫時用）。只支援撰寫模式的大綱。"""
+        return cls(
+            title=str(data.get("title", "")),
+            summary=str(data.get("summary", "")),
+            fallback=bool(data.get("fallback")),
+            open_questions=[str(q) for q in data.get("open_questions") or []],
+            answered=[(str(q), str(a)) for q, a in data.get("answered") or []],
+            terms=[Term(**t) for t in data.get("terms") or []],
+            sections=[
+                SectionPlan(
+                    id=s["id"],
+                    heading=s["heading"],
+                    goal=s.get("goal", ""),
+                    key_points=list(s.get("key_points") or []),
+                    diagrams=[DiagramPlan(**d) for d in s.get("diagrams") or []],
+                    ids=s.get("ids", ""),
+                )
+                for s in data.get("sections") or []
+            ],
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -80,6 +115,8 @@ class Plan:
             "summary": self.summary,
             "fallback": self.fallback,
             "open_questions": self.open_questions,
+            "answered": [list(qa) for qa in self.answered],
+            "terms": [asdict(t) for t in self.terms],
             "sections": [
                 {
                     "id": s.id,

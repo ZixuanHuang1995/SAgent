@@ -1,8 +1,9 @@
-"""AI 代理：範本、模型清單、建立/查詢/取消工作、即時進度（SSE）。"""
+"""AI 代理：範本、模型清單、建立/查詢/取消工作、確認大綱後繼續、即時進度（SSE）。"""
 
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 from dataclasses import asdict
 from typing import Any
@@ -16,10 +17,11 @@ from sqlalchemy.orm import Session
 
 from ..agents.doc_templates import CATEGORIES
 from ..agents.llm import ollama_list_models
+from ..agents.planner import parse_terms
 from ..app_state import AppState
 from ..db import utcnow
 from ..models import AgentEvent, AgentRun, Spec
-from ..schemas import EventOut, RunCreate, RunDetail, RunOut
+from ..schemas import EventOut, RunContinue, RunCreate, RunDetail, RunOut
 from ..services import specs as spec_service
 from ..services.diagram_snippets import SNIPPETS
 from ..services.errors import BadRequest, Conflict, NotFound, Unavailable
@@ -112,6 +114,7 @@ async def create_run(body: RunCreate, state: AppState = Depends(get_state)):
                 "diagrams": (current.diagrams if o.diagrams is None else o.diagrams)
                 and templates[doc_type].allow_diagrams,
                 "max_diagrams": 4 if o.max_diagrams is None else o.max_diagrams,
+                "plan_first": bool(o.plan_first) and body.mode == "draft",
                 "ollama_url": current.ollama_url,
                 "num_ctx": current.num_ctx,
             }
@@ -170,6 +173,46 @@ def get_run(run_id: int, state: AppState = Depends(get_state)):
         )
 
 
+@router.post("/runs/{run_id}/continue", response_model=RunOut)
+async def continue_run(run_id: int, body: RunContinue, state: AppState = Depends(get_state)):
+    """先確認大綱的工作：帶入待確認問題的回答、改過的名詞表和要點，重新排隊繼續撰寫。"""
+
+    def _update() -> tuple[RunOut, int]:
+        with state.db() as s:
+            run = s.get(AgentRun, run_id)
+            if run is None:
+                raise NotFound("找不到這個 AI 工作")
+            if run.status != "planned":
+                raise Conflict("這個 AI 工作不是在等待確認大綱")
+            plan = copy.deepcopy(run.plan or {})
+            questions = [str(q) for q in plan.get("open_questions") or []]
+            given = {a.question.strip(): a.answer.strip() for a in body.answers if a.answer.strip()}
+            answered = [(q, given[q.strip()]) for q in questions if q.strip() in given]
+            plan["open_questions"] = [q for q in questions if q.strip() not in given]
+            plan["answered"] = [list(qa) for qa in answered]
+            if body.terms is not None:
+                plan["terms"] = [asdict(t) for t in parse_terms([t.model_dump() for t in body.terms], limit=20)]
+            points = {sp.id: [p.strip()[:200] for p in sp.key_points if p.strip()] for sp in body.sections}
+            for sec in plan.get("sections") or []:
+                if sec.get("id") in points:
+                    sec["key_points"] = points[sec["id"]]
+            run.plan = plan
+            run.options = {
+                **(run.options or {}),
+                "plan_confirmed": True,
+                "answers": [{"question": q, "answer": a} for q, a in answered],
+            }
+            run.status = "queued"
+            s.flush()
+            return run_out(s, run, state), len(answered)
+
+    out, n = await run_in_threadpool(_update)
+    message = f"已確認大綱（回答 {n} 個待確認問題），繼續撰寫" if n else "已確認大綱，繼續撰寫"
+    await state.runner.publish(run_id, "log", "system", message, {"level": "info"})
+    state.runner.submit(run_id)
+    return out.model_copy(update={"queue_position": state.runner.queue_position(run_id)})
+
+
 @router.post("/runs/{run_id}/cancel")
 async def cancel_run(run_id: int, state: AppState = Depends(get_state)) -> dict[str, bool]:
     return {"cancelled": await state.runner.cancel(run_id)}
@@ -192,11 +235,15 @@ async def run_events(run_id: int, request: Request, after: int = 0, state: AppSt
             run = s.get(AgentRun, run_id)
             if run is None:
                 raise NotFound("找不到這個 AI 工作")
-            events = s.scalars(
-                select(AgentEvent)
-                .where(AgentEvent.run_id == run_id, AgentEvent.seq > after)
-                .order_by(AgentEvent.seq)
-            )
+            events = [
+                e
+                for e in s.scalars(
+                    select(AgentEvent)
+                    .where(AgentEvent.run_id == run_id, AgentEvent.seq > after)
+                    .order_by(AgentEvent.seq)
+                )
+                if e.type != "run_paused" or run.status == "planned"
+            ]
             just_finished = run.finished_at is not None and (utcnow() - run.finished_at).total_seconds() < 10
             return run.status, just_finished, [_event_out(e) for e in events]
 
@@ -222,6 +269,8 @@ async def run_events(run_id: int, request: Request, after: int = 0, state: AppSt
             for event in past:
                 last = event["seq"]
                 yield _sse(event)
+            if status == "planned":
+                return  # 等使用者確認大綱；繼續之後畫面會重新連線
             if status in FINAL_STATUSES:
                 if past and past[-1]["type"] == "run_end":
                     return
@@ -254,7 +303,7 @@ async def run_events(run_id: int, request: Request, after: int = 0, state: AppSt
                         continue
                     last = seq
                 yield _sse(event)
-                if event["type"] == "run_end":
+                if event["type"] in ("run_end", "run_paused"):
                     return
         finally:
             state.runner.unsubscribe(run_id, queue)

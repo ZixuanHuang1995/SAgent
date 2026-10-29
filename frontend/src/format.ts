@@ -29,6 +29,7 @@ export const CATEGORY_TONE: Record<string, string> = {
 export const RUN_STATUS: Record<RunStatus, string> = {
   queued: '排隊中',
   running: '執行中',
+  planned: '等待確認大綱',
   succeeded: '完成',
   failed: '失敗',
   cancelled: '已取消',

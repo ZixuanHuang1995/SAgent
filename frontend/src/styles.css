@@ -1648,6 +1648,21 @@ body.is-resizing .cm-editor {
 .run-form .seg button {
   flex: 1;
 }
+.check-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  cursor: pointer;
+}
+.check-row input {
+  margin-top: 4px;
+}
+.check-row-hint {
+  display: block;
+}
+.plan-confirm summary {
+  cursor: pointer;
+}
 .advanced {
   padding: 10px;
   margin-bottom: 10px;

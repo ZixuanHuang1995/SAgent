@@ -113,6 +113,9 @@ function reducer(state: RunStreamState, action: Action): RunStreamState {
       return { ...next, sections: { ...next.sections, [d.section_id]: { heading: d.heading, body: d.body } } }
     case 'log':
       return { ...next, logs: [...next.logs, { agent: ev.agent, message: ev.message, level: d.level ?? 'info' }] }
+    case 'run_paused':
+      // 先確認大綱的工作停下來了；繼續之後重新連線，重播時不會再收到這個事件
+      return { ...next, status: 'planned' }
     case 'run_end':
       return {
         ...next,
@@ -125,7 +128,12 @@ function reducer(state: RunStreamState, action: Action): RunStreamState {
   }
 }
 
-export function useRunStream(runId: number | null, onEnd?: (status: RunStatus, versionNo: number | null) => void) {
+/** resumeKey：先確認大綱的工作繼續之後加 1，重新連線接收後面的進度 */
+export function useRunStream(
+  runId: number | null,
+  onEnd?: (status: RunStatus, versionNo: number | null) => void,
+  resumeKey = 0,
+) {
   const [state, dispatch] = useReducer(reducer, initial)
   // 用 ref 存最新的 onEnd，換 callback 時不必重新連線
   const onEndRef = useRef(onEnd)
@@ -143,15 +151,15 @@ export function useRunStream(runId: number | null, onEnd?: (status: RunStatus, v
         return
       }
       dispatch({ type: 'event', event })
-      if (event.type === 'run_end') {
-        es.close() // 結束後關閉，不然瀏覽器會自動重連
+      if (event.type === 'run_end' || event.type === 'run_paused') {
+        es.close() // 結束或暫停後關閉，不然瀏覽器會自動重連
         dispatch({ type: 'connected', value: false })
         onEndRef.current?.(event.data?.status, event.data?.version_no ?? null)
       }
     }
     es.onerror = () => dispatch({ type: 'connected', value: false })
     return () => es.close()
-  }, [runId])
+  }, [runId, resumeKey])
   return state
 }
 

@@ -188,3 +188,82 @@ def test_project_list_counts_active_runs(slow_client):
     for run_id in run_ids:
         wait_run(slow_client, run_id)
     assert counts() == (0, 0)
+
+
+def _wait_paused(client, run_id):
+    run = wait_status(client, run_id, ("planned", "failed"))
+    for _ in range(100):  # 狀態先改、run_paused 事件後送
+        if run["events"] and run["events"][-1]["type"] == "run_paused":
+            return run
+        run = client.get(f"/api/agent/runs/{run_id}").json()
+    raise AssertionError("沒有收到 run_paused")
+
+
+def test_plan_first_pauses_then_continues_with_answers(client, project):
+    spec = _spec(client, project)
+    body = {"spec_id": spec["id"], "requirement": "客戶可以線上下單", "options": {"plan_first": True}}
+    run_id = client.post("/api/agent/runs", json=body).json()["id"]
+    run = _wait_paused(client, run_id)
+    assert run["status"] == "planned" and run["result_version_no"] is None
+    assert run["plan"]["terms"][0]["name"] == "客戶"
+    assert run["stats"]["planner"]["calls"] == 1 and run["stats"]["writer"]["calls"] == 0
+    # 等待確認時不能再開新的工作；SSE 送完歷史就結束，最後一個是 run_paused
+    assert client.post("/api/agent/runs", json=body).status_code == 409
+    assert _sse_events(client.get(f"/api/agent/runs/{run_id}/events").text)[-1]["type"] == "run_paused"
+
+    q1, q2 = run["plan"]["open_questions"]
+    first = run["plan"]["sections"][0]
+    r = client.post(
+        f"/api/agent/runs/{run_id}/continue",
+        json={
+            "answers": [{"question": q1, "answer": "約 200 人"}, {"question": q2, "answer": " "}],
+            "terms": [{"name": "會員", "kind": "角色", "note": "註冊過的客戶"}],
+            "sections": [{"id": first["id"], "key_points": ["只寫網站下單", ""]}],
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert client.post(f"/api/agent/runs/{run_id}/continue", json={}).status_code == 409  # 已經在排隊
+
+    run = wait_run(client, run_id)
+    assert run["status"] == "succeeded", run["error"]
+    assert set(run["stats"]) == {"planner", "writer", "reviewer"}
+    assert run["stats"]["planner"]["calls"] == 1  # 沒有重新規劃
+    assert run["plan"]["sections"][0]["key_points"] == ["只寫網站下單"]
+    assert [t["name"] for t in run["plan"]["terms"]] == ["會員"]
+    content = client.get(f"/api/specs/{spec['id']}").json()["content"]
+    assert f"- [x] {q1}（已確認：約 200 人）" in content
+    assert f"- [ ] {q2}" in content
+    # 已經繼續的工作，重播時不送當時的 run_paused，畫面才不會停在那裡
+    types = [e["type"] for e in _sse_events(client.get(f"/api/agent/runs/{run_id}/events").text)]
+    assert "run_paused" not in types and types[-1] == "run_end"
+
+
+def test_plan_first_answers_reach_writer(client, project, fake_llms):
+    spec = _spec(client, project)
+    body = {"spec_id": spec["id"], "requirement": "客戶可以線上下單", "options": {"plan_first": True}}
+    run_id = client.post("/api/agent/runs", json=body).json()["id"]
+    run = _wait_paused(client, run_id)
+    q = run["plan"]["open_questions"][0]
+    client.post(f"/api/agent/runs/{run_id}/continue", json={"answers": [{"question": q, "answer": "約 200 人"}]})
+    wait_run(client, run_id)
+    prompt = next(c for c in fake_llms[-1].calls if ":section:" in c["purpose"])["messages"][-1]["content"]
+    assert "## 待確認問題的回答" in prompt and "答：約 200 人" in prompt
+    assert "## 名詞表" in prompt and "- 客戶（角色）：在網站下單的人" in prompt
+
+
+def test_cancel_planned_run(client, project):
+    spec = _spec(client, project)
+    body = {"spec_id": spec["id"], "requirement": "需求", "options": {"plan_first": True}}
+    run_id = client.post("/api/agent/runs", json=body).json()["id"]
+    _wait_paused(client, run_id)
+    assert client.post(f"/api/agent/runs/{run_id}/cancel").json() == {"cancelled": True}
+    assert client.get(f"/api/agent/runs/{run_id}").json()["status"] == "cancelled"
+    assert client.get(f"/api/specs/{spec['id']}").json()["active_run_id"] is None
+
+
+def test_plan_first_ignored_in_revise_mode(client, project):
+    spec = _spec(client, project, init="template")
+    body = {"spec_id": spec["id"], "mode": "revise", "requirement": "加退貨", "options": {"plan_first": True}}
+    run_id = client.post("/api/agent/runs", json=body).json()["id"]
+    run = wait_run(client, run_id)
+    assert run["status"] == "succeeded" and run["options"]["plan_first"] is False

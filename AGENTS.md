@@ -26,6 +26,7 @@
 | 重新產生示範資料（腳本模型，約 2 分鐘） | `uv run --project backend python scripts/seed_demo.py --data-dir data-demo-build --script scripts/demo_content`，確認後改名成 `data-demo`。內容檔格式見 `DEMO_DATA_PLAN.md` |
 | 重新產生示範資料（真模型，約 29～34 小時） | 上一行去掉 `--script …`。四個情境的需求內容在 `scripts/demo_scenarios.py`，模型預設讀 `data/sagent.db` 的設定 |
 | 用真模型跑一次 AI 流程 | `uv run --project backend python scripts/run_pipeline.py --requirement-file 需求.txt --out 輸出.md` |
+| 審查一致性（同一份文件審查好幾次，比較錯誤重疊多少） | `uv run --project backend python scripts/review_consistency.py --db data-demo/sagent.db --run-id 6 --times 3`（資料庫只讀；功能規格書一次審查約 10 分鐘） |
 
 ## 改完程式要做的檢查
 
@@ -119,7 +120,7 @@
 - 這台沒有 GPU，Ollama 只能用 CPU。不要隨便跑真模型。
 - 這台沒有 Java，PlantUML 還沒設定。
 - 這是地端系統，資料不能送到外部服務（例如公開的 PlantUML 伺服器）。
-- `data/` 是使用者的正式資料，不要刪改。測試和示範用暫存目錄或 `data-demo/`。`data-demo/` 是 `scripts/seed_demo.py --script` 用 `scripts/demo_content/` 的內容檔產生的（文字由 AI 子代理撰寫，不是地端模型的產出），不要隨便覆蓋；畫面上測試新增的資料不影響。
+- `data/` 是使用者的正式資料，不要刪改。測試和示範用暫存目錄或 `data-demo/`。`data-demo/` 目前是真模型每種內建範本各寫一份的結果（2026-10-29 產生，跑了 13 小時），不要隨便覆蓋；`scripts/seed_demo.py --script` 用內容檔產生的是另一套完整情境（文字由 AI 子代理撰寫）；畫面上測試新增的資料不影響。
 - `agents/zh.py` 會把「峰」「群」改成「峯」「羣」，示範內容檔要避開這兩個字，不然 `check_demo_content.py` 會當成簡體字。
 - 8765 埠常被使用者自己開的 SAgent 占用，預覽用 8766。
 - 這台的 uv 可能不在（2026-10-28 被移除過）。`start.ps1` 和 `.claude/launch.json`（透過 `start.ps1`）沒有 uv 時會改用 `backend\.venv`。其他指令沒有 uv 時：`uv run --project backend python` 換成 `backend\.venv\Scripts\python.exe`，`backend` 目錄裡的 `uv run pytest`、`uv run ruff` 換成 `.\.venv\Scripts\pytest.exe`、`.\.venv\Scripts\ruff.exe`。`.venv` 是 uv 建的，底層 Python 在 `%APPDATA%\uv\python\`，那個資料夾不能刪。

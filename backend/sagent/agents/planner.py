@@ -13,9 +13,9 @@ from ..services.markdown_doc import normalize_heading, parse_markdown, strip_hea
 from .base import AgentBase
 from .diagram_kinds import KINDS, resolve_syntax
 from .doc_templates import DocTemplate, ids_from_goal, same_heading
-from .prompts import REVISE_PLAN_SCHEMA, plan_schema, planner_messages, revise_planner_messages
+from .prompts import REVISE_PLAN_SCHEMA, TERM_KINDS, plan_schema, planner_messages, revise_planner_messages
 from .textutil import clean_list, normalize_sid
-from .types import OPEN_QUESTIONS_HEADING, DiagramPlan, PipelineOptions, Plan, RunInput, SectionPlan
+from .types import OPEN_QUESTIONS_HEADING, DiagramPlan, PipelineOptions, Plan, RunInput, SectionPlan, Term
 
 _OPEN_Q_KEY = normalize_heading(OPEN_QUESTIONS_HEADING)
 
@@ -39,6 +39,26 @@ def _diagrams(raw_list: Any, opts: PipelineOptions) -> list[DiagramPlan]:
             )
         )
     return out[:2]
+
+
+def parse_terms(raw_list: Any, limit: int = 12) -> list[Term]:
+    """名詞表：名稱重複的只留第一個。也用在使用者先確認大綱時改過的名詞表。"""
+    if not isinstance(raw_list, list):
+        return []
+    terms: list[Term] = []
+    seen: set[str] = set()
+    for raw in raw_list:
+        if not isinstance(raw, dict):
+            continue
+        name = str(raw.get("name", "")).strip()[:30]
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        kind = str(raw.get("kind", "")).strip()
+        terms.append(
+            Term(name, kind if kind in TERM_KINDS else "其他", str(raw.get("note", "")).strip()[:100])
+        )
+    return terms[:limit]
 
 
 def _limit_diagrams(sections: list[SectionPlan], opts: PipelineOptions) -> None:
@@ -185,6 +205,7 @@ class Planner(AgentBase):
             summary=str(data.get("summary", "")).strip()[:500] or tpl.description,
             sections=sections,
             open_questions=clean_list(data.get("open_questions"), limit=15),
+            terms=parse_terms(data.get("terms")),
         )
 
     # --- 修訂模式 ---

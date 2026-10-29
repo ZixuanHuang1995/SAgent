@@ -16,7 +16,8 @@ from .db import Base, UTCDateTime, utcnow
 
 SPEC_STATUSES = ("draft", "reviewing", "approved", "deprecated")
 VERSION_SOURCES = ("manual", "agent", "restore", "import", "template")
-RUN_STATUSES = ("queued", "running", "succeeded", "failed", "cancelled")
+# planned：先確認大綱的工作規劃完了，等使用者回答待確認問題、確認大綱後繼續
+RUN_STATUSES = ("queued", "running", "planned", "succeeded", "failed", "cancelled")
 RUN_MODES = ("draft", "revise")
 
 

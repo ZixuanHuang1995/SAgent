@@ -1,10 +1,11 @@
 // AI 工作的進度畫面：階段、每個步驟、即時輸出、大綱、審查結果
 
 import { useEffect, useRef, useState } from 'react'
-import type { PlanOut, ReviewIssue, ReviewOut, ReviewPoint, Run } from '../api'
+import type { PlanOut, ReviewIssue, ReviewOut, ReviewPoint, Run, RunContinue } from '../api'
 import { AGENT_NAME, formatDuration, RUN_STATUS } from '../format'
 import { assemblePreview, type RunStreamState, type StepState } from '../hooks/useRunStream'
 import { MarkdownView } from './MarkdownView'
+import { PlanConfirm } from './PlanConfirm'
 import { Badge, Modal, Spinner } from './ui'
 import { Icon } from './icons'
 
@@ -157,10 +158,30 @@ export function PlanView({ plan }: { plan: PlanOut }) {
           </li>
         ))}
       </ol>
-      {plan.open_questions.length > 0 && (
+      {plan.terms && plan.terms.length > 0 && (
+        <>
+          <div className="subhead">名詞表</div>
+          <ul>
+            {plan.terms.map((t, i) => (
+              <li key={i}>
+                <strong>{t.name}</strong>
+                {t.kind && <span className="muted">（{t.kind}）</span>}
+                {t.note && `：${t.note}`}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {(plan.open_questions.length > 0 || (plan.answered?.length ?? 0) > 0) && (
         <>
           <div className="subhead">待確認事項</div>
           <ul>
+            {plan.answered?.map(([q, a], i) => (
+              <li key={`a${i}`}>
+                {q}
+                <span className="muted">（已確認：{a}）</span>
+              </li>
+            ))}
             {plan.open_questions.map((q, i) => (
               <li key={i}>{q}</li>
             ))}
@@ -276,11 +297,15 @@ export function RunProgress(props: {
   onOpenVersion?: (versionNo: number) => void
   onDiff?: (versionNo: number) => void
   onJumpToSection?: (heading: string) => void
+  /** 先確認大綱的工作停下來時，送出回答和調整後繼續 */
+  onContinue?: (body: RunContinue) => Promise<void>
   compact?: boolean
 }) {
   const { run, state } = props
   const [preview, setPreview] = useState(false)
-  const running = !state.end && (state.status === 'running' || state.status === 'unknown' || run.status === 'queued' || run.status === 'running')
+  const paused = !state.end && state.status === 'planned'
+  const running =
+    !paused && !state.end && (state.status === 'running' || state.status === 'unknown' || run.status === 'queued' || run.status === 'running')
   const elapsed = useElapsed(state.firstEventAt, running)
   const current = [...state.steps].reverse().find((s) => s.status === 'running')
   const lastReview = state.reviews[state.reviews.length - 1]
@@ -290,8 +315,14 @@ export function RunProgress(props: {
   return (
     <div className={`run-progress ${props.compact ? 'is-compact' : ''}`}>
       <div className="run-head">
-        <Badge tone={state.end ? (state.end.status === 'succeeded' ? 'green' : 'red') : 'blue'}>
-          {state.end ? RUN_STATUS[state.end.status] : run.status === 'queued' && state.status === 'unknown' ? RUN_STATUS.queued : RUN_STATUS.running}
+        <Badge tone={state.end ? (state.end.status === 'succeeded' ? 'green' : 'red') : paused ? 'amber' : 'blue'}>
+          {state.end
+            ? RUN_STATUS[state.end.status]
+            : paused
+              ? RUN_STATUS.planned
+              : run.status === 'queued' && state.status === 'unknown'
+                ? RUN_STATUS.queued
+                : RUN_STATUS.running}
         </Badge>
         <span className="muted small">
           {run.mode === 'revise' ? '修訂' : '撰寫'}・{run.model}
@@ -317,6 +348,10 @@ export function RunProgress(props: {
       )}
 
       <PhaseStepper state={state} />
+
+      {paused && state.plan && props.onContinue && props.onCancel && (
+        <PlanConfirm plan={state.plan} onContinue={props.onContinue} onCancel={props.onCancel} />
+      )}
 
       {state.end && (
         <div className={state.end.status === 'succeeded' ? 'success-box' : 'error-box'}>

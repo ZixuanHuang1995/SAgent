@@ -195,6 +195,8 @@ class RunOptionsIn(BaseModel):
     temperature: float | None = Field(None, ge=0, le=1.5)
     diagrams: bool | None = None
     max_diagrams: int | None = Field(None, ge=0, le=10)
+    # 規劃完先停下來，讓使用者回答待確認問題、調整大綱再撰寫（只用在撰寫模式）
+    plan_first: bool | None = None
 
 
 class RunCreate(BaseModel):
@@ -203,6 +205,30 @@ class RunCreate(BaseModel):
     requirement: str = Field(min_length=1)
     doc_type: str | None = None
     options: RunOptionsIn = Field(default_factory=RunOptionsIn)
+
+
+class AnswerIn(BaseModel):
+    question: str
+    answer: str = Field(max_length=2000)
+
+
+class TermIn(BaseModel):
+    name: str = Field(max_length=30)
+    kind: str = ""
+    note: str = Field("", max_length=100)
+
+
+class SectionPointsIn(BaseModel):
+    id: str
+    key_points: list[str] = Field(default_factory=list, max_length=10)
+
+
+class RunContinue(BaseModel):
+    """確認大綱後繼續撰寫：待確認問題的回答、改過的名詞表和各節要點。沒給的部分照 Planner 的。"""
+
+    answers: list[AnswerIn] = Field(default_factory=list, max_length=20)
+    terms: list[TermIn] | None = Field(None, max_length=20)
+    sections: list[SectionPointsIn] = Field(default_factory=list)
 
 
 class RunOut(ORMModel):

@@ -124,6 +124,10 @@ class FakeLLM:
             "summary": "這是假模型產生的示範文件，用來檢查流程是否正常。",
             "sections": sections[:6],
             "open_questions": ["需求中的使用者人數尚未確認", "是否需要支援行動裝置"],
+            "terms": [
+                {"name": "客戶", "kind": "角色", "note": "在網站下單的人"},
+                {"name": "已送出", "kind": "狀態", "note": "客戶送出訂單、還沒出貨"},
+            ],
         }
         return json.dumps(plan, ensure_ascii=False, indent=2)
 

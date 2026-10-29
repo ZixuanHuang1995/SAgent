@@ -44,20 +44,30 @@ export function AgentPanel(props: {
   const [shownRunId, setShownRunId] = useState<number | null>(spec.active_run_id)
   const shownRun = runs.data?.find((r) => r.id === shownRunId) ?? null
   const [detailRunId, setDetailRunId] = useState<number | null>(null)
+  // 先確認大綱的工作按「繼續撰寫」後加 1，讓進度重新連線
+  const [resumeKey, setResumeKey] = useState(0)
 
   useEffect(() => {
     if (spec.active_run_id) setShownRunId(spec.active_run_id)
   }, [spec.active_run_id])
 
-  const stream = useRunStream(shownRunId, (status, versionNo) => {
-    qc.invalidateQueries({ queryKey: keys.spec(spec.id) })
-    qc.invalidateQueries({ queryKey: keys.versions(spec.id) })
-    qc.invalidateQueries({ queryKey: ['runs'] })
-    qc.invalidateQueries({ queryKey: ['tree'] })
-    if (status === 'succeeded') toast(versionNo ? `AI 已完成，存成 v${versionNo}` : 'AI 已完成，內容沒有變化', 'success')
-    else if (status === 'failed') toast('AI 工作失敗，請看錯誤訊息', 'error')
-    props.onRunFinished(status === 'succeeded' ? versionNo : null)
-  })
+  const stream = useRunStream(
+    shownRunId,
+    (status, versionNo) => {
+      qc.invalidateQueries({ queryKey: ['runs'] })
+      if (status === 'planned') {
+        toast('大綱完成，請回答待確認問題、確認大綱後繼續', 'info')
+        return
+      }
+      qc.invalidateQueries({ queryKey: keys.spec(spec.id) })
+      qc.invalidateQueries({ queryKey: keys.versions(spec.id) })
+      qc.invalidateQueries({ queryKey: ['tree'] })
+      if (status === 'succeeded') toast(versionNo ? `AI 已完成，存成 v${versionNo}` : 'AI 已完成，內容沒有變化', 'success')
+      else if (status === 'failed') toast('AI 工作失敗，請看錯誤訊息', 'error')
+      props.onRunFinished(status === 'succeeded' ? versionNo : null)
+    },
+    resumeKey,
+  )
 
   // 工作剛建立時清單還沒更新，先重新抓一次
   useEffect(() => {
@@ -74,6 +84,15 @@ export function AgentPanel(props: {
             compact
             onDiff={(v) => props.onOpenDiff(v - 1, v)}
             onJumpToSection={props.onJumpToSection}
+            onContinue={async (body) => {
+              try {
+                await api.continueRun(shownRunId, body)
+                qc.invalidateQueries({ queryKey: ['runs'] })
+                setResumeKey((k) => k + 1)
+              } catch (e) {
+                toast(errorText(e), 'error')
+              }
+            }}
             onCancel={async () => {
               try {
                 await api.cancelRun(shownRunId)
@@ -170,7 +189,8 @@ function RunForm({ spec }: { spec: SpecDetail }) {
     }
     setBusy(true)
     try {
-      await api.createRun({ spec_id: spec.id, mode, requirement, doc_type: docType, options: { ...options, model } })
+      const runOptions = { ...options, model, plan_first: mode === 'draft' && !!options.plan_first }
+      await api.createRun({ spec_id: spec.id, mode, requirement, doc_type: docType, options: runOptions })
       toast('已開始 AI 工作', 'success')
       qc.invalidateQueries({ queryKey: keys.spec(spec.id) })
       qc.invalidateQueries({ queryKey: ['runs'] })
@@ -276,6 +296,20 @@ function RunForm({ spec }: { spec: SpecDetail }) {
           })}
         </select>
       </Field>
+
+      {mode === 'draft' && (
+        <label className="check-row mb-sm">
+          <input
+            type="checkbox"
+            checked={!!options.plan_first}
+            onChange={(e) => setOptions((o) => ({ ...o, plan_first: e.target.checked }))}
+          />
+          <span>
+            先確認大綱再撰寫
+            <span className="muted small check-row-hint">Planner 規劃完（約 3～5 分鐘）先停下來，讓你回答待確認問題、調整名詞表和要點。</span>
+          </span>
+        </label>
+      )}
 
       <button className="link-btn mb-sm" aria-expanded={advanced} onClick={() => setAdvanced((a) => !a)}>
         {advanced ? '▾' : '▸'} 進階選項（{canDraw ? '模型、圖表、審查次數' : '模型、審查次數'}）

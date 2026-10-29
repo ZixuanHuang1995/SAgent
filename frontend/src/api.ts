@@ -1,7 +1,8 @@
 // 後端 API 的型別和呼叫方式
 
 export type SpecStatus = 'draft' | 'reviewing' | 'approved' | 'deprecated'
-export type RunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+// planned：先確認大綱的工作規劃完了，等使用者回答待確認問題、確認大綱後繼續
+export type RunStatus = 'queued' | 'running' | 'planned' | 'succeeded' | 'failed' | 'cancelled'
 export type RunMode = 'draft' | 'revise'
 export type UmlSyntax = 'auto' | 'mermaid' | 'plantuml'
 
@@ -199,6 +200,8 @@ export interface RunOptions {
   temperature?: number
   diagrams?: boolean
   max_diagrams?: number
+  /** 規劃完先停下來確認大綱和待確認問題（只用在撰寫模式） */
+  plan_first?: boolean
 }
 
 export interface Run {
@@ -232,12 +235,28 @@ export interface PlanSection {
   diagrams: { kind: string; title: string; description: string; syntax: string }[]
 }
 
+/** 名詞表：角色、狀態、主要資料的名稱，每一節都照這份用 */
+export interface PlanTerm {
+  name: string
+  kind: string
+  note: string
+}
+
 export interface PlanOut {
   title: string
   summary: string
   fallback: boolean
   open_questions: string[]
+  /** 先確認大綱時回答過的問題：[問題, 回答] */
+  answered?: [string, string][]
+  terms?: PlanTerm[]
   sections: PlanSection[]
+}
+
+export interface RunContinue {
+  answers: { question: string; answer: string }[]
+  terms?: PlanTerm[]
+  sections: { id: string; key_points: string[] }[]
 }
 
 export interface ReviewIssue {
@@ -425,6 +444,7 @@ export const api = {
     request<Run[]>('GET', `/api/agent/runs${qs(params)}`),
   run: (id: number) => request<RunDetail>('GET', `/api/agent/runs/${id}`),
   cancelRun: (id: number) => request<{ cancelled: boolean }>('POST', `/api/agent/runs/${id}/cancel`),
+  continueRun: (id: number, body: RunContinue) => request<Run>('POST', `/api/agent/runs/${id}/continue`, body),
   runEventsUrl: (id: number) => `/api/agent/runs/${id}/events`,
 
   // 系統

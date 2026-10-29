@@ -24,7 +24,7 @@ def assemble(inp: RunInput, plan: Plan, draft: Draft) -> str:
 
     # 待確認事項：原本的內容整段保留（可能有表格或說明），只在後面加上新的問題
     body = plan.existing_questions_body.rstrip()
-    new_items: list[str] = []
+    new_items: list[str] = [f"- [x] {bullet_text(q)}（已確認：{a}）" for q, a in plan.answered]
     for q in plan.open_questions:
         text = bullet_text(q)
         if text and text not in body and not any(text in item for item in new_items):
@@ -39,21 +39,34 @@ def assemble(inp: RunInput, plan: Plan, draft: Draft) -> str:
 
 
 class SpecPipeline:
-    def __init__(self, llm: LLMClient, emitter: Emitter):
+    def __init__(self, llm: LLMClient, emitter: Emitter, stats: dict[str, AgentStats] | None = None):
+        """stats：先確認大綱的工作繼續撰寫時，帶入規劃階段的用量，最後的統計才完整。"""
         self.emitter = emitter
-        self.stats: dict[str, AgentStats] = {}
+        self.stats: dict[str, AgentStats] = stats if stats is not None else {}
         self.planner = Planner(llm, emitter, self.stats)
         self.writer = Writer(llm, emitter, self.stats)
         self.reviewer = Reviewer(llm, emitter, self.stats)
 
-    async def run(self, inp: RunInput) -> PipelineResult:
+    @staticmethod
+    def _apply_template_limits(inp: RunInput) -> None:
         if not inp.template.allow_diagrams:
             inp.options.diagrams = False  # 這種文件類型不畫圖（例如 UI/UX 設計建議）
         if inp.template.max_diagrams is not None:
             inp.options.max_diagrams = min(inp.options.max_diagrams, inp.template.max_diagrams)
+
+    async def plan_only(self, inp: RunInput) -> Plan:
+        """先確認大綱：只跑 Planner，大綱和待確認問題交給使用者確認後，再用 run(plan=…) 繼續。"""
+        self._apply_template_limits(inp)
+        await self.emitter.emit("phase", "planner", "Planner：規劃文件", {"phase": "plan"})
+        return await self.planner.plan(inp)
+
+    async def run(self, inp: RunInput, plan: Plan | None = None) -> PipelineResult:
+        """plan 有值時（使用者已經確認過的大綱）跳過 Planner。"""
+        self._apply_template_limits(inp)
         emit = self.emitter.emit
-        await emit("phase", "planner", "Planner：規劃文件", {"phase": "plan"})
-        plan = await self.planner.plan(inp)
+        if plan is None:
+            await emit("phase", "planner", "Planner：規劃文件", {"phase": "plan"})
+            plan = await self.planner.plan(inp)
 
         await emit("phase", "writer", "Writer：撰寫內容", {"phase": "write"})
         draft = await self.writer.write(inp, plan)
