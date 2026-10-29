@@ -7,10 +7,15 @@
 
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 from pathlib import Path
 
 _WINDOW = 3
+
+# 「于」在繁體也是字（姓氏），不在「簡體專用字」裡，但簡體把介系詞「於」也寫成「于」。
+# 只在常見的介系詞用法（受限于、位于、大于、于是…）改成「於」，姓氏不動
+_YU_RE = re.compile(r"(?<=[限位對由關基等屬在至處用見善急終歸出源鑑鑒大小高低多少])于|于(?=是)")
 
 
 @lru_cache(maxsize=1)
@@ -36,6 +41,7 @@ def to_traditional(text: str) -> str:
     if tables is None or not text:
         return text
     converter, simplified_only = tables
+    text = _YU_RE.sub("於", text)
     if not any(ch in simplified_only for ch in text):
         return text
     out = list(text)

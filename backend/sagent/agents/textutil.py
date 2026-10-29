@@ -150,6 +150,35 @@ def extract_item_ids(text: str) -> list[str]:
     return list(seen.values())
 
 
+def select_known_items(items: list[str], limit: int = 40) -> list[str]:
+    """挑出要放進提示詞的編號項目：同一個編號只留第一次出現的（通常是定義），每種編號平均分配名額。
+
+    只留最後幾個的話，FR 一多，前面章節定義的 UC 就會被擠掉。
+    """
+    unique: dict[str, str] = {}
+    for item in items:
+        unique.setdefault(item.split(" ", 1)[0], item)
+    if len(unique) <= limit:
+        return list(unique.values())
+    sizes: dict[str, int] = {}
+    for item_id in unique:
+        prefix = item_id.split("-")[0]
+        sizes[prefix] = sizes.get(prefix, 0) + 1
+    # 數量少的種類先分，用不完的名額留給後面的種類
+    quota: dict[str, int] = {}
+    remaining = limit
+    for n, (prefix, size) in enumerate(sorted(sizes.items(), key=lambda kv: kv[1])):
+        quota[prefix] = min(size, remaining // (len(sizes) - n))
+        remaining -= quota[prefix]
+    picked: list[str] = []
+    for item_id, item in unique.items():
+        prefix = item_id.split("-")[0]
+        if quota[prefix] > 0:
+            quota[prefix] -= 1
+            picked.append(item)
+    return picked
+
+
 def normalize_sid(value: Any, prefix: str, count: int) -> str | None:
     """把「S2」「s2」「[S2]」「2」「第2節」都轉成「S2」。超出範圍回傳 None。"""
     m = re.search(r"(\d+)", str(value or ""))

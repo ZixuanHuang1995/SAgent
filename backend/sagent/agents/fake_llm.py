@@ -195,6 +195,7 @@ class FakeLLM:
                 "issues": [
                     {
                         "section_id": "S2",
+                        "kind": "conflict",
                         "severity": "medium",
                         "problem": "第 2 節沒有寫發生例外時的處理，跟其他章節的流程接不起來",
                         "suggestion": "補上例外情況和處理方式",

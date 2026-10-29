@@ -1,17 +1,26 @@
 import asyncio
+import json
 
 from sagent.agents.base import ListEmitter
 from sagent.agents.doc_templates import load_templates
 from sagent.agents.fake_llm import FakeLLM
 from sagent.agents.pipeline import SpecPipeline
 from sagent.agents.planner import Planner
-from sagent.agents.reviewer import marked_points, static_checks, table_problems, undefined_ids
+from sagent.agents.reviewer import (
+    marked_points,
+    parse_llm_issues,
+    parse_llm_points,
+    static_checks,
+    table_problems,
+    undefined_ids,
+)
 from sagent.agents.textutil import (
     clean_section_body,
     diagrams_to_markers,
     extract_item_ids,
     markers_to_diagrams,
     parse_json_object,
+    select_known_items,
 )
 from sagent.agents.types import Draft, PipelineOptions, Plan, RunInput, SectionDraft, SectionPlan
 from sagent.services.diagrams import extract_diagrams, lint_mermaid
@@ -570,3 +579,99 @@ def test_reviewer_lists_marked_points():
         ("S2", "保存期限 / 5 年（待確認）", "check"),
     ]
     assert "假設" in points[0].reason and points[1].reason == "文件標註為待確認"
+
+
+class _ReviewLLM(FakeLLM):
+    """可以指定第幾輪審查回傳壞掉的 JSON、或第一次輸出被截斷。"""
+
+    def __init__(self, fail_rounds=(), truncate_first=False, review=None):
+        super().__init__()
+        self.fail_rounds = set(fail_rounds)
+        self.truncate_first = truncate_first
+        self.review = review
+        self.reviewer_calls = 0
+
+    async def chat(self, messages, **kwargs):
+        result = await super().chat(messages, **kwargs)
+        purpose = kwargs.get("purpose", "")
+        if purpose.startswith("reviewer:"):
+            self.reviewer_calls += 1
+            round_no = int(purpose.rsplit(":", 1)[1])
+            if round_no in self.fail_rounds:
+                result.text = "審查完成，沒有問題。"
+            elif self.truncate_first and self.reviewer_calls == 1:
+                result.text, result.truncated = result.text[:30], True
+            elif self.review is not None and round_no == 1:
+                result.text = json.dumps(self.review, ensure_ascii=False)
+        return result
+
+
+def test_unstated_issues_become_review_points():
+    review = {
+        "issues": [
+            {"section_id": "S2", "kind": "unstated", "severity": "high", "problem": "寫了需求沒有的簽核層級", "suggestion": "刪除"},
+            {"section_id": "S3", "kind": "conflict", "severity": "high", "problem": "S3 的狀態跟 S2 不一樣", "suggestion": "統一"},
+        ],
+        "review_points": [],
+        "summary": "s",
+    }
+    llm = _ReviewLLM(review=review)
+    result, _ = run(llm, make_input(max_revisions=0))
+    r = result.reviews[0]
+    llm_issues = [i for i in r.issues if i.source == "llm"]
+    assert [(i.section_id, i.kind) for i in llm_issues] == [("S3", "conflict")]
+    point = next(p for p in r.review_points if p.item == "寫了需求沒有的簽核層級")
+    assert point.section_id == "S2" and "需求沒提到" in point.reason
+    # 舊格式沒有 kind 照樣算錯誤
+    assert parse_llm_issues({"issues": [{"section_id": "S1", "severity": "high", "problem": "p"}]}, result.plan)
+
+
+def test_truncated_json_retries_with_shorter_request():
+    llm = _ReviewLLM(truncate_first=True)
+    result, emitter = run(llm, make_input(max_revisions=0))
+    assert result.reviews[0].llm_ok is True
+    second = [c for c in llm.calls if c["purpose"].startswith("reviewer:")][1]["messages"]
+    assert "被截斷" in second[-1]["content"]
+    assert second[-2]["role"] != "assistant"  # 截斷的輸出不放回去
+    logs = [e["message"] for e in emitter.events if e["type"] == "log"]
+    assert any("精簡後重試" in m for m in logs)
+
+
+def test_failed_second_review_keeps_previous_issues_as_points():
+    llm = _ReviewLLM(fail_rounds={2})
+    result, emitter = run(llm, make_input())
+    first, second = result.reviews
+    assert first.needs_revision and second.llm_ok is False
+    # 修改過的 S2 上一輪的問題不能消失，改列人工覆核，不再觸發修訂
+    stale = [p for p in second.review_points if p.section_id == "S2" and "沒有重新審查" in p.reason]
+    assert stale and stale[0].item == first.issues[0].problem
+    assert not any(i.source == "llm" for i in second.issues)
+    ends = [e["message"] for e in emitter.events if e["type"] == "step_end" and e["data"]["step"] == "review:2"]
+    assert "只有程式檢查" in ends[0]
+
+
+def test_revise_gets_item_ids_from_other_sections():
+    items = [f"FR-{i:02d} 功能{i}" for i in range(1, 50)]
+    picked = select_known_items(["UC-01 報修", "UC-02 派工", *items, "UC-01 報修（引用）"])
+    assert "UC-01 報修" in picked and "UC-02 派工" in picked  # FR 很多也不會擠掉 UC
+    assert "UC-01 報修（引用）" not in picked
+    assert len(picked) == 40
+
+    llm = FakeLLM()
+    run(llm, make_input())
+    revise = next(c for c in llm.calls if c["purpose"].startswith("writer:revise:"))
+    content = revise["messages"][-1]["content"]
+    assert "其他章節已經定義的編號項目" in content
+
+
+def test_unstated_issue_duplicating_review_point_is_dropped():
+    plan, _ = _draft("a", "b")
+    data = {
+        "review_points": [{"section_id": "S2", "item": "AC-01 中「預計處理時間」的功能是否必要", "reason": "r"}],
+        "issues": [
+            {"section_id": "S2", "kind": "unstated", "problem": "AC-01 提到系統要列出「預計處理時間」，需求沒提到"},
+            {"section_id": "S1", "kind": "unstated", "problem": "S1 也寫了「預計處理時間」"},  # 不同章節，保留
+        ],
+    }
+    points = parse_llm_points(data, plan)
+    assert [(p.section_id, p.item[:6]) for p in points] == [("S2", "AC-01 "), ("S1", "S1 也寫了")]

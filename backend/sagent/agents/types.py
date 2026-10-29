@@ -120,6 +120,8 @@ class Issue:
     source: Literal["check", "llm"] = "llm"
     # 圖表語法錯誤時記錄是第幾張圖（章節內從 0 起算）
     diagram_index: int | None = None
+    # 審查模型標的類型：format、conflict、requirement（unstated 會轉成人工覆核，不會出現在這裡）
+    kind: str = ""
 
 
 @dataclass

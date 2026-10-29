@@ -22,6 +22,7 @@ from .textutil import (
     diagrams_to_markers,
     extract_item_ids,
     markers_to_diagrams,
+    select_known_items,
     text_length,
 )
 from .types import DiagramPlan, Draft, Issue, Plan, Review, RunInput, SectionDraft, SectionPlan
@@ -42,6 +43,15 @@ MAX_REVISE_SECTIONS = 4
 
 def append_diagram(body: str, caption: str, lang: str, code: str) -> str:
     return f"{body.rstrip()}\n\n**{caption}**\n\n{fence(lang, code)}"
+
+
+def _other_items(draft: Draft, section_id: str) -> list[str]:
+    """其他章節的編號項目，修改一節時給模型對照。"""
+    items: list[str] = []
+    for sec in draft.sections:
+        if sec.id != section_id:
+            items.extend(extract_item_ids(sec.body))
+    return select_known_items(items)
 
 
 class Writer(AgentBase):
@@ -67,7 +77,7 @@ class Writer(AgentBase):
                 draft = SectionDraft(sec.id, sec.heading, await self._update_section(inp, plan, sec))
                 known_items.extend(extract_item_ids(draft.body))
             else:
-                body = await self._write_section(inp, plan, sec, number, known_items[-30:])
+                body = await self._write_section(inp, plan, sec, number, select_known_items(known_items))
                 draft = SectionDraft(sec.id, sec.heading, body)
                 known_items.extend(extract_item_ids(body))
             drafts[sec.id] = draft
@@ -183,7 +193,9 @@ class Writer(AgentBase):
             for issue in diagram_issues:
                 if await self._fix_diagram(inp, sec, issue, round_no):
                     changed.add(section_id)
-            if text_issues and await self._revise_text(inp, plan, sec_plan, sec, text_issues, round_no):
+            if text_issues and await self._revise_text(
+                inp, plan, sec_plan, sec, text_issues, round_no, _other_items(draft, section_id)
+            ):
                 changed.add(section_id)
         return changed
 
@@ -195,13 +207,14 @@ class Writer(AgentBase):
         sec: SectionDraft,
         issues: list[Issue],
         round_no: int,
+        known_items: list[str],
     ) -> bool:
         step = f"revise:{sec.id}:{round_no}"
         async with self.step(step, f"依審查意見修改：{sec.heading}") as info:
             marked, originals = diagrams_to_markers(sec.body)
             result = await self.chat(
                 step,
-                revise_section_messages(inp, plan, sec_plan, marked, issues),
+                revise_section_messages(inp, plan, sec_plan, marked, issues, known_items),
                 temperature=min(inp.options.temperature, 0.3),
                 max_tokens=3000,
             )

@@ -418,13 +418,23 @@ def revise_system(template: DocTemplate) -> str:
 
 
 def revise_section_messages(
-    inp: RunInput, plan: Plan, sec: SectionPlan, body_with_markers: str, issues: list[Issue]
+    inp: RunInput,
+    plan: Plan,
+    sec: SectionPlan,
+    body_with_markers: str,
+    issues: list[Issue],
+    known_items: list[str] | None = None,
 ) -> list[dict[str, str]]:
     comments = "\n".join(
         f"- （{i.severity}）問題：{i.problem}" + (f"；建議：{i.suggestion}" if i.suggestion else "")
         for i in issues
     )
     numbering = f"\n{_numbering(sec)}" if sec.ids else ""
+    # 修改時看不到其他章節，不給編號清單的話，容易引用錯的編號或發明新的編號
+    if known_items:
+        numbering += "\n\n其他章節已經定義的編號項目（引用其他章節的項目時，只能用這些編號）：\n" + "\n".join(
+            f"- {item}" for item in known_items
+        )
     user = f"""{_writer_context(inp, plan)}
 
 ## 要修改的章節：{sec.heading}
@@ -496,6 +506,9 @@ def diagram_fix_message(errors: list[str], lang: str) -> dict[str, str]:
 # Reviewer
 # ---------------------------------------------------------------------------
 
+# 審查錯誤的類型。小模型常把「需求沒提到」寫成錯誤，讓它選類型，由程式把 unstated 轉成人工覆核
+ISSUE_KINDS = ("format", "conflict", "requirement", "unstated")
+
 REVIEW_SCHEMA = {
     "type": "object",
     "properties": {
@@ -505,11 +518,12 @@ REVIEW_SCHEMA = {
                 "type": "object",
                 "properties": {
                     "section_id": {"type": "string"},
+                    "kind": {"type": "string", "enum": list(ISSUE_KINDS)},
                     "severity": {"type": "string", "enum": ["high", "medium", "low"]},
                     "problem": {"type": "string"},
                     "suggestion": {"type": "string"},
                 },
-                "required": ["section_id", "severity", "problem", "suggestion"],
+                "required": ["section_id", "kind", "severity", "problem", "suggestion"],
             },
             "maxItems": 8,
         },
@@ -581,14 +595,15 @@ def reviewer_system(template: DocTemplate) -> str:
 
 規則：
 1. 不要評論寫得好不好、完不完整，不要挑剔用字和文筆，也不要要求補上需求沒寫的內容。
-2. issues 最多 6 個，每個寫 section_id（例如 S2）、severity、problem（哪裡錯、為什麼錯）、suggestion（具體怎麼改）。
-3. severity：high 是邏輯錯誤或跟需求矛盾；medium 是格式錯誤；low 是不影響理解的小問題。
-4. review_points 最多 8 個，每個寫 section_id、item（要確認的內容，一句話）、reason（為什麼要人工確認）。
-5. 沒有問題時給空陣列，不要硬找。
-6. 需求內容裡的條列編號（1、2、3…）只是順序，跟文件裡的編號無關，不要拿來對照。
-7. 同一件事在不同章節出現（例如功能需求和驗收條件都提到）是正常的，只有寫得不一樣才算錯誤。
-8. summary 用一兩句話說明審查結果。
-9. 使用繁體中文。只輸出 JSON，不要縮排和多餘的空白。"""
+2. issues 最多 6 個，每個寫 section_id（例如 S2）、kind、severity、problem（一句話寫哪裡錯、為什麼錯）、suggestion（一句話寫具體怎麼改）。
+3. kind：format 格式錯誤；conflict 章節之間寫得不一樣或條件衝突；requirement 跟需求矛盾；unstated 需求沒提到、文件卻寫得很具體（這類會轉成人工覆核）。
+4. severity：high 是邏輯錯誤或跟需求矛盾；medium 是格式錯誤；low 是不影響理解的小問題。
+5. review_points 最多 8 個，每個寫 section_id、item（要確認的內容，一句話）、reason（為什麼要人工確認，一句話）。
+6. 沒有問題時給空陣列，不要硬找。
+7. 需求內容裡的條列編號（1、2、3…）只是順序，跟文件裡的編號無關，不要拿來對照。
+8. 同一件事在不同章節出現（例如功能需求和驗收條件都提到）是正常的，只有寫得不一樣才算錯誤。
+9. summary 用一兩句話說明審查結果。
+10. 使用繁體中文。只輸出 JSON，不要縮排和多餘的空白。"""
 
 
 def reviewer_messages(
@@ -624,3 +639,11 @@ def reviewer_messages(
 
 def json_retry_message() -> dict[str, str]:
     return {"role": "user", "content": "上一次的輸出不是正確的 JSON。請重新輸出，只輸出 JSON，不要其他文字。"}
+
+
+def json_too_long_message() -> dict[str, str]:
+    """輸出達到長度上限被截斷時用。照原樣重試幾乎一定再被截斷，所以要求精簡。"""
+    return {
+        "role": "user",
+        "content": "上一次的輸出太長，被截斷了。請重新輸出完整的 JSON，內容要精簡：每個陣列最多 3 項，每個說明只寫一句話。只輸出 JSON，不要其他文字。",
+    }

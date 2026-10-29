@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from .llm import LLMClient, LLMResult
-from .prompts import json_retry_message
+from .prompts import json_retry_message, json_too_long_message
 from .textutil import parse_json_object
 from .types import AgentStats
 from .zh import to_traditional
@@ -162,7 +162,11 @@ class AgentBase:
             try:
                 return parse_json_object(result.text)
             except ValueError as exc:
-                if attempt == 0:
+                if attempt == 0 and result.truncated:
+                    # 被截斷的輸出放回去也沒用，照原樣重試又會被截斷，改成要求精簡
+                    await self.log("模型輸出太長被截斷，請模型精簡後重試一次", "warn", step=step_id)
+                    messages = [*messages, json_too_long_message()]
+                elif attempt == 0:
                     await self.log(f"模型輸出的 JSON 格式不正確（{exc}），重試一次", "warn", step=step_id)
                     messages = [
                         *messages,

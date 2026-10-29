@@ -11,7 +11,7 @@ from typing import Any
 
 from ..services.diagrams import extract_diagrams, lint_mermaid, lint_plantuml
 from .base import AgentBase
-from .prompts import REVIEW_SCHEMA, reviewer_messages
+from .prompts import ISSUE_KINDS, REVIEW_SCHEMA, reviewer_messages
 from .textutil import normalize_sid, text_length
 from .types import Draft, Issue, Plan, Review, ReviewPoint, RunInput
 
@@ -22,7 +22,10 @@ _ID_RE = re.compile(r"\b([A-Z]{1,4})-(\d{2,3})\b")
 # 一行的開頭（條列、標題、粗體之後）或表格第一欄出現的編號，算是「定義」
 _ID_DEF_RE = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)]\s+|#+\s+|\|\s*)?(?:\*\*|`)?([A-Z]{1,4}-\d{2,3})\b", re.M)
 _MARK_RE = re.compile(r"[（(](假設|待確認)[）)]")
+_QUOTED_RE = re.compile(r"「([^」]{2,30})」")
 MAX_CHECK_POINTS = 20
+_UNSTATED_REASON = "需求沒提到，可能是撰寫者自己補的，要確認是否正確"
+_STALE_REASON = "上一輪審查指出的問題，修改後沒有重新審查成功，要確認是否已經修正"
 
 
 def _without_code(text: str) -> str:
@@ -189,15 +192,21 @@ def draft_for_review(plan: Plan, draft: Draft, only: set[str] | None = None) -> 
     return "\n\n".join(parts)
 
 
+def _is_unstated(raw: dict[str, Any]) -> bool:
+    return str(raw.get("kind", "")).strip().lower() == "unstated"
+
+
 def parse_llm_issues(data: dict[str, Any], plan: Plan) -> list[Issue]:
+    """模型標成 unstated（需求沒提到）的不算錯誤，由 parse_llm_points 轉成人工覆核。"""
     issues: list[Issue] = []
     seen: set[tuple[str | None, str]] = set()
     for raw in data.get("issues") or []:
-        if not isinstance(raw, dict):
+        if not isinstance(raw, dict) or _is_unstated(raw):
             continue
         problem = str(raw.get("problem", "")).strip()
         if not problem:
             continue
+        kind = str(raw.get("kind", "")).strip().lower()
         severity = str(raw.get("severity", "medium")).strip().lower()
         if severity not in _SEVERITIES:
             severity = "medium"
@@ -207,24 +216,46 @@ def parse_llm_issues(data: dict[str, Any], plan: Plan) -> list[Issue]:
             continue
         seen.add(key)
         issues.append(
-            Issue(sid, severity, problem[:400], str(raw.get("suggestion", "")).strip()[:400], source="llm")  # type: ignore[arg-type]
+            Issue(
+                sid,
+                severity,  # type: ignore[arg-type]
+                problem[:400],
+                str(raw.get("suggestion", "")).strip()[:400],
+                source="llm",
+                kind=kind if kind in ISSUE_KINDS else "",
+            )
         )
     return issues[:12]
 
 
 def parse_llm_points(data: dict[str, Any], plan: Plan) -> list[ReviewPoint]:
+    """review_points，加上 issues 裡標成 unstated 的（照設計要人工覆核，不交給 Writer 修）。"""
+    raw_points: list[tuple[Any, str, str, bool]] = []
+    for raw in data.get("review_points") or []:
+        if isinstance(raw, dict):
+            raw_points.append(
+                (raw.get("section_id"), str(raw.get("item", "")), str(raw.get("reason", "")), False)
+            )
+    for raw in data.get("issues") or []:
+        if isinstance(raw, dict) and _is_unstated(raw):
+            raw_points.append((raw.get("section_id"), str(raw.get("problem", "")), _UNSTATED_REASON, True))
     points: list[ReviewPoint] = []
     seen: set[str] = set()
-    for raw in data.get("review_points") or []:
-        if not isinstance(raw, dict):
-            continue
-        item = str(raw.get("item", "")).strip()
+    for section_id, item, reason, from_issue in raw_points:
+        item = item.strip()
         if not item or item in seen:
             continue
+        sid = normalize_sid(section_id, "S", len(plan.sections))
+        # 模型常在 review_points 和 issues 用不同的話講同一件事；同一節引號裡的詞一樣就算重複
+        if from_issue and any(p.section_id == sid and _quoted(p.item) & _quoted(item) for p in points):
+            continue
         seen.add(item)
-        sid = normalize_sid(raw.get("section_id"), "S", len(plan.sections))
-        points.append(ReviewPoint(sid, item[:300], str(raw.get("reason", "")).strip()[:300], "llm"))
-    return points[:10]
+        points.append(ReviewPoint(sid, item[:300], reason.strip()[:300], "llm"))
+    return points[:12]
+
+
+def _quoted(text: str) -> set[str]:
+    return set(_QUOTED_RE.findall(text))
 
 
 class Reviewer(AgentBase):
@@ -262,7 +293,8 @@ class Reviewer(AgentBase):
                 ),
                 REVIEW_SCHEMA,
                 temperature=0.1,
-                max_tokens=2000,
+                # 真模型實測審查輸出平均約 1500 tokens，2000 常被截斷
+                max_tokens=3000,
             )
             carried: list[Issue] = []
             carried_points: list[ReviewPoint] = []
@@ -272,11 +304,24 @@ class Reviewer(AgentBase):
                     p for p in previous.review_points if p.source == "llm" and p.section_id not in focus
                 ]
             if data is None:
+                summary = "審查模型沒有給出可用的結果，只列出程式檢查的結果。"
+                stale: list[ReviewPoint] = []
+                if focus and previous is not None:
+                    # 修改過的章節沒能重新審查：上一輪的意見不能當成已經修好，改列人工覆核。
+                    # 不放回 issues，避免依舊的意見再修一次
+                    stale = [
+                        ReviewPoint(i.section_id, i.problem, _STALE_REASON, "llm")
+                        for i in previous.issues
+                        if i.source == "llm" and i.section_id in focus and i.severity in ("high", "medium")
+                    ]
+                    stale += [p for p in previous.review_points if p.source == "llm" and p.section_id in focus]
+                    if stale:
+                        summary += "修改過的章節上一輪指出的問題，改列人工覆核。"
                 review = Review(
                     round=round_no,
-                    summary="審查模型沒有給出可用的結果，只列出程式檢查的結果。",
+                    summary=summary,
                     issues=checks + carried,
-                    review_points=marked + carried_points,
+                    review_points=marked + carried_points + stale,
                     llm_ok=False,
                 )
             else:
@@ -294,5 +339,7 @@ class Reviewer(AgentBase):
             info.output = review.to_dict()
             errors = sum(1 for i in review.issues if i.severity in ("high", "medium"))
             verdict = f"需要修訂（錯誤 {errors} 個）" if review.needs_revision else "沒有需要修正的錯誤"
+            if not review.llm_ok:
+                verdict = f"審查模型沒有結果，只有程式檢查（錯誤 {errors} 個）"
             info.message = f"審查結果：{verdict}，需要人工覆核 {len(review.review_points)} 項"
         return review
