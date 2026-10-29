@@ -51,6 +51,8 @@
   --diff-add-text: #166534;
   --diff-del: #fcebeb;
   --diff-del-text: #991b1b;
+  /* 下拉框的箭頭：跟 Icon 的 chevron-down 一樣，顏色是 --muted */
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7385' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 
   --radius: 8px;
   --radius-sm: 5px;
@@ -92,6 +94,7 @@
   --diff-add-text: #86efac;
   --diff-del: #3a1c1f;
   --diff-del-text: #fca5a5;
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238d95a5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
   color-scheme: dark;
@@ -128,6 +131,7 @@
     --diff-add-text: #86efac;
     --diff-del: #3a1c1f;
     --diff-del-text: #fca5a5;
+    --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238d95a5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
     color-scheme: dark;
@@ -451,8 +455,35 @@ h1 {
   resize: vertical;
   line-height: 1.5;
 }
+/* 原生下拉框：拿掉系統的箭頭，換成跟選單按鈕一樣的箭頭。展開後的清單還是系統畫的 */
 select.input {
-  padding-right: 4px;
+  appearance: none;
+  padding-right: 34px;
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 16px;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+select.input-sm {
+  padding-right: 28px;
+  background-position: right 8px center;
+  background-size: 14px;
+}
+select.input:hover:not(:disabled, :focus) {
+  border-color: var(--muted);
+}
+select.input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+/* Windows 高對比模式不畫背景圖，改回系統的箭頭 */
+@media (forced-colors: active) {
+  select.input {
+    appearance: auto;
+    padding-right: 4px;
+  }
 }
 
 .field {
