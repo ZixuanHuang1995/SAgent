@@ -6,7 +6,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'reac
 import { QuickSwitcher } from '../components/QuickSwitcher'
 import { useMediaQuery, usePersistent, usePersistentNumber } from '../hooks/layout'
 import { api, type Phase, type Spec } from '../api'
-import { SPEC_STATUS } from '../format'
+import { AI_STATUS, SPEC_STATUS } from '../format'
 import { keys, useProjectTree, useTemplateCategories, useTemplates } from '../queries'
 import {
   CategoryBadge,
@@ -352,7 +352,10 @@ function SpecLink({ projectId, spec }: { projectId: number; spec: Spec }) {
       <span className={`status-dot status-${spec.status}`} title={SPEC_STATUS[spec.status]} />
       {tag && <span className={`tree-spec-cat cat-${category}`}>{tag}</span>}
       <span className="tree-spec-title">{spec.title}</span>
-      {spec.review && spec.review.open > 0 && (
+      {/* AI 工作進行中時，上一次審查的數字已經不準，改顯示 AI 狀態 */}
+      {spec.ai_status ? (
+        <span className={`tree-spec-ai ai-${spec.ai_status}`}>{AI_STATUS[spec.ai_status]}</span>
+      ) : spec.review && spec.review.open > 0 && (
         <span className="tree-spec-review" title={`AI 審查還有 ${spec.review.open} 項沒處理`}>
           {spec.review.open}
         </span>
@@ -391,6 +394,8 @@ export function NewSpecDialog(props: {
   const [init, setInit] = useState<'template' | 'blank' | 'content' | 'ai'>('ai')
   const [content, setContent] = useState('')
   const [requirement, setRequirement] = useState(preset?.requirement ?? '')
+  // 跟 AI 面板一樣預設先確認大綱
+  const [planFirst, setPlanFirst] = useState(true)
 
   const inCategory = (templates.data ?? []).filter((t) => t.category === category)
   // 換類型時，文件類型改成這個類型的第一個
@@ -408,7 +413,13 @@ export function NewSpecDialog(props: {
       })
       if (init === 'ai') {
         try {
-          await api.createRun({ spec_id: spec.id, mode: 'draft', requirement, doc_type: template!.key })
+          await api.createRun({
+            spec_id: spec.id,
+            mode: 'draft',
+            requirement,
+            doc_type: template!.key,
+            options: { plan_first: planFirst },
+          })
         } catch (e) {
           toast(`Spec 已建立，但 AI 工作沒有啟動：${errorText(e)}`, 'error')
         }
@@ -547,6 +558,15 @@ export function NewSpecDialog(props: {
         >
           <textarea className="input textarea" rows={8} value={requirement} onChange={(e) => setRequirement(e.target.value)} />
         </Field>
+      )}
+      {init === 'ai' && (
+        <label className="check-row mb-sm">
+          <input type="checkbox" checked={planFirst} onChange={(e) => setPlanFirst(e.target.checked)} />
+          <span>
+            先確認大綱再撰寫
+            <span className="muted small check-row-hint">Planner 規劃完（約 3～5 分鐘）先停下來，讓你回答待確認問題、調整名詞表和要點。</span>
+          </span>
+        </label>
       )}
       {init === 'template' && template && (
         <div className="muted small">會建立以下章節：{template.sections.map((s) => s.heading).join('、')}</div>

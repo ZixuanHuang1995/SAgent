@@ -308,6 +308,18 @@ def active_run_for_spec(s: Session, spec_id: int) -> AgentRun | None:
     )
 
 
+def active_run_statuses(s: Session, spec_ids: list[int]) -> dict[int, str]:
+    """每份 Spec 進行中的 AI 工作狀態（queued、running、planned），給清單上的標籤用。沒有的不會出現在結果裡。"""
+    if not spec_ids:
+        return {}
+    rows = s.execute(
+        select(AgentRun.spec_id, AgentRun.status)
+        .where(AgentRun.spec_id.in_(spec_ids), AgentRun.status.in_(ACTIVE_RUN_STATUSES))
+        .order_by(AgentRun.id)
+    ).all()
+    return {spec_id: status for spec_id, status in rows}  # 同一份 Spec 同時只有一個，保險起見用最新的
+
+
 # ---------------------------------------------------------------------------
 # 版本
 # ---------------------------------------------------------------------------

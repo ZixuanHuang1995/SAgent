@@ -127,6 +127,8 @@ class SpecOut(ORMModel):
     updated_at: datetime
     # 只有專案清單和單一 Spec 會填
     review: ReviewSummary | None = None
+    # 進行中的 AI 工作狀態：queued、running、planned；沒有時是 None。只有專案清單和單一 Spec 會填
+    ai_status: str | None = None
 
 
 class VersionMeta(ORMModel):

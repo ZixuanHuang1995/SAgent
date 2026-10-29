@@ -51,7 +51,11 @@ export interface Spec {
   updated_at: string
   /** 最近一次成功的 AI 工作的審查項目數。只有專案清單和單一 Spec 會填 */
   review?: ReviewSummary | null
+  /** 進行中的 AI 工作狀態，沒有時是 null。只有專案清單和單一 Spec 會填 */
+  ai_status?: ActiveRunStatus | null
 }
+
+export type ActiveRunStatus = Extract<RunStatus, 'queued' | 'running' | 'planned'>
 
 export interface ReviewSummary {
   run_id: number

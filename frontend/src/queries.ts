@@ -33,8 +33,9 @@ export const useProjectTree = (projectId: number, archived = false) =>
     queryKey: keys.tree(projectId, archived),
     queryFn: () => api.projectTree(projectId, archived),
     enabled: projectId > 0,
-    // AI 工作可能在別的頁面完成，定期更新版本號
-    refetchInterval: 30_000,
+    // AI 工作可能在別的頁面完成，定期更新版本號；有 AI 工作在跑或排隊時更新快一點，清單上的狀態標籤才會跟上
+    refetchInterval: (query) =>
+      query.state.data?.specs.some((s) => s.ai_status === 'queued' || s.ai_status === 'running') ? 5000 : 30_000,
   })
 
 export const useSpec = (specId: number) =>
@@ -49,7 +50,13 @@ export const useVersions = (specId: number) =>
   useQuery({ queryKey: keys.versions(specId), queryFn: () => api.versions(specId) })
 
 export const useRuns = (params: { project_id?: number; spec_id?: number }, refetchMs?: number) =>
-  useQuery({ queryKey: keys.runs(params), queryFn: () => api.runs(params), refetchInterval: refetchMs })
+  useQuery({
+    queryKey: keys.runs(params),
+    queryFn: () => api.runs(params),
+    // 清單裡有工作在跑或排隊時定時更新，狀態標籤（排隊中 → 執行中 → 完成）才會跟上
+    refetchInterval: (query) =>
+      refetchMs ?? (query.state.data?.some((r) => r.status === 'queued' || r.status === 'running') ? 5000 : false),
+  })
 
 export const useBaselines = (projectId: number) =>
   useQuery({ queryKey: keys.baselines(projectId), queryFn: () => api.baselines(projectId) })

@@ -40,6 +40,7 @@ def spec_detail(s: Session, spec: Spec) -> SpecDetail:
             "content": head.content if head else "",
             "head": VersionMeta.model_validate(head) if head else None,
             "active_run_id": run.id if run else None,
+            "ai_status": run.status if run else None,
             "review": review_service.summaries(s, [spec.id])[spec.id],
             "source_spec": SpecLink.model_validate(origin) if origin else None,
             "derived_specs": [SpecLink.model_validate(d) for d in spec_service.derived_specs(s, spec)],

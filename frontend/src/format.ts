@@ -1,6 +1,6 @@
 // 顯示用的文字和格式
 
-import type { PlanTerm, RunStatus, SpecStatus, VersionMeta } from './api'
+import type { ActiveRunStatus, PlanTerm, RunStatus, SpecStatus, VersionMeta } from './api'
 
 export const SPEC_STATUS: Record<SpecStatus, string> = {
   draft: '草稿',
@@ -33,6 +33,13 @@ export const RUN_STATUS: Record<RunStatus, string> = {
   succeeded: '完成',
   failed: '失敗',
   cancelled: '已取消',
+}
+
+/** Spec 清單和標題旁的 AI 狀態標籤 */
+export const AI_STATUS: Record<ActiveRunStatus, string> = {
+  queued: 'AI 排隊中',
+  running: 'AI 撰寫中',
+  planned: '待確認大綱',
 }
 
 export const AGENT_NAME: Record<string, string> = {

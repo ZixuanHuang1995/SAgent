@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { api, type PlanTerm } from '../api'
-import { relativeTime, RUN_STATUS, SPEC_STATUS, termsToText, textToTerms } from '../format'
+import { AI_STATUS, relativeTime, RUN_STATUS, SPEC_STATUS, termsToText, textToTerms } from '../format'
 import { keys, useBaselines, useProjectTree, useRuns, useTemplateCategories, useTemplates } from '../queries'
 import { Badge, CategoryBadge, ConfirmDialog, Empty, errorText, Field, Menu, MenuItem, MenuSeparator, Modal, Skeleton, useToast } from '../components/ui'
 import { NewSpecDialog } from './ProjectLayout'
@@ -146,7 +146,9 @@ export function ProjectHome() {
                       <span className={`status-dot status-${s.status}`} /> {SPEC_STATUS[s.status]}
                     </td>
                     <td>
-                      {s.review && s.review.open > 0 ? (
+                      {s.ai_status ? (
+                        <span className={`badge badge-ai ai-${s.ai_status}`}>{AI_STATUS[s.ai_status]}</span>
+                      ) : s.review && s.review.open > 0 ? (
                         <Badge tone="amber">{s.review.open}</Badge>
                       ) : s.review ? (
                         <span className="muted small">已處理</span>

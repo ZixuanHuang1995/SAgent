@@ -13,7 +13,7 @@ import { ReviewChecklist } from '../components/ReviewChecklist'
 import { VersionPanel } from '../components/VersionPanel'
 import { Badge, CategoryBadge, ConfirmDialog, Empty, errorText, Menu, MenuItem, MenuSeparator, Popover, Skeleton, Spinner, Splitter, useToast } from '../components/ui'
 import { useElementWidth, useMediaQuery, usePersistent, usePersistentNumber } from '../hooks/layout'
-import { extractOutline, slugify, SPEC_STATUS, VERSION_SOURCE } from '../format'
+import { AI_STATUS, extractOutline, slugify, SPEC_STATUS, VERSION_SOURCE } from '../format'
 import { keys, useProjectTree, useSpec, useTemplateCategories, useTemplates } from '../queries'
 import { NewSpecDialog } from './ProjectLayout'
 import { Icon, type IconName } from '../components/icons'
@@ -373,7 +373,10 @@ export function SpecPage() {
           </Badge>
           {data.head?.label && <Badge tone="green"><Icon name="tag" size={12} /> {data.head.label}</Badge>}
           {dirty && <Badge tone="amber">未儲存</Badge>}
-          {review && review.open > 0 && (
+          {/* AI 工作進行中時，上一次審查的數字已經不準，改顯示 AI 狀態 */}
+          {data.ai_status ? (
+            <span className={`badge badge-ai ai-${data.ai_status}`}>{AI_STATUS[data.ai_status]}</span>
+          ) : review && review.open > 0 && (
             <button
               className="badge badge-amber badge-btn"
               title={`最近一次 AI 審查還有 ${review.open} 項沒處理，按一下查看`}

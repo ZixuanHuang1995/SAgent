@@ -1823,13 +1823,6 @@ body.is-resizing .cm-editor {
 .plan-confirm summary {
   cursor: pointer;
 }
-.advanced {
-  padding: 10px;
-  margin-bottom: 10px;
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-sm);
-}
-
 .run-head {
   display: flex;
   align-items: center;
@@ -2559,6 +2552,53 @@ kbd {
   line-height: 18px;
   text-align: center;
   font-variant-numeric: tabular-nums;
+}
+/* AI 工作狀態標籤：側邊欄、Spec 標題旁、專案總覽 */
+.tree-spec-ai {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  line-height: 18px;
+  white-space: nowrap;
+}
+.tree-spec-ai,
+.badge-ai {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface-3);
+  color: var(--text-2);
+}
+.tree-spec-ai.ai-running,
+.badge-ai.ai-running {
+  background: var(--writer-soft);
+  color: var(--writer);
+}
+.tree-spec-ai.ai-running::before,
+.badge-ai.ai-running::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: ai-blink 1.2s ease-in-out infinite;
+}
+.tree-spec-ai.ai-planned,
+.badge-ai.ai-planned {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+@keyframes ai-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tree-spec-ai.ai-running::before,
+  .badge-ai.ai-running::before {
+    animation: none;
+  }
 }
 .review-progress {
   margin-bottom: 6px;

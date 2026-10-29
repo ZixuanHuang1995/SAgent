@@ -172,22 +172,32 @@ def test_sse_fills_in_missing_run_end(client, project):
 def test_project_list_counts_active_runs(slow_client):
     pid = slow_client.post("/api/projects", json={"name": "首頁狀態"}).json()["id"]
     tree = slow_client.get(f"/api/projects/{pid}").json()
-    run_ids = []
+    run_ids, spec_ids = [], []
     for title in ("A", "B"):
         body = {"phase_id": tree["phases"][0]["id"], "title": title, "init": "none"}
         spec = slow_client.post(f"/api/projects/{pid}/specs", json=body).json()
         r = slow_client.post("/api/agent/runs", json={"spec_id": spec["id"], "requirement": "需求"})
         run_ids.append(r.json()["id"])
+        spec_ids.append(spec["id"])
     wait_status(slow_client, run_ids[0], ("running",))
 
     def counts():
         p = next(p for p in slow_client.get("/api/projects").json() if p["id"] == pid)
         return p["running_runs"], p["queued_runs"]
 
+    def ai_status():
+        """側邊欄和 Spec 頁上的 AI 狀態標籤"""
+        specs = {s["id"]: s["ai_status"] for s in slow_client.get(f"/api/projects/{pid}").json()["specs"]}
+        detail = [slow_client.get(f"/api/specs/{i}").json()["ai_status"] for i in spec_ids]
+        assert detail == [specs[i] for i in spec_ids]
+        return detail
+
     assert counts() == (1, 1)
+    assert ai_status() == ["running", "queued"]
     for run_id in run_ids:
         wait_run(slow_client, run_id)
     assert counts() == (0, 0)
+    assert ai_status() == [None, None]
 
 
 def _wait_paused(client, run_id):

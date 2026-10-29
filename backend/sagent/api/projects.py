@@ -78,12 +78,16 @@ def project_tree(project_id: int, archived: bool = False, state: AppState = Depe
         project = spec_service.get_project(s, project_id)
         specs = spec_service.list_specs(s, project.id, archived=archived)
         reviews = review_service.summaries(s, [sp.id for sp in specs])
+        ai = spec_service.active_run_statuses(s, [sp.id for sp in specs])
         return ProjectTree(
             project=project_out(s, project),
             phases=[PhaseOut.model_validate(ph) for ph in project.phases],
             specs=[
                 SpecOut.model_validate(sp).model_copy(
-                    update={"review": ReviewSummary(**reviews[sp.id]) if reviews[sp.id] else None}
+                    update={
+                        "review": ReviewSummary(**reviews[sp.id]) if reviews[sp.id] else None,
+                        "ai_status": ai.get(sp.id),
+                    }
                 )
                 for sp in specs
             ],

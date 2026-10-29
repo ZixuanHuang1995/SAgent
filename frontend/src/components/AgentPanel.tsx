@@ -2,10 +2,10 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
-import { api, type RunMode, type RunOptions, type SpecDetail, type UmlSyntax } from '../api'
-import { formatDuration, relativeTime, RUN_STATUS, runDuration, UML_SYNTAX } from '../format'
+import { api, type RunMode, type SpecDetail } from '../api'
+import { formatDuration, relativeTime, RUN_STATUS, runDuration } from '../format'
 import { useRunStream } from '../hooks/useRunStream'
-import { keys, useHealth, useModels, useRuns, useSettings, useTemplateCategories, useTemplates } from '../queries'
+import { keys, useHealth, useRuns, useTemplateCategories, useTemplates } from '../queries'
 import { Icon } from './icons'
 import { RunProgress } from './RunProgress'
 import { RunDetailModal } from './RunDetail'
@@ -68,6 +68,15 @@ export function AgentPanel(props: {
     },
     resumeKey,
   )
+
+  // 狀態一變（排隊中 → 執行中 → 等待確認大綱、結束）就更新各處的狀態標籤，不用等定時更新
+  useEffect(() => {
+    if (stream.status === 'unknown') return
+    qc.invalidateQueries({ queryKey: ['runs'] })
+    qc.invalidateQueries({ queryKey: keys.spec(spec.id) })
+    qc.invalidateQueries({ queryKey: ['tree', spec.project_id] })
+    qc.invalidateQueries({ queryKey: keys.projects })
+  }, [stream.status, qc, spec.id, spec.project_id])
 
   // 工作剛建立時清單還沒更新，先重新抓一次
   useEffect(() => {
@@ -166,8 +175,6 @@ function RunForm({ spec }: { spec: SpecDetail }) {
   const toast = useToast()
   const templates = useTemplates()
   const categories = useTemplateCategories()
-  const models = useModels()
-  const settings = useSettings()
   const health = useHealth()
   const fileInput = useRef<HTMLInputElement>(null)
 
@@ -175,19 +182,15 @@ function RunForm({ spec }: { spec: SpecDetail }) {
   const [mode, setMode] = useState<RunMode>(hasRealContent ? 'revise' : 'draft')
   const [requirement, setRequirement] = useState(() => loadDraft(spec.id))
   const [docType, setDocType] = useState(spec.doc_type)
-  const [advanced, setAdvanced] = useState(false)
-  const [options, setOptions] = useState<RunOptions>({})
+  // 預設先確認大綱：規劃只花幾分鐘，先回答待確認問題，寫出來的內容比較準
+  const [planFirst, setPlanFirst] = useState(true)
   const [busy, setBusy] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
 
   useEffect(() => saveDraft(spec.id, requirement), [spec.id, requirement])
 
-  const s = settings.data
-  const model = options.model ?? s?.default_model ?? ''
   const ollamaDown = health.data?.llm_provider === 'ollama' && health.data && !health.data.ollama.reachable
   const template = templates.data?.find((t) => t.key === docType)
-  // 有些文件類型不畫圖（例如 UI/UX 設計建議），圖表相關選項就不顯示
-  const canDraw = template?.allow_diagrams !== false
 
   const start = async () => {
     if (!requirement.trim()) {
@@ -196,11 +199,14 @@ function RunForm({ spec }: { spec: SpecDetail }) {
     }
     setBusy(true)
     try {
-      const runOptions = { ...options, model, plan_first: mode === 'draft' && !!options.plan_first }
-      await api.createRun({ spec_id: spec.id, mode, requirement, doc_type: docType, options: runOptions })
+      // 模型、圖表、修訂輪數不在這裡選，後端照「設定」頁的值
+      const options = { plan_first: mode === 'draft' && planFirst }
+      await api.createRun({ spec_id: spec.id, mode, requirement, doc_type: docType, options })
       toast('已開始 AI 工作', 'success')
       qc.invalidateQueries({ queryKey: keys.spec(spec.id) })
       qc.invalidateQueries({ queryKey: ['runs'] })
+      qc.invalidateQueries({ queryKey: ['tree', spec.project_id] })
+      qc.invalidateQueries({ queryKey: keys.projects })
     } catch (e) {
       toast(errorText(e), 'error')
     } finally {
@@ -308,83 +314,14 @@ function RunForm({ spec }: { spec: SpecDetail }) {
         <label className="check-row mb-sm">
           <input
             type="checkbox"
-            checked={!!options.plan_first}
-            onChange={(e) => setOptions((o) => ({ ...o, plan_first: e.target.checked }))}
+            checked={planFirst}
+            onChange={(e) => setPlanFirst(e.target.checked)}
           />
           <span>
             先確認大綱再撰寫
             <span className="muted small check-row-hint">Planner 規劃完（約 3～5 分鐘）先停下來，讓你回答待確認問題、調整名詞表和要點。</span>
           </span>
         </label>
-      )}
-
-      <button className="link-btn mb-sm" aria-expanded={advanced} onClick={() => setAdvanced((a) => !a)}>
-        {advanced ? '▾' : '▸'} 進階選項（{canDraw ? '模型、圖表、審查次數' : '模型、審查次數'}）
-      </button>
-      {advanced && s && (
-        <div className="advanced">
-          <Field label="模型" hint={models.error ? `讀不到模型清單：${errorText(models.error)}` : '本機 Ollama 的模型。MoE 模型（例如 a3b）在 CPU 上通常比較快。'}>
-            <select className="input" value={model} onChange={(e) => setOptions((o) => ({ ...o, model: e.target.value }))}>
-              {!models.data?.models.some((m) => m.name === model) && <option value={model}>{model}</option>}
-              {models.data?.models.map((m) => (
-                <option key={m.name} value={m.name}>
-                  {m.name} {m.parameter_size ? `（${m.parameter_size}）` : ''}
-                </option>
-              ))}
-            </select>
-          </Field>
-          {canDraw && (
-            <Field label="UML 圖語法">
-              <select
-                className="input"
-                value={options.uml_syntax ?? s.uml_syntax}
-                onChange={(e) => setOptions((o) => ({ ...o, uml_syntax: e.target.value as UmlSyntax }))}
-              >
-                {Object.entries(UML_SYNTAX).map(([k, v]) => (
-                  <option key={k} value={k}>
-                    {v}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          )}
-          <div className="form-row">
-            {canDraw && (
-              <>
-                <Field label="畫圖">
-                  <select
-                    className="input"
-                    value={String(options.diagrams ?? s.diagrams)}
-                    onChange={(e) => setOptions((o) => ({ ...o, diagrams: e.target.value === 'true' }))}
-                  >
-                    <option value="true">要</option>
-                    <option value="false">不要（比較快）</option>
-                  </select>
-                </Field>
-                <Field label="最多幾張圖">
-                  <input
-                    className="input"
-                    type="number"
-                    min={0}
-                    max={10}
-                    value={options.max_diagrams ?? 4}
-                    onChange={(e) => setOptions((o) => ({ ...o, max_diagrams: Number(e.target.value) }))}
-                  />
-                </Field>
-              </>
-            )}
-            <Field label="審查後修訂幾輪">
-              <input
-                className="input"
-                type="number"
-                min={0}
-                max={3}
-                value={options.max_revisions ?? s.max_revisions}
-                onChange={(e) => setOptions((o) => ({ ...o, max_revisions: Number(e.target.value) }))}
-              />
-            </Field>
-          </div>
-        </div>
       )}
 
       {/* 按鈕固定在側欄底部，表單很長時也不用捲動才找得到 */}
