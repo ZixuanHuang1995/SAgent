@@ -1971,6 +1971,11 @@ body.is-resizing .cm-editor {
 .step > .error-box {
   padding: 4px 0 10px 22px;
 }
+/* 章節內容可能很長，限制高度，捲動看 */
+.step-section {
+  max-height: 360px;
+  overflow: auto;
+}
 
 .warn-list {
   margin-bottom: 12px;

@@ -86,7 +86,7 @@ function useTokenRate(step: StepState) {
 
 function StepRow({ step }: { step: StepState }) {
   const [open, setOpen] = useState(false)
-  const hasDetail = step.status !== 'running' && (step.output || step.error)
+  const hasDetail = step.status !== 'running' && stepHasDetail(step)
   return (
     <li className={`step step-${step.status}`}>
       <div
@@ -116,16 +116,31 @@ function StepRow({ step }: { step: StepState }) {
   )
 }
 
+/** 展開後有沒有東西可看。沒有的步驟（例如修改後內容變少、保留原內容）不顯示展開箭頭 */
+function stepHasDetail(step: StepState): boolean {
+  if (step.error) return true
+  const o = step.output
+  if (!o) return false
+  return step.id === 'plan' || step.id.startsWith('review:') || !!o.code || o.errors?.length > 0 || !!step.sectionBody
+}
+
 function StepDetail({ step }: { step: StepState }) {
   if (step.error) return <div className="error-box">{step.error}</div>
   const o = step.output ?? {}
   if (step.id === 'plan') return <PlanView plan={o as PlanOut} />
   if (step.id.startsWith('review:')) return <ReviewView review={o as ReviewOut} />
-  if (o.code)
+  if (o.code || o.errors?.length > 0)
     return (
       <div className="step-detail">
         {o.errors?.length > 0 && <div className="warn-box">仍有語法問題：{o.errors.join('；')}</div>}
-        <MarkdownView markdown={'```' + (o.lang ?? 'mermaid') + '\n' + o.code + '\n```'} />
+        {o.code && <MarkdownView markdown={'```' + (o.lang ?? 'mermaid') + '\n' + o.code + '\n```'} />}
+      </div>
+    )
+  // Writer 撰寫、修改章節：顯示這一步完成後的章節內容
+  if (step.sectionBody)
+    return (
+      <div className="step-detail step-section">
+        <MarkdownView markdown={step.sectionBody} />
       </div>
     )
   return null

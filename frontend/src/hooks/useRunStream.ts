@@ -16,6 +16,8 @@ export interface StepState {
   output?: any
   error?: string
   live: string
+  /** 這一步寫完（或修改完）之後的章節內容，展開步驟時顯示。重播時也有，逐字輸出則沒有存 */
+  sectionBody?: string
 }
 
 export interface RunLog {
@@ -112,8 +114,17 @@ function reducer(state: RunStreamState, action: Action): RunStreamState {
     case 'plan_update':
       // 先確認大綱的工作繼續時，換成使用者確認過的大綱
       return { ...next, plan: (d.plan as PlanOut) ?? next.plan }
-    case 'section':
-      return { ...next, sections: { ...next.sections, [d.section_id]: { heading: d.heading, body: d.body } } }
+    case 'section': {
+      // Writer 每寫完、改完一節就送一次章節內容，記在剛結束的那一步，展開步驟時才看得到寫了什麼
+      const steps = next.steps.slice()
+      for (let i = steps.length - 1; i >= 0; i--) {
+        if (steps[i].status !== 'running' && steps[i].output?.section_id === d.section_id) {
+          steps[i] = { ...steps[i], sectionBody: d.body }
+          break
+        }
+      }
+      return { ...next, steps, sections: { ...next.sections, [d.section_id]: { heading: d.heading, body: d.body } } }
+    }
     case 'log':
       return { ...next, logs: [...next.logs, { agent: ev.agent, message: ev.message, level: d.level ?? 'info' }] }
     case 'run_paused':
