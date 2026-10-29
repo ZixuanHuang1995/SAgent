@@ -5,6 +5,7 @@
 
 用法（在專案根目錄）：
     uv run --project backend python scripts/review_consistency.py --db data-demo/sagent.db --run-id 6 --times 3 --out 結果.json
+    自訂範本的文件加 --templates-dir（例如 verify_real_model.py 的資料夾裡的 templates）
 """
 
 from __future__ import annotations
@@ -37,7 +38,7 @@ from sagent.services.markdown_doc import normalize_heading, parse_markdown, stri
 _KEY_RE = re.compile(r"[A-Z]{1,4}-\d{2,3}|「([^」]{2,30})」")
 
 
-def load_run(db_path: Path, run_id: int) -> tuple[RunInput, Plan, Draft]:
+def load_run(db_path: Path, run_id: int, templates_dir: Path | None = None) -> tuple[RunInput, Plan, Draft]:
     db = sqlite3.connect(f"file:{db_path.as_posix()}?mode=ro", uri=True)
     row = db.execute(
         "select r.requirement, r.plan, s.doc_type, s.title, p.name, p.description, ph.name, v.content "
@@ -49,7 +50,7 @@ def load_run(db_path: Path, run_id: int) -> tuple[RunInput, Plan, Draft]:
     if row is None:
         raise SystemExit(f"找不到 AI 工作 {run_id}，或它沒有產生版本")
     requirement, plan_json, doc_type, title, project, description, phase, content = row
-    template = get_template(load_templates(), doc_type)
+    template = get_template(load_templates(templates_dir), doc_type)
     planned = {normalize_heading(s["heading"]): s for s in (json.loads(plan_json or "{}").get("sections") or [])}
     sections, drafts = [], []
     for sec in parse_markdown(content).sections:
@@ -93,6 +94,7 @@ def same_issue(a: Issue, b: Issue) -> bool:
 
 
 async def main() -> int:
+    sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser()
     parser.add_argument("--db", type=Path, required=True)
     parser.add_argument("--run-id", type=int, required=True)
@@ -100,9 +102,10 @@ async def main() -> int:
     parser.add_argument("--model", default="qwen3.6:35b-a3b")
     parser.add_argument("--ollama", default="http://127.0.0.1:11434")
     parser.add_argument("--out", type=Path, default=Path("review-consistency.json"))
+    parser.add_argument("--templates-dir", type=Path, help="自訂範本的資料夾")
     args = parser.parse_args()
 
-    inp, plan, draft = load_run(args.db, args.run_id)
+    inp, plan, draft = load_run(args.db, args.run_id, args.templates_dir)
     print(f"文件：{inp.spec_title}（{inp.template.name}），{len(plan.sections)} 節", flush=True)
     llm = OllamaClient(args.ollama, args.model)
     results: list[list[Issue]] = []

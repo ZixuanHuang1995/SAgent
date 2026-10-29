@@ -127,7 +127,7 @@ export function SettingsPage() {
           <Field label="Ollama 網址">
             <input className="input" value={form.ollama_url} onChange={(e) => set('ollama_url', e.target.value)} />
           </Field>
-          <Field label="預設模型" hint="記憶體 32GB 以上建議用 MoE 模型（例如 qwen3.6:35b-a3b），在 CPU 上比 8B 快、品質也比較好；記憶體不夠再用 8B。">
+          <Field label="預設模型" hint="預設是 MoE 模型 qwen3.6:35b-a3b，在 CPU 上比 8B 快、品質也比較好，但需要約 22GB 記憶體；記憶體不到 32GB 改用 qwen3:8b。">
             <select className="input" value={form.default_model} onChange={(e) => set('default_model', e.target.value)}>
               {!models.data?.models.some((m) => m.name === form.default_model) && <option value={form.default_model}>{form.default_model}</option>}
               {models.data?.models.map((m) => (

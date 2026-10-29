@@ -15,7 +15,7 @@ _KEY = "app"
 
 class AppSettings(BaseModel):
     ollama_url: str = "http://127.0.0.1:11434"
-    default_model: str = "qwen3:8b"
+    default_model: str = "qwen3.6:35b-a3b"
     temperature: float = Field(0.4, ge=0, le=1.5)
     # 審查後最多修訂幾輪。0 = 只審查不修訂
     max_revisions: int = Field(1, ge=0, le=3)

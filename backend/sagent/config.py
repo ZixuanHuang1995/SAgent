@@ -58,7 +58,7 @@ def load_config(**overrides) -> Config:
         port=int(env.get("SAGENT_PORT", "8765")),
         llm_provider=env.get("SAGENT_LLM_PROVIDER", "ollama"),
         ollama_url=env.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
-        default_model=env.get("SAGENT_DEFAULT_MODEL", "qwen3:8b"),
+        default_model=env.get("SAGENT_DEFAULT_MODEL", "qwen3.6:35b-a3b"),
         plantuml_server=env.get("SAGENT_PLANTUML_SERVER", ""),
         plantuml_jar=Path(env.get("SAGENT_PLANTUML_JAR", ROOT_DIR / "tools" / "plantuml.jar")),
         java_cmd=env.get("SAGENT_JAVA", "java"),

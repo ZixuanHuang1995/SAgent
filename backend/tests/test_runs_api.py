@@ -102,8 +102,8 @@ def test_list_runs_and_templates_and_settings(client, project):
     assert templates[0]["key"] == "functional_spec"
     assert client.get("/api/agent/models").json()["provider"] == "fake"
 
-    s = client.put("/api/settings", json={"default_model": "qwen3.6:35b-a3b", "max_revisions": 2}).json()
-    assert s["default_model"] == "qwen3.6:35b-a3b" and s["max_revisions"] == 2
+    s = client.put("/api/settings", json={"default_model": "qwen3:8b", "max_revisions": 2}).json()
+    assert s["default_model"] == "qwen3:8b" and s["max_revisions"] == 2
     assert client.get("/api/settings").json()["max_revisions"] == 2
     assert client.put("/api/settings", json={"max_revisions": 9}).status_code == 422
     health = client.get("/api/health").json()
@@ -248,6 +248,9 @@ def test_plan_first_answers_reach_writer(client, project, fake_llms):
     wait_run(client, run_id)
     prompt = next(c for c in fake_llms[-1].calls if ":section:" in c["purpose"])["messages"][-1]["content"]
     assert "## 待確認問題的回答" in prompt and "答：約 200 人" in prompt
+    # 每一節的提示另外列出相關的回答，模型才不會只當成背景資料
+    prompts = [c["messages"][-1]["content"] for c in fake_llms[-1].calls if ":section:" in c["purpose"]]
+    assert any("使用者確認過的回答" in p and "答：約 200 人" in p.split("## 現在要寫的章節")[1] for p in prompts)
     assert "## 名詞表" in prompt and "- 客戶（角色）：在網站下單的人" in prompt
 
 

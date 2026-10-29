@@ -86,6 +86,7 @@ def consistency(results: list[dict]) -> dict:
 
 
 async def main() -> int:
+    sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser()
     parser.add_argument("--requirement-file", type=Path, required=True)
     parser.add_argument("--rephrased-file", type=Path, help="同樣的需求換一種說法或格式，量穩健性")

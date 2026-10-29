@@ -377,11 +377,42 @@ def _numbering(sec: SectionPlan) -> str:
     return "編號：這一節不新增編號，提到其他章節的項目時引用已經定義的編號"
 
 
+# 問句常見、跟內容無關的雙字詞，比對回答屬於哪一節時不算
+_QUESTION_GRAMS = {"哪些", "有哪", "尚未", "未決", "決定", "是否", "需要", "確認", "什麼", "如何", "多少", "要不", "不要"}
+
+
+def _grams(text: str) -> set[str]:
+    return {text[i : i + 2] for i in range(len(text) - 1) if re.fullmatch(r"[一-鿿]{2}", text[i : i + 2])}
+
+
+def related_answers(plan: Plan, sec: SectionPlan) -> list[tuple[str, str]]:
+    """跟這一節有關的「待確認問題的回答」。
+
+    回答只接在需求後面時，小模型常當成背景資料，內文還是照規劃時的要點寫（真模型驗證 D2）。
+    所以每一節的提示另外列出相關的回答：問題和回答的字詞跟這一節的標題、目標、要點重疊最多的那幾節；
+    跟哪一節都對不上時，每一節都列。
+    """
+    text = _grams(" ".join([sec.heading, sec.goal, *sec.key_points]))
+    result = []
+    for q, a in plan.answered:
+        grams = _grams(q + a) - _QUESTION_GRAMS
+        scores = [len(grams & _grams(" ".join([s.heading, s.goal, *s.key_points]))) for s in plan.sections]
+        best = max(scores, default=0)
+        if best == 0 or len(grams & text) == best:
+            result.append((q, a))
+    return result
+
+
 def section_messages(
     inp: RunInput, plan: Plan, sec: SectionPlan, number: int, known_items: list[str]
 ) -> list[dict[str, str]]:
     points = "\n".join(f"- {p}" for p in sec.key_points) or "- （依目標撰寫）"
     extra = ""
+    answers = related_answers(plan, sec)
+    if answers:
+        extra += "\n\n使用者確認過的回答（跟這一節有關的內容要照回答寫進內文，不要再標「待確認」）：\n" + "\n".join(
+            f"- 問：{q}\n  答：{a}" for q, a in answers
+        )
     if sec.diagrams:
         titles = "、".join(d.title for d in sec.diagrams)
         extra += f"\n這一節後面會附上圖：{titles}。內文可以寫「如下圖」，但不要自己畫。"

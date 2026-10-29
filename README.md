@@ -20,7 +20,7 @@
 |---|---|---|
 | Python 3.11 以上 + [uv](https://docs.astral.sh/uv/) | 後端 | 沒有 uv 也可以，見下面「不用 uv」 |
 | Node.js 20 以上 | 打包前端 | 只有第一次打包和開發時需要 |
-| [Ollama](https://ollama.com/) + 模型 | AI 撰寫 | 例如 `ollama pull qwen3:8b` |
+| [Ollama](https://ollama.com/) + 模型 | AI 撰寫 | 預設模型 `ollama pull qwen3.6:35b-a3b`（約 22GB 記憶體）；記憶體不到 32GB 用 `qwen3:8b` |
 
 ## 快速開始
 
@@ -254,7 +254,7 @@ AI 工作在 CPU 上很慢，一次只會執行一個，其他排隊。
 | qwen3.6:35b-a3b（MoE） | 約 30 tokens/秒 | 約 10 tokens/秒 | 32 分鐘（7 節、2 張圖、修訂 1 輪） |
 
 - qwen3:8b 那次是加速調整前跑的（第二輪審查還是讀整份文件），現在會再快一些。
-- MoE 模型每次只用一小部分參數計算，在 CPU 上反而比 8B 快，內容品質也比較好，但需要約 22GB 記憶體。記憶體 32GB 以上建議在「設定」把預設模型改成 MoE；8B 在速度和品質上都比較差，只適合記憶體不夠的機器。
+- MoE 模型每次只用一小部分參數計算，在 CPU 上反而比 8B 快，內容品質也比較好，所以預設模型是 qwen3.6:35b-a3b，但需要約 22GB 記憶體。記憶體不到 32GB 的機器，在「設定」把預設模型改成 qwen3:8b（速度和品質都比較差）。
 - 調整 Ollama 的執行緒數沒有明顯差別。
 - AI 工作結束後的「用量」表會分開列出讀提示詞和生成的時間。
 
@@ -300,7 +300,7 @@ Context 長度設 0 時由 Ollama 決定：有設環境變數 `OLLAMA_CONTEXT_LE
 | `SAGENT_HOST` / `SAGENT_PORT` | `127.0.0.1` / `8765` | 服務位址 |
 | `SAGENT_DATA_DIR` | `data/` | 資料目錄（資料庫、自訂範本） |
 | `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Ollama 網址 |
-| `SAGENT_DEFAULT_MODEL` | `qwen3:8b` | 預設模型 |
+| `SAGENT_DEFAULT_MODEL` | `qwen3.6:35b-a3b` | 預設模型 |
 | `SAGENT_LLM_PROVIDER` | `ollama` | 設成 `fake` 就是示範模式 |
 | `SAGENT_PLANTUML_SERVER` | 空白 | PlantUML 伺服器網址 |
 | `SAGENT_PLANTUML_JAR` | `tools/plantuml.jar` | plantuml.jar 位置 |

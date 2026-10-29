@@ -2,7 +2,7 @@
 
 用法（在專案根目錄）：
     uv run --project backend python scripts/run_pipeline.py --requirement-file 需求.txt --out 輸出.md
-    uv run --project backend python scripts/run_pipeline.py --model qwen3.6:35b-a3b --template use_case --requirement "..."
+    uv run --project backend python scripts/run_pipeline.py --model qwen3:8b --template use_case --requirement "..."
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ class PrintEmitter:
 
 async def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default="qwen3:8b")
+    parser.add_argument("--model", default="qwen3.6:35b-a3b")
     parser.add_argument("--ollama", default="http://127.0.0.1:11434")
     parser.add_argument("--template", default="functional_spec")
     parser.add_argument("--title", default="測試文件")

@@ -6,7 +6,7 @@ from sagent.agents.doc_templates import load_templates
 from sagent.agents.fake_llm import FakeLLM
 from sagent.agents.pipeline import SpecPipeline
 from sagent.agents.planner import Planner
-from sagent.agents.prompts import PARTIAL_REVIEW_LIMITS, REVIEW_LIMITS
+from sagent.agents.prompts import PARTIAL_REVIEW_LIMITS, REVIEW_LIMITS, related_answers
 from sagent.agents.reviewer import (
     marked_points,
     mismatched_ids,
@@ -756,3 +756,13 @@ def test_requirement_gaps():
     items = [p.item for p in requirement_gaps(requirement, draft)]
     # 「3 天」寫成「3 個日曆天」也算有；10MB 沒寫到；統計報表那一句文件完全沒提到；引言行不算
     assert items == ["需求提到「10MB」", "需求：主管每個月要看各類故障的統計報表和匯出 Excel。"]
+
+
+def test_related_answers_go_to_matching_sections():
+    bg = SectionPlan("S1", "背景與目標", "說明要解決的問題", ["請假流程紙本化很慢"])
+    fr = SectionPlan("S2", "功能需求", "列出功能需求", ["員工填寫假別、起訖日期和事由"])
+    plan = Plan("請假", "", [bg, fr])
+    plan.answered = [("有哪些假別尚未決定？", "假別只有特休、病假、事假三種。"), ("上線時間？", "明年一月")]
+    # 「假別」只對得上功能需求；上線時間跟哪一節都對不上，每一節都列
+    assert [q for q, _ in related_answers(plan, fr)] == ["有哪些假別尚未決定？", "上線時間？"]
+    assert [q for q, _ in related_answers(plan, bg)] == ["上線時間？"]
