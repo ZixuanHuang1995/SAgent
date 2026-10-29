@@ -3,9 +3,9 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { api, type RunMode, type SpecDetail } from '../api'
-import { formatDuration, relativeTime, RUN_STATUS, runDuration } from '../format'
+import { formatDuration, relativeTime, requirementHelp, RUN_STATUS, RUN_TIME_TEXT, runDuration } from '../format'
 import { useRunStream } from '../hooks/useRunStream'
-import { keys, useHealth, useRuns, useTemplateCategories, useTemplates } from '../queries'
+import { keys, useHealth, useRuns, useTemplates } from '../queries'
 import { Icon } from './icons'
 import { RunProgress } from './RunProgress'
 import { RunDetailModal } from './RunDetail'
@@ -174,14 +174,12 @@ function RunForm({ spec }: { spec: SpecDetail }) {
   const qc = useQueryClient()
   const toast = useToast()
   const templates = useTemplates()
-  const categories = useTemplateCategories()
   const health = useHealth()
   const fileInput = useRef<HTMLInputElement>(null)
 
   const hasRealContent = spec.head_version_no > 0 && spec.head?.source !== 'template'
   const [mode, setMode] = useState<RunMode>(hasRealContent ? 'revise' : 'draft')
   const [requirement, setRequirement] = useState(() => loadDraft(spec.id))
-  const [docType, setDocType] = useState(spec.doc_type)
   // 預設先確認大綱：規劃只花幾分鐘，先回答待確認問題，寫出來的內容比較準
   const [planFirst, setPlanFirst] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -190,7 +188,9 @@ function RunForm({ spec }: { spec: SpecDetail }) {
   useEffect(() => saveDraft(spec.id, requirement), [spec.id, requirement])
 
   const ollamaDown = health.data?.llm_provider === 'ollama' && health.data && !health.data.ollama.reachable
-  const template = templates.data?.find((t) => t.key === docType)
+  // 文件類型建立後不能改，AI 一律照這份 Spec 的範本寫
+  const template = templates.data?.find((t) => t.key === spec.doc_type)
+  const help = requirementHelp(template, mode)
 
   const start = async () => {
     if (!requirement.trim()) {
@@ -201,7 +201,7 @@ function RunForm({ spec }: { spec: SpecDetail }) {
     try {
       // 模型、圖表、修訂輪數不在這裡選，後端照「設定」頁的值
       const options = { plan_first: mode === 'draft' && planFirst }
-      await api.createRun({ spec_id: spec.id, mode, requirement, doc_type: docType, options })
+      await api.createRun({ spec_id: spec.id, mode, requirement, doc_type: spec.doc_type, options })
       toast('已開始 AI 工作', 'success')
       qc.invalidateQueries({ queryKey: keys.spec(spec.id) })
       qc.invalidateQueries({ queryKey: ['runs'] })
@@ -227,7 +227,7 @@ function RunForm({ spec }: { spec: SpecDetail }) {
         <div className="info-box small">
           三個 agent 合作：<b className="c-planner">Planner</b> 規劃大綱 → <b className="c-writer">Writer</b> 逐節撰寫並畫圖 →{' '}
           <b className="c-reviewer">Reviewer</b> 審查，有問題再交回 Writer 修訂。結果會存成新版本，舊版本都保留。
-          <p className="mt-sm">本機 CPU 推論一份完整文件約需 15～60 分鐘。可以離開這個頁面，完成後會自動存成新版本。</p>
+          <p className="mt-sm">{RUN_TIME_TEXT}。可以離開這個頁面，完成後會自動存成新版本。</p>
         </div>
       )}
 
@@ -246,7 +246,7 @@ function RunForm({ spec }: { spec: SpecDetail }) {
       </div>
       <div className="muted small mb-sm">
         {mode === 'draft'
-          ? '依需求從頭寫一份完整文件（目前內容會被新版本取代，但仍保留在版本歷程）。'
+          ? `依需求照「${template?.name ?? spec.doc_type}」的章節從頭寫一份完整文件（目前內容會被新版本取代，但仍保留在版本歷程）。`
           : '在目前內容上修改：只改跟需求有關的章節，其他章節保持不變。'}
       </div>
 
@@ -254,7 +254,7 @@ function RunForm({ spec }: { spec: SpecDetail }) {
         label={mode === 'draft' ? '需求內容' : '修訂需求'}
         hint={
           <span className="row gap-sm">
-            <span>可以貼會議紀錄、客戶需求、條列重點。寫得越具體，結果越好。</span>
+            <span>{help.hint}</span>
             <button className="link-btn" type="button" onClick={() => fileInput.current?.click()}>
               從檔案載入
             </button>
@@ -263,7 +263,7 @@ function RunForm({ spec }: { spec: SpecDetail }) {
       >
         <textarea
           className="input textarea"
-          rows={9}
+          rows={7}
           value={requirement}
           onChange={(e) => setRequirement(e.target.value)}
           onKeyDown={(e) => {
@@ -272,11 +272,7 @@ function RunForm({ spec }: { spec: SpecDetail }) {
               start()
             }
           }}
-          placeholder={
-            mode === 'draft'
-              ? '例如：\n公司要做員工請假系統，取代紙本流程。\n1. 員工在網頁申請請假，選假別、日期、代理人\n2. 主管審核，超過 3 天要經理再審\n3. 自動計算剩餘特休…'
-              : '例如：\n請假要支援「半天」為單位，並且新增「補休」假別。'
-          }
+          placeholder={help.placeholder}
         />
       </Field>
       <input
@@ -290,25 +286,6 @@ function RunForm({ spec }: { spec: SpecDetail }) {
           e.target.value = ''
         }}
       />
-
-      <Field label="文件類型" hint={template?.description}>
-        <select className="input" value={docType} onChange={(e) => setDocType(e.target.value)}>
-          {categories.data?.map((c) => {
-            const list = templates.data?.filter((t) => t.category === c.key) ?? []
-            return (
-              list.length > 0 && (
-                <optgroup key={c.key} label={c.name}>
-                  {list.map((t) => (
-                    <option key={t.key} value={t.key}>
-                      {t.name}
-                    </option>
-                  ))}
-                </optgroup>
-              )
-            )
-          })}
-        </select>
-      </Field>
 
       {mode === 'draft' && (
         <label className="check-row mb-sm">
@@ -330,7 +307,8 @@ function RunForm({ spec }: { spec: SpecDetail }) {
         <button className="btn btn-primary btn-block" onClick={start} disabled={busy || !requirement.trim()} title="Ctrl+Enter">
           {busy ? <Spinner small /> : '開始 AI 撰寫'}
         </button>
-        <div className="muted small run-form-note">約需 15～60 分鐘，可以離開頁面・在需求欄按 Ctrl+Enter 也能開始</div>
+        {/* 一行就好，固定在底部的區塊越矮，上面的欄位越不會被蓋住 */}
+        <div className="muted small run-form-note">{RUN_TIME_TEXT}，可以離開頁面</div>
       </div>
     </section>
   )

@@ -43,7 +43,7 @@ const STATUS_TONE: Record<SpecStatus, 'neutral' | 'amber' | 'green' | 'red'> = {
 }
 
 const PANEL_TABS: { key: PanelTab; icon: IconName; label: string }[] = [
-  { key: 'agent', icon: 'bot', label: 'AI 代理' },
+  { key: 'agent', icon: 'bot', label: 'AI 撰寫' },
   // 只有 AI 審查列出項目的文件才有這個分頁
   { key: 'review', icon: 'review', label: '審查' },
   { key: 'versions', icon: 'history', label: '版本' },
@@ -382,7 +382,7 @@ export function SpecPage() {
               title={`最近一次 AI 審查還有 ${review.open} 項沒處理，按一下查看`}
               onClick={openReview}
             >
-              <Icon name="review" size={12} /> 待確認 {review.open}
+              <Icon name="review" size={12} /> 待處理 {review.open}
             </button>
           )}
           <span className="spacer" />
@@ -536,7 +536,14 @@ export function SpecPage() {
         </div>
       </div>
 
-      {data.archived && <div className="banner banner-warn">這份 Spec 已封存，不能修改。可以從「⋯」取消封存。</div>}
+      {data.archived && (
+        <div className="banner banner-warn">
+          這份 Spec 已封存，不能修改。
+          <button className="btn btn-sm" onClick={async () => { await api.unarchiveSpec(specId); refreshAll() }}>
+            取消封存
+          </button>
+        </div>
+      )}
       {data.active_run_id && (
         <div className="banner banner-info">
           AI 正在撰寫這份文件，完成後會存成新版本。
@@ -600,8 +607,8 @@ export function SpecPage() {
               ) : (
                 <Empty title={data.active_run_id ? 'AI 撰寫中' : '文件是空的'}>
                   {data.active_run_id
-                    ? '完成後內容會出現在這裡，可以在右邊的「AI 代理」看進度。'
-                    : '可以直接編輯，或在右邊的「AI 代理」輸入需求讓 AI 撰寫。'}
+                    ? '完成後內容會出現在這裡，可以在右邊的「AI 撰寫」看進度。'
+                    : '可以直接編輯，或在右邊的「AI 撰寫」輸入需求。'}
                 </Empty>
               )}
             </div>

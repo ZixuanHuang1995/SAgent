@@ -2,11 +2,11 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router'
+import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate, useParams } from 'react-router'
 import { QuickSwitcher } from '../components/QuickSwitcher'
 import { useMediaQuery, usePersistent, usePersistentNumber } from '../hooks/layout'
 import { api, type Phase, type Spec } from '../api'
-import { AI_STATUS, SPEC_STATUS } from '../format'
+import { AI_STATUS, SPEC_STATUS, requirementHelp } from '../format'
 import { keys, useProjectTree, useTemplateCategories, useTemplates } from '../queries'
 import {
   CategoryBadge,
@@ -42,7 +42,11 @@ export function ProjectLayout() {
   const [showArchived, setShowArchived] = useState(false)
   // 寬螢幕：可以收合成一排圖示（記住選擇）；窄螢幕：平常收合，展開時蓋在內容上面
   const narrow = useMediaQuery('(max-width: 800px)')
-  const [collapsed, setCollapsed] = usePersistent<'0' | '1'>('sagent:sidebar-collapsed', '0')
+  // Spec 頁要放編輯區、預覽區和右側欄，螢幕不到 1440 寬時左側欄預設收合。Spec 頁和其他頁面分開記
+  const onSpec = useMatch('/p/:projectId/s/:specId') !== null
+  const pageCollapsed = usePersistent<'0' | '1'>('sagent:sidebar-collapsed', '0')
+  const specCollapsed = usePersistent<'0' | '1'>('sagent:sidebar-collapsed-spec', window.innerWidth < 1440 ? '1' : '0')
+  const [collapsed, setCollapsed] = onSpec ? specCollapsed : pageCollapsed
   const [sidebarWidth, setSidebarWidth] = usePersistentNumber('sagent:sidebar-width', SIDEBAR_DEFAULT, SIDEBAR_MIN, SIDEBAR_MAX)
   const sidebarStyle = { '--sidebar-w': `${sidebarWidth}px` } as CSSProperties
   const sidebarEl = useRef<HTMLElement>(null)
@@ -115,6 +119,9 @@ export function ProjectLayout() {
                 <Icon name={n.icon} size={18} />
               </NavLink>
             ))}
+            <button className="icon-btn rail-btn" title="切換到其他 Spec（Ctrl+K）" aria-label="切換到其他 Spec" onClick={() => setSwitcher(true)}>
+              <Icon name="search" size={18} />
+            </button>
             {!narrow && (
               <button className="icon-btn rail-btn rail-expand" title="展開側欄" aria-label="展開側欄" onClick={expand}>
                 <Icon name="expand" size={18} />
@@ -348,7 +355,11 @@ function SpecLink({ projectId, spec }: { projectId: number; spec: Spec }) {
   const category = templates.data?.find((t) => t.key === spec.doc_type)?.category
   const tag = category && category !== 'feature' ? categories.data?.find((c) => c.key === category)?.name : undefined
   return (
-    <NavLink to={`/p/${projectId}/s/${spec.id}`} className="tree-spec" title={spec.title}>
+    <NavLink
+      to={`/p/${projectId}/s/${spec.id}`}
+      className="tree-spec"
+      title={spec.head_version_no > 0 ? `${spec.title}（v${spec.head_version_no}）` : spec.title}
+    >
       <span className={`status-dot status-${spec.status}`} title={SPEC_STATUS[spec.status]} />
       {tag && <span className={`tree-spec-cat cat-${category}`}>{tag}</span>}
       <span className="tree-spec-title">{spec.title}</span>
@@ -360,7 +371,6 @@ function SpecLink({ projectId, spec }: { projectId: number; spec: Spec }) {
           {spec.review.open}
         </span>
       )}
-      <span className="tree-spec-ver">{spec.head_version_no > 0 ? `v${spec.head_version_no}` : '—'}</span>
     </NavLink>
   )
 }
@@ -438,6 +448,7 @@ export function NewSpecDialog(props: {
 
   const ready = title.trim() && phaseId && template && (init !== 'ai' || requirement.trim())
   const current = categories.data?.find((c) => c.key === category)
+  const help = requirementHelp(template)
 
   if (!category) {
     return (
@@ -542,21 +553,8 @@ export function NewSpecDialog(props: {
         </div>
       </Field>
       {init === 'ai' && (
-        <Field
-          label="需求內容"
-          hint={
-            category === 'idea'
-              ? '寫下你的想法就好，幾句話也可以：想解決什麼問題、給誰用、大概想怎麼做。AI 會整理成構想提案，包含使用者故事和怎樣算成功，不清楚的地方列成待確認事項。'
-              : template?.style === 'decision'
-                ? '寫清楚要做什麼決定、有哪些限制、用什麼標準比較，已經想到的方案也可以列出來（例如：「搜尋功能要用資料庫全文檢索還是另外架搜尋引擎，三個月內上線，只有兩個人維護」）。AI 會補充方案、做比較表並提出建議。'
-              : template?.style === 'experiment'
-                ? '寫清楚要評估的工具或做法、想知道的事、可以參與的人和時間、怎樣算成功（例如：「評估 AI 程式碼審查工具，三個團隊參加 8 週，PR 前置時間要縮短 20% 以上」）。AI 會設計假設、指標、分組、流程和分析方法。'
-                : category === 'algorithm'
-                ? '寫清楚要解決的問題、輸入和輸出、限制條件和效能要求（例如：「解 9×9 數獨，題目用 81 個字元表示，0 是空格，每題要在 1 秒內解完」）。AI 會設計解法、寫虛擬碼、分析複雜度並列出測試案例。'
-                :'可以貼會議紀錄、客戶需求、條列重點。AI 會依「文件類型」的章節規劃並撰寫。'
-          }
-        >
-          <textarea className="input textarea" rows={8} value={requirement} onChange={(e) => setRequirement(e.target.value)} />
+        <Field label="需求內容" hint={help.hint}>
+          <textarea className="input textarea" rows={8} value={requirement} placeholder={help.placeholder} onChange={(e) => setRequirement(e.target.value)} />
         </Field>
       )}
       {init === 'ai' && (
@@ -627,8 +625,8 @@ function PhaseDialog({ projectId, phase, onClose }: { projectId: number; phase: 
         </>
       }
     >
-      <Field label="名稱" hint="例如：需求分析、系統設計、第二期">
-        <input className="input" autoFocus value={name} onChange={(e) => setName(e.target.value)} />
+      <Field label="名稱">
+        <input className="input" autoFocus value={name} placeholder="例如：需求分析、系統設計、第二期" onChange={(e) => setName(e.target.value)} />
       </Field>
       <Field label="說明（選填）">
         <textarea className="input textarea" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />

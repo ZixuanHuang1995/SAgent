@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { PlanOut, RunContinue } from '../api'
-import { termsToText, textToTerms } from '../format'
+import { TERMS_FORMAT, termsToText, textToTerms } from '../format'
 import { Field, Spinner } from './ui'
 
 export function PlanConfirm(props: { plan: PlanOut; onContinue: (body: RunContinue) => Promise<void>; onCancel: () => void }) {
@@ -52,7 +52,7 @@ export function PlanConfirm(props: { plan: PlanOut; onContinue: (body: RunContin
         </>
       )}
 
-      <Field label="名詞表" hint="一行一個：名稱（類型）：說明。每一節都會用這些名稱，例如狀態名稱要在這裡定好。">
+      <Field label="名詞表" hint={`${TERMS_FORMAT}這份文件的每一節都會用這些名稱，例如狀態名稱要在這裡定好。`}>
         <textarea className="input textarea" rows={Math.min(Math.max((plan.terms?.length ?? 0) + 1, 3), 10)} value={terms} onChange={(e) => setTerms(e.target.value)} />
       </Field>
 

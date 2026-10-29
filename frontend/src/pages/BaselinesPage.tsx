@@ -235,8 +235,8 @@ function CreateBaselineDialog({ projectId, onClose }: { projectId: number; onClo
         </>
       }
     >
-      <Field label="名稱" hint="例如：需求凍結 v1.0、客戶確認版">
-        <input className="input" autoFocus value={name} onChange={(e) => setName(e.target.value)} />
+      <Field label="名稱">
+        <input className="input" autoFocus value={name} placeholder="例如：需求凍結 v1.0、客戶確認版" onChange={(e) => setName(e.target.value)} />
       </Field>
       <Field label="說明（選填）">
         <textarea className="input textarea" rows={3} value={note} onChange={(e) => setNote(e.target.value)} />

@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { api, type PlanTerm } from '../api'
-import { AI_STATUS, relativeTime, RUN_STATUS, SPEC_STATUS, termsToText, textToTerms } from '../format'
+import { AI_STATUS, relativeTime, RUN_STATUS, SPEC_STATUS, TERMS_FORMAT, termsToText, textToTerms } from '../format'
 import { keys, useBaselines, useProjectTree, useRuns, useTemplateCategories, useTemplates } from '../queries'
 import { Badge, CategoryBadge, ConfirmDialog, Empty, errorText, Field, Menu, MenuItem, MenuSeparator, Modal, Skeleton, useToast } from '../components/ui'
 import { NewSpecDialog } from './ProjectLayout'
@@ -128,7 +128,7 @@ export function ProjectHome() {
                   <th>標題</th>
                   <th>類型</th>
                   <th>狀態</th>
-                  <th title="最近一次 AI 審查還沒處理的項目">待確認</th>
+                  <th title="最近一次 AI 審查還沒處理的項目">待處理</th>
                   <th>版本</th>
                   <th>更新</th>
                 </tr>
@@ -143,11 +143,17 @@ export function ProjectHome() {
                       <DocTypeCell docType={s.doc_type} />
                     </td>
                     <td>
-                      <span className={`status-dot status-${s.status}`} /> {SPEC_STATUS[s.status]}
+                      <span className="row gap-sm">
+                        <span>
+                          <span className={`status-dot status-${s.status}`} /> {SPEC_STATUS[s.status]}
+                        </span>
+                        {s.ai_status && <span className={`badge badge-ai ai-${s.ai_status}`}>{AI_STATUS[s.ai_status]}</span>}
+                      </span>
                     </td>
                     <td>
+                      {/* AI 工作進行中時，上一次審查的數字已經不準 */}
                       {s.ai_status ? (
-                        <span className={`badge badge-ai ai-${s.ai_status}`}>{AI_STATUS[s.ai_status]}</span>
+                        <span className="muted" title="AI 工作完成後會更新">—</span>
                       ) : s.review && s.review.open > 0 ? (
                         <Badge tone="amber">{s.review.open}</Badge>
                       ) : s.review ? (
@@ -241,8 +247,8 @@ function EditProjectDialog(props: { projectId: number; initial: { name: string; 
       <Field label="專案名稱">
         <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
       </Field>
-      <Field label="專案代碼">
-        <input className="input" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
+      <Field label="專案代碼" hint="簡短的英文代號">
+        <input className="input" value={form.code} placeholder="例如：HR、ORD" onChange={(e) => setForm({ ...form, code: e.target.value })} />
       </Field>
       <Field label="說明" hint="AI 撰寫時會參考這段說明">
         <textarea className="input textarea" rows={4} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
@@ -281,7 +287,7 @@ function GlossaryDialog(props: { projectId: number; initial: PlanTerm[]; onClose
     >
       <Field
         label={`名詞（${terms.length} / 40）`}
-        hint="一行一個：名稱（類型）：說明。類型用角色、狀態、資料或其他。AI 撰寫和修訂時都會沿用這些名稱，例如狀態名稱在這裡定好，每份文件就會寫一樣的。"
+        hint={`${TERMS_FORMAT}這個專案的每份文件，AI 撰寫和修訂時都會用這些名稱，例如狀態名稱在這裡定好，文件之間才不會說法不一樣。`}
       >
         <textarea
           className="input textarea"

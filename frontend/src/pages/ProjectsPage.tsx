@@ -43,7 +43,7 @@ export function ProjectsPage() {
                 <input
                   className="input"
                   type="search"
-                  placeholder="搜尋名稱、代碼、說明"
+                  placeholder="搜尋名稱、代碼、說明…"
                   aria-label="搜尋專案"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
@@ -240,8 +240,8 @@ function CreateProjectDialog({ onClose }: { onClose: () => void }) {
       <Field label="專案名稱">
         <input className="input" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：員工請假系統" />
       </Field>
-      <Field label="專案代碼（選填）" hint="簡短的英文代號，例如 HR、ORD">
-        <input className="input" value={code} maxLength={40} onChange={(e) => setCode(e.target.value)} />
+      <Field label="專案代碼（選填）" hint="簡短的英文代號">
+        <input className="input" value={code} maxLength={40} placeholder="例如：HR、ORD" onChange={(e) => setCode(e.target.value)} />
       </Field>
       <Field label="說明（選填）" hint="AI 撰寫時會參考這段說明">
         <textarea className="input textarea" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />

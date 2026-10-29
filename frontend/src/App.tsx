@@ -1,5 +1,6 @@
 import { createBrowserRouter, Link, Outlet, RouterProvider, useMatch, useParams, useRouteError } from 'react-router'
 import { Icon } from './components/icons'
+import { RunIndicator } from './components/RunIndicator'
 import logoUrl from './logo.svg'
 import { useHealth, useProjectTree } from './queries'
 import { useThemePref, type ThemePref } from './theme'
@@ -17,7 +18,7 @@ function HealthIndicator() {
   const h = health.data
   if (h.llm_provider === 'fake')
     return (
-      <Link to="/settings" className="health health-warn" title="SAGENT_LLM_PROVIDER=fake：不接模型，用固定內容展示流程">
+      <Link to="/settings" className="health health-warn" title="沒有接 AI 模型：AI 撰寫會用固定的示範內容，幾秒就完成。要接模型請不加 --fake-llm 重新啟動">
         示範模式（假模型）
       </Link>
     )
@@ -87,6 +88,7 @@ function Shell() {
         </Link>
         <Breadcrumb />
         <span className="spacer" />
+        <RunIndicator />
         <HealthIndicator />
         <ThemeToggle />
         <Link to="/settings" className="topbar-link">

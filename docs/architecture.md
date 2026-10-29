@@ -254,7 +254,7 @@ Reviewer 只做兩件事，不評論寫得好不好、完不完整，也不打�
 - 模型寫的每個錯誤要選 `kind`：`format` 格式、`conflict` 章節之間不一致、`requirement` 跟需求矛盾、`unstated` 需求沒提到。真模型常把「需求沒提到」寫成錯誤（data-demo 第一輪約四分之一），所以 `unstated` 由程式轉成 `review_points`，不觸發修訂。模型常在 `review_points` 已經用別的話列過同一件事，同一節引號「」裡的詞一樣就不重複列。舊資料沒有 `kind` 照樣算錯誤。
 - 修訂後的再審查如果模型沒給出可用的結果，修改過的章節上一輪的錯誤改列 `review_points`（註明沒有重新審查），不會因為少了模型意見就看起來像通過。
 - 各種文件（規格、建議、構想、技術決策、演算法、實驗）共用 `reviewer_system()`，差別只在 `_REVIEW_STYLE_NOTE` 的一行說明。
-- 處理進度（`services/reviews.py`）：每份 Spec 看最近一次成功的 AI 工作的最後一次審查。使用者在 Spec 頁的「審查」分頁逐項標成已處理，存在 `agent_runs.review_checked`，項目代號是在 `issues`、`review_points` 裡的位置（`issue:0`、`point:3`），審查結果存好後不會再改，所以位置固定。專案清單（`GET /api/projects/{id}`）和單一 Spec 的 `review` 欄位帶項目總數和沒處理的數量，畫面上的「待確認 N」用這個。
+- 處理進度（`services/reviews.py`）：每份 Spec 看最近一次成功的 AI 工作的最後一次審查。使用者在 Spec 頁的「審查」分頁逐項標成已處理，存在 `agent_runs.review_checked`，項目代號是在 `issues`、`review_points` 裡的位置（`issue:0`、`point:3`），審查結果存好後不會再改，所以位置固定。專案清單（`GET /api/projects/{id}`）和單一 Spec 的 `review` 欄位帶項目總數和沒處理的數量，畫面上的「待處理 N」用這個（不叫「待確認」，免得跟文件裡標「待確認」的地方搞混）。
 
 ### 4.9 技術決策、演算法設計和實驗設計文件
 

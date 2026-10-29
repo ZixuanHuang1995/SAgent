@@ -20,7 +20,7 @@ export function RunsPage() {
         </div>
       </div>
       {runs.isLoading && <div className="card"><Skeleton lines={5} title={false} /></div>}
-      {runs.data?.length === 0 && <Empty title="還沒有 AI 工作">在任何一份 Spec 的「AI 代理」輸入需求就能開始。</Empty>}
+      {runs.data?.length === 0 && <Empty title="還沒有 AI 工作">在任何一份 Spec 右邊的「AI 撰寫」輸入需求就能開始。</Empty>}
       {runs.data && runs.data.length > 0 && (
         <section className="card">
           <table className="table">

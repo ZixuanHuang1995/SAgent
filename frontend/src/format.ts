@@ -1,6 +1,6 @@
 // 顯示用的文字和格式
 
-import type { ActiveRunStatus, PlanTerm, RunStatus, SpecStatus, VersionMeta } from './api'
+import type { ActiveRunStatus, PlanTerm, RunStatus, SpecStatus, Template, VersionMeta } from './api'
 
 export const SPEC_STATUS: Record<SpecStatus, string> = {
   draft: '草稿',
@@ -144,4 +144,48 @@ export function textToTerms(text: string): PlanTerm[] {
       const m = line.match(/^(.+?)(?:（(.+?)）)?(?:[：:](.*))?$/)
       return { name: (m?.[1] ?? line).trim(), kind: (m?.[2] ?? '').trim(), note: (m?.[3] ?? '').trim() }
     })
+}
+
+/** 名詞表的格式說明，專案詞彙表和確認大綱的名詞表共用 */
+export const TERMS_FORMAT = '一行一個：名稱（類型）：說明。類型用角色、狀態、資料或其他。'
+
+/** AI 撰寫一份文件大概要多久（CPU 推論），各處的說明都用這個 */
+export const RUN_TIME_TEXT = '本機 CPU 上一份文件約 30～70 分鐘'
+
+const REQUIREMENT_HELP: Record<Template['style'], { hint: string; placeholder: string }> = {
+  idea: {
+    hint: '寫下你的想法就好，幾句話也可以：想解決什麼問題、給誰用、大概想怎麼做。AI 會整理成構想提案，不清楚的地方列成待確認事項。',
+    placeholder: '例如：\n員工常找不到空的會議室，想做一個手機就能查、能預約的功能，先給總部試用。',
+  },
+  decision: {
+    hint: '寫清楚要做什麼決定、有哪些限制、用什麼標準比較，已經想到的方案也列出來。AI 會補充方案、做比較表並提出建議。',
+    placeholder: '例如：\n搜尋功能要用資料庫全文檢索，還是另外架搜尋引擎？三個月內上線，只有兩個人維護。',
+  },
+  experiment: {
+    hint: '寫清楚要評估的工具或做法、想知道的事、可以參與的人和時間、怎樣算成功。AI 會設計假設、指標、分組、流程和分析方法。',
+    placeholder: '例如：\n評估 AI 程式碼審查工具，三個團隊參加 8 週，PR 前置時間要縮短 20% 以上才算有效。',
+  },
+  algorithm: {
+    hint: '寫清楚要解決的問題、輸入和輸出、限制條件和效能要求。AI 會設計解法、寫虛擬碼、分析複雜度並列出測試案例。',
+    placeholder: '例如：\n解 9×9 數獨，題目用 81 個字元表示，0 是空格，每題要在 1 秒內解完。',
+  },
+  advice: {
+    hint: '寫清楚給誰用、在什麼情況下用、現在哪裡不好用。AI 會提出畫面和操作上的建議，每條都有理由和優先順序。',
+    placeholder: '例如：\n報修畫面給現場員工用手機操作，常常邊走邊填，希望 1 分鐘內就能送出。',
+  },
+  spec: {
+    hint: '可以貼會議紀錄、客戶需求、條列重點，寫得越具體越好。',
+    placeholder:
+      '例如：\n公司要做員工請假系統，取代紙本流程。\n1. 員工在網頁申請請假，選假別、日期、代理人\n2. 主管審核，超過 3 天要經理再審\n3. 自動計算剩餘特休…',
+  },
+}
+
+/** 需求欄的說明和 placeholder，依文件類型的寫作規則給不同的建議。新增 Spec 和 AI 撰寫表單共用 */
+export function requirementHelp(template: Template | undefined, mode: 'draft' | 'revise' = 'draft') {
+  if (mode === 'revise')
+    return {
+      hint: '寫要改什麼就好，例如新增哪條規則、哪一節要調整、哪裡寫錯了。',
+      placeholder: '例如：\n請假要支援「半天」為單位，並且新增「補休」假別。',
+    }
+  return REQUIREMENT_HELP[template?.style ?? 'spec'] ?? REQUIREMENT_HELP.spec
 }

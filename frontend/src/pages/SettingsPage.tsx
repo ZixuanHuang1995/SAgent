@@ -146,7 +146,7 @@ export function SettingsPage() {
             </Field>
             <Field
               label="Context 長度"
-              hint={`0 = 用 Ollama 的設定（沒有 GPU 時預設只有 4096）。改了會讓 Ollama 重新載入模型${actualCtx ? `。${actualCtx}` : ''}`}
+              hint={`0 = 用 Ollama 的設定，通常只有 4096，長文件會不夠用。改了 Ollama 要重新載入模型，下一次 AI 撰寫會慢一點${actualCtx ? `。${actualCtx}` : ''}`}
             >
               <input className="input" type="number" step={1024} min={0} value={form.num_ctx} onChange={(e) => set('num_ctx', Number(e.target.value))} />
             </Field>
@@ -183,7 +183,7 @@ export function SettingsPage() {
         <section className="card mt">
           <div className="card-title">文件範本</div>
           <p className="muted small">
-            AI 撰寫時，Planner 會參考範本的建議章節。可以在 <code>data/templates/</code> 放自己的 YAML 範本（格式同 <code>backend/sagent/doc_templates/</code>），key 相同時會取代內建範本，不用重新啟動。
+            AI 撰寫時，Planner 會參考範本的建議章節。可以在 <code>data/templates/</code> 放自己的 YAML 範本（格式見 README 的「自訂範本」），key 相同時會取代內建範本，不用重新啟動。
           </p>
           {templates.data?.map((t) => (
             <details key={t.key} className="template-item">
