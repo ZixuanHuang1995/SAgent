@@ -207,7 +207,22 @@ function ProjectSidebar(props: {
         ))}
       </nav>
 
-      <input className="input input-sm sidebar-search" placeholder="搜尋標題或內容…" value={q} onChange={(e) => setQ(e.target.value)} />
+      <div className="sidebar-search">
+        <input
+          className="input input-sm"
+          placeholder="搜尋標題或內容…"
+          aria-label="搜尋標題或內容"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        {/* 快速切換的提示放在搜尋框裡，找 Spec 只有一個地方。Ctrl+K 在哪裡按都可以 */}
+        {!q && (
+          <button className="search-kbd" onClick={props.onOpenSwitcher} title="快速切換到其他 Spec（Ctrl+K）" aria-label="快速切換到其他 Spec">
+            <kbd>Ctrl</kbd>
+            <kbd>K</kbd>
+          </button>
+        )}
+      </div>
 
       {debounced ? (
         <div className="tree">
@@ -282,20 +297,19 @@ function ProjectSidebar(props: {
               </div>
             )
           })}
+          {/* 放在清單最後，新的階段就出現在這裡 */}
+          <button className="tree-add" onClick={() => setPhaseDialog('new')}>
+            <Icon name="plus" size={14} /> 新增階段
+          </button>
         </div>
       )}
 
+      {/* 底部只放不常用的：已封存、收合 */}
       <div className="sidebar-foot">
-        <button className="btn btn-sm" onClick={() => setPhaseDialog('new')}>
-          + 新增階段
+        <button className="icon-btn sidebar-archived" onClick={props.onShowArchived} title="查看已封存的 Spec，可以取消封存">
+          <Icon name="archive" size={14} /> 已封存
         </button>
-        <button className="link-btn small" onClick={props.onShowArchived}>
-          已封存的 Spec
-        </button>
-        <button className="link-btn small muted-link" onClick={props.onOpenSwitcher} title="快速切換到其他 Spec">
-          <kbd>Ctrl</kbd>+<kbd>K</kbd> 快速切換
-        </button>
-        {/* 放在底部右邊，不佔上面選項的寬度；收合後的展開按鈕也在底部 */}
+        {/* 收合後的展開按鈕也在底部，兩個位置一樣 */}
         <button className="icon-btn sidebar-collapse" title="收合側欄" aria-label="收合側欄" onClick={props.onCollapse}>
           <Icon name="collapse" />
         </button>

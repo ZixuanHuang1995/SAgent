@@ -1278,7 +1278,67 @@ details.card[open] > summary::before {
   font-weight: var(--fw-semibold);
 }
 .sidebar-search {
+  position: relative;
   margin-bottom: 8px;
+}
+.sidebar-search .input {
+  padding-right: 64px;
+}
+/* 搜尋框右邊的 Ctrl K 提示，按了打開快速切換 */
+.search-kbd {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 2px;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--muted);
+  cursor: pointer;
+  /* 平常不顯示，滑鼠移到搜尋框上或搜尋框有焦點時才出現，畫面比較安靜 */
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.sidebar-search:hover .search-kbd,
+.sidebar-search:focus-within .search-kbd {
+  opacity: 1;
+}
+.search-kbd kbd {
+  line-height: 16px;
+  background: none;
+  border-color: var(--border);
+  border-bottom-width: 1px;
+}
+.search-kbd:hover kbd {
+  color: var(--text);
+  border-color: var(--muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .search-kbd {
+    transition: none;
+  }
+}
+/* 清單最後的「新增階段」：淡色，滑鼠移過去才清楚 */
+.tree-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 2px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+  cursor: pointer;
+}
+.tree-add:hover {
+  background: var(--surface-2);
+  color: var(--text);
 }
 .tree {
   flex: 1;
@@ -1357,12 +1417,14 @@ details.card[open] > summary::before {
 }
 .sidebar-foot {
   display: flex;
-  flex-wrap: wrap;
   gap: 6px;
-  padding-top: 10px;
-  margin-top: 10px;
+  padding-top: 6px;
+  margin-top: 6px;
   border-top: 1px solid var(--border);
   align-items: center;
+}
+.sidebar-archived {
+  font-size: var(--fs-sm);
 }
 .sidebar-collapse {
   margin-left: auto;
@@ -2272,9 +2334,6 @@ kbd {
   border-bottom-width: 2px;
   border-radius: 3px;
   background: var(--surface-2);
-}
-.muted-link {
-  color: var(--muted);
 }
 
 /* ---------- 載入中 ---------- */
