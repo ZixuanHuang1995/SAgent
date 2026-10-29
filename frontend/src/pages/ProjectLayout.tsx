@@ -1,14 +1,14 @@
 // 專案頁面的外框：左邊是「階段 → Spec」的樹狀清單
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router'
 import { QuickSwitcher } from '../components/QuickSwitcher'
-import { useMediaQuery, usePersistent } from '../hooks/layout'
+import { useMediaQuery, usePersistent, usePersistentNumber } from '../hooks/layout'
 import { api, type Phase, type Spec } from '../api'
 import { SPEC_STATUS } from '../format'
 import { keys, useProjectTree, useTemplateCategories, useTemplates } from '../queries'
-import { CategoryBadge, ConfirmDialog, Empty, errorText, Field, Modal, Skeleton, Spinner, useToast } from '../components/ui'
+import { CategoryBadge, ConfirmDialog, Empty, errorText, Field, Modal, Skeleton, Spinner, Splitter, useToast } from '../components/ui'
 import { Icon, type IconName } from '../components/icons'
 
 const PROJECT_NAV: { to: string; icon: IconName; label: string }[] = [
@@ -17,6 +17,11 @@ const PROJECT_NAV: { to: string; icon: IconName; label: string }[] = [
   { to: '/runs', icon: 'bot', label: 'AI 工作紀錄' },
 ]
 
+// 左側欄寬度：可以拖拉調整，標題太長被截掉時拉寬一點
+const SIDEBAR_DEFAULT = 270
+const SIDEBAR_MIN = 220
+const SIDEBAR_MAX = 440
+
 export function ProjectLayout() {
   const projectId = Number(useParams().projectId)
   const tree = useProjectTree(projectId)
@@ -24,6 +29,9 @@ export function ProjectLayout() {
   // 寬螢幕：可以收合成一排圖示（記住選擇）；窄螢幕：平常收合，展開時蓋在內容上面
   const narrow = useMediaQuery('(max-width: 800px)')
   const [collapsed, setCollapsed] = usePersistent<'0' | '1'>('sagent:sidebar-collapsed', '0')
+  const [sidebarWidth, setSidebarWidth] = usePersistentNumber('sagent:sidebar-width', SIDEBAR_DEFAULT, SIDEBAR_MIN, SIDEBAR_MAX)
+  const sidebarStyle = { '--sidebar-w': `${sidebarWidth}px` } as CSSProperties
+  const sidebarEl = useRef<HTMLElement>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const location = useLocation()
   useEffect(() => setDrawerOpen(false), [location.pathname, narrow])
@@ -43,7 +51,7 @@ export function ProjectLayout() {
   if (tree.isLoading)
     return (
       <div className="workspace">
-        <aside className={`sidebar ${narrow || collapsed === '1' ? 'is-collapsed' : ''}`}>
+        <aside className={`sidebar ${narrow || collapsed === '1' ? 'is-collapsed' : ''}`} style={sidebarStyle}>
           {!(narrow || collapsed === '1') && (
             <div className="sidebar-inner">
               <Skeleton lines={6} title={false} />
@@ -62,10 +70,15 @@ export function ProjectLayout() {
   const expanded = narrow ? drawerOpen : collapsed === '0'
   const expand = () => (narrow ? setDrawerOpen(true) : setCollapsed('0'))
   const collapse = () => (narrow ? setDrawerOpen(false) : setCollapsed('1'))
+  const resizable = expanded && !narrow
 
   return (
     <div className="workspace">
-      <aside className={`sidebar ${expanded ? '' : 'is-collapsed'} ${narrow && expanded ? 'is-drawer' : ''}`}>
+      <aside
+        ref={sidebarEl}
+        className={`sidebar ${expanded ? '' : 'is-collapsed'} ${narrow && expanded ? 'is-drawer' : ''} ${resizable ? 'has-splitter' : ''}`}
+        style={sidebarStyle}
+      >
         {expanded ? (
           <ProjectSidebar
             projectId={projectId}
@@ -96,6 +109,17 @@ export function ProjectLayout() {
           </nav>
         )}
       </aside>
+      {resizable && (
+        <Splitter
+          label="調整左側欄的寬度"
+          onMove={(x) => {
+            const r = sidebarEl.current?.getBoundingClientRect()
+            if (r) setSidebarWidth(x - r.left)
+          }}
+          onNudge={(d) => setSidebarWidth((w) => w + d * 20)}
+          onReset={() => setSidebarWidth(SIDEBAR_DEFAULT)}
+        />
+      )}
       {narrow && drawerOpen && (
         <>
           <div className="sidebar-spacer" />

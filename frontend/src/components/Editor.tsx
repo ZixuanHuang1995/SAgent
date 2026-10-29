@@ -1,11 +1,47 @@
 // Markdown 編輯器（CodeMirror）
 
 import { markdown } from '@codemirror/lang-markdown'
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { EditorSelection, type Text } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
+import { tags as t } from '@lezer/highlight'
 import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { forwardRef, useImperativeHandle, useMemo, useRef } from 'react'
 import { useIsDark } from '../theme'
+
+/** 編輯器外框的顏色，都用 styles.css 的變數，跟預覽區、整個畫面一致 */
+const editorTheme = (dark: boolean) =>
+  EditorView.theme(
+    {
+      '&': { backgroundColor: 'var(--surface)', color: 'var(--text)' },
+      '.cm-content': { caretColor: 'var(--accent)' },
+      '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--accent)' },
+      // 目前這行的底色要半透明，選取的範圍才不會被蓋住
+      '.cm-activeLine': { backgroundColor: 'color-mix(in srgb, var(--text) 4%, transparent)' },
+      '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, .cm-content ::selection': {
+        backgroundColor: 'color-mix(in srgb, var(--accent) 24%, transparent)',
+      },
+      '.cm-selectionMatch': { backgroundColor: 'color-mix(in srgb, var(--accent) 12%, transparent)' },
+      '.cm-gutters': { backgroundColor: 'var(--surface)', color: 'var(--muted)', border: 'none' },
+      '.cm-activeLineGutter': { backgroundColor: 'transparent', color: 'var(--text-2)' },
+    },
+    { dark },
+  )
+const LIGHT_THEME = editorTheme(false)
+const DARK_THEME = editorTheme(true)
+
+/** Markdown 語法顏色：標題用主色，#、*、| 這類符號淡一點，內容本身好讀 */
+const markdownHighlight = syntaxHighlighting(
+  HighlightStyle.define([
+    { tag: t.heading, color: 'var(--accent)', fontWeight: 'var(--fw-bold)' },
+    { tag: t.strong, fontWeight: 'var(--fw-bold)' },
+    { tag: t.emphasis, fontStyle: 'italic' },
+    { tag: t.strikethrough, textDecoration: 'line-through' },
+    { tag: t.link, color: 'var(--writer)' },
+    { tag: [t.url, t.processingInstruction, t.contentSeparator, t.labelName, t.comment], color: 'var(--muted)' },
+    { tag: [t.quote, t.monospace], color: 'var(--text-2)' },
+  ]),
+)
 
 export interface EditorHandle {
   scrollToLine: (line: number) => void
@@ -30,7 +66,7 @@ export const MarkdownEditor = forwardRef<
   /** 文件開頭在捲動區裡的位置（上方留白） */
   const docOffset = (view: EditorView) =>
     view.documentTop - view.scrollDOM.getBoundingClientRect().top + view.scrollDOM.scrollTop
-  const extensions = useMemo(() => [markdown(), EditorView.lineWrapping], [])
+  const extensions = useMemo(() => [markdown(), EditorView.lineWrapping, markdownHighlight], [])
   useImperativeHandle(ref, () => ({
     scrollToLine(line: number) {
       const view = cm.current?.view
@@ -80,7 +116,7 @@ export const MarkdownEditor = forwardRef<
       value={value}
       onChange={onChange}
       extensions={extensions}
-      theme={dark ? 'dark' : 'light'}
+      theme={dark ? DARK_THEME : LIGHT_THEME}
       readOnly={readOnly}
       height="100%"
       onCreateEditor={(view) => view.scrollDOM.addEventListener('scroll', () => onScrollRef.current?.(), { passive: true })}

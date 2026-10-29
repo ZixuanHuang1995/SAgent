@@ -41,12 +41,12 @@ const PANEL_TABS: { key: PanelTab; icon: IconName; label: string }[] = [
   { key: 'outline', icon: 'list', label: '大綱' },
 ]
 
-const PANEL_DEFAULT = 400
+const PANEL_DEFAULT = 360
 const PANEL_MIN = 300
 const PANEL_MAX = 720
 const EDITOR_DEFAULT = 50 // 分割模式下編輯區佔的百分比
-/** 文件區至少要這麼寬才能左右分割；不夠寬時只能切換編輯或預覽 */
-const SPLIT_MIN_WIDTH = 760
+/** 文件區至少要這麼寬才能左右分割；不夠寬時只能切換編輯或預覽。1366 寬的筆電開著左右側欄也要能分割 */
+const SPLIT_MIN_WIDTH = 680
 
 export function SpecPage() {
   const params = useParams()

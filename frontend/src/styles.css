@@ -1111,11 +1111,15 @@ details.card[open] > summary::before {
   position: relative;
 }
 .sidebar {
-  width: 270px;
+  width: var(--sidebar-w, 270px);
   flex: none;
   border-right: 1px solid var(--border);
   background: var(--surface);
-  overflow: auto;
+  overflow: hidden;
+}
+/* 旁邊有拖拉分隔線時，線由分隔線畫 */
+.sidebar.has-splitter {
+  border-right: none;
 }
 /* 收合時只剩一排圖示 */
 .sidebar.is-collapsed {
@@ -1172,10 +1176,11 @@ details.card[open] > summary::before {
   z-index: 35;
   background: rgba(10, 14, 22, 0.35);
 }
+/* 上面的導覽、搜尋框和底部的按鈕固定，只有中間的清單捲動 */
 .sidebar-inner {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  height: 100%;
   padding: 10px 8px;
 }
 .sidebar-nav {
@@ -1203,6 +1208,11 @@ details.card[open] > summary::before {
 }
 .tree {
   flex: 1;
+  min-height: 0;
+  overflow: auto;
+  /* 捲軸貼著側欄右邊 */
+  margin: 0 -8px;
+  padding: 0 8px;
 }
 .tree-phase {
   margin-bottom: 4px;
@@ -1399,6 +1409,10 @@ body.is-resizing .cm-editor {
 .preview-pane {
   padding: 20px 28px 60px;
   background: var(--surface);
+}
+/* 分割時每邊比較窄，左右留白少一點 */
+.mode-split .preview-pane {
+  padding-inline: 20px;
 }
 .mode-preview .preview-pane {
   padding: 24px max(28px, calc((100% - 900px) / 2)) 60px;
