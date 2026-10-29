@@ -7,7 +7,7 @@ import { api, type PhaseSummary, type Project } from '../api'
 import { relativeTime } from '../format'
 import { usePersistent } from '../hooks/layout'
 import { keys, useProjects } from '../queries'
-import { Badge, Empty, errorText, Field, Modal, Skeleton, useToast } from '../components/ui'
+import { Badge, Empty, errorText, Field, Menu, MenuItem, MenuSeparator, Modal, Skeleton, useToast } from '../components/ui'
 import { Icon } from '../components/icons'
 import { NewSpecDialog } from './ProjectLayout'
 
@@ -129,18 +129,23 @@ function ProjectItem({ project: p, layout }: { project: Project; layout: 'card' 
     </>
   )
   const menu = (
-    <details className="menu project-menu">
-      <summary className="icon-btn" title="更多" aria-label={`「${p.name}」的其他操作`}>
-        <Icon name="more" size={16} />
-      </summary>
-      <div className="menu-list menu-right menu-narrow">
-        <button disabled={p.phases.length === 0} onClick={() => setNewSpec(true)}>
-          新增 Spec
-        </button>
-        <Link to={`/p/${p.id}/baselines`}>基準版本</Link>
-        <Link to={`/p/${p.id}/runs`}>AI 工作紀錄</Link>
-      </div>
-    </details>
+    <Menu
+      trigger={<Icon name="more" size={16} />}
+      label={`「${p.name}」的其他操作`}
+      title="更多"
+      triggerClassName="icon-btn project-menu"
+    >
+      <MenuItem icon="plus" disabled={p.phases.length === 0} onSelect={() => setNewSpec(true)}>
+        新增 Spec
+      </MenuItem>
+      <MenuSeparator />
+      <MenuItem icon="tag" to={`/p/${p.id}/baselines`}>
+        基準版本
+      </MenuItem>
+      <MenuItem icon="bot" to={`/p/${p.id}/runs`}>
+        AI 工作紀錄
+      </MenuItem>
+    </Menu>
   )
   return (
     <div className={layout === 'card' ? 'project-card' : 'project-row'}>

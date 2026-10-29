@@ -10,7 +10,7 @@ import { DiffModal } from '../components/DiffView'
 import { MarkdownEditor, type EditorHandle } from '../components/Editor'
 import { MarkdownView } from '../components/MarkdownView'
 import { VersionPanel } from '../components/VersionPanel'
-import { Badge, CategoryBadge, ConfirmDialog, Empty, errorText, Skeleton, Spinner, Splitter, useToast } from '../components/ui'
+import { Badge, CategoryBadge, ConfirmDialog, Empty, errorText, Menu, MenuItem, MenuSeparator, Popover, Skeleton, Spinner, Splitter, useToast } from '../components/ui'
 import { useElementWidth, useMediaQuery, usePersistent, usePersistentNumber } from '../hooks/layout'
 import { extractOutline, slugify, SPEC_STATUS, VERSION_SOURCE } from '../format'
 import { keys, useProjectTree, useSpec, useTemplateCategories, useTemplates } from '../queries'
@@ -375,64 +375,71 @@ export function SpecPage() {
               放棄修改
             </button>
           )}
-          <details className="menu">
-            <summary className="btn" aria-label="這份 Spec 的其他操作" title="其他操作">
-              <Icon name="more" />
-            </summary>
-            <div className="menu-list menu-right">
-              {data.head_version_no > 0 && (
-                <a href={api.specExportUrl(specId)} download>
-                  下載 Markdown
-                </a>
-              )}
-              {data.head_version_no > 1 && <button onClick={() => setDiff({})}>與前一版比較</button>}
-              {data.archived ? (
-                <button onClick={async () => { await api.unarchiveSpec(specId); refreshAll() }}>取消封存</button>
-              ) : (
-                <button className="danger" onClick={() => setArchiving(true)}>
-                  封存這份 Spec
-                </button>
-              )}
-            </div>
-          </details>
+          <Menu trigger={<Icon name="more" />} label="這份 Spec 的其他操作" title="其他操作">
+            {data.head_version_no > 0 && (
+              <MenuItem icon="download" href={api.specExportUrl(specId)} download>
+                下載 Markdown
+              </MenuItem>
+            )}
+            {data.head_version_no > 1 && (
+              <MenuItem icon="diff" onSelect={() => setDiff({})}>
+                與前一版比較
+              </MenuItem>
+            )}
+            {data.head_version_no > 0 && <MenuSeparator />}
+            {data.archived ? (
+              <MenuItem icon="restore" onSelect={async () => { await api.unarchiveSpec(specId); refreshAll() }}>
+                取消封存
+              </MenuItem>
+            ) : (
+              <MenuItem icon="archive" danger onSelect={() => setArchiving(true)}>
+                封存這份 Spec…
+              </MenuItem>
+            )}
+          </Menu>
         </div>
         <div className="spec-meta-row">
-          <details className="menu">
-            <summary className="btn btn-sm meta-summary" title="修改階段、狀態">
-              <span className="muted">屬性</span> {phases.find((p) => p.id === data.phase_id)?.name ?? ''}・
-              {category ? `${category.name}・` : ''}
-              {template?.name ?? data.doc_type} ▾
-            </summary>
-            <div className="menu-list props-menu">
-              <label className="field">
-                <span className="field-label">階段</span>
-                <select className="input input-sm" value={data.phase_id} onChange={(e) => updateMeta({ phase_id: Number(e.target.value) })}>
-                  {phases.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span className="field-label">狀態</span>
-                <select className="input input-sm" value={data.status} onChange={(e) => updateMeta({ status: e.target.value as SpecStatus })}>
-                  {Object.entries(SPEC_STATUS).map(([k, v]) => (
-                    <option key={k} value={k}>
-                      {v}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="field">
-                <span className="field-label">文件類型</span>
-                <span>
-                  {category && <CategoryBadge category={category.key}>{category.name}</CategoryBadge>} {template?.name ?? data.doc_type}
-                </span>
-                <span className="field-hint">建立後不能改。AI 撰寫時會照這個類型的範本規劃章節。</span>
-              </div>
+          <Popover
+            trigger={
+              <>
+                <span className="muted">屬性</span> {phases.find((p) => p.id === data.phase_id)?.name ?? ''}・
+                {category ? `${category.name}・` : ''}
+                {template?.name ?? data.doc_type} <Icon name="chevron-down" size={14} />
+              </>
+            }
+            label="修改階段、狀態"
+            title="修改階段、狀態"
+            triggerClassName="btn btn-sm meta-summary"
+            className="props-menu"
+          >
+            <label className="field">
+              <span className="field-label">階段</span>
+              <select className="input input-sm" value={data.phase_id} onChange={(e) => updateMeta({ phase_id: Number(e.target.value) })}>
+                {phases.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span className="field-label">狀態</span>
+              <select className="input input-sm" value={data.status} onChange={(e) => updateMeta({ status: e.target.value as SpecStatus })}>
+                {Object.entries(SPEC_STATUS).map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="field">
+              <span className="field-label">文件類型</span>
+              <span>
+                {category && <CategoryBadge category={category.key}>{category.name}</CategoryBadge>} {template?.name ?? data.doc_type}
+              </span>
+              <span className="field-hint">建立後不能改。AI 撰寫時會照這個類型的範本規劃章節。</span>
             </div>
-          </details>
+          </Popover>
           {(data.source_spec || data.derived_specs.length > 0) && (
             <span className="spec-links small">
               {data.source_spec && (

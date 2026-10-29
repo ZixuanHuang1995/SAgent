@@ -7,7 +7,7 @@ import { formatTime, relativeTime, VERSION_SOURCE } from '../format'
 import { keys, useVersions } from '../queries'
 import { DiffModal } from './DiffView'
 import { MarkdownView } from './MarkdownView'
-import { Badge, ConfirmDialog, Empty, errorText, Modal, Skeleton, Spinner, useToast } from './ui'
+import { Badge, ConfirmDialog, Empty, errorText, Menu, MenuItem, Modal, Skeleton, Spinner, useToast } from './ui'
 import { Icon } from './icons'
 
 const SOURCE_TONE: Record<VersionMeta['source'], string> = {
@@ -98,21 +98,24 @@ export function VersionPanel({ specId, headNo, archived, dirty }: { specId: numb
                     比較前一版
                   </button>
                 )}
-                <details className="menu">
-                  <summary className="btn btn-sm" aria-label={`v${v.version_no} 的其他操作`} title="其他操作">
-                    <Icon name="more" />
-                  </summary>
-                  <div className="menu-list menu-right">
-                    {v.version_no !== headNo && (
-                      <button onClick={() => setDiff({ from: v.version_no, to: headNo })}>與最新版比較</button>
-                    )}
-                    {v.version_no !== headNo && !archived && <button onClick={() => setRestoring(v.version_no)}>還原成這一版</button>}
-                    <button onClick={() => setLabeling(v)}>{v.label ? '修改標籤' : '加標籤'}</button>
-                    <a href={api.specExportUrl(specId, v.version_no)} download>
-                      下載 Markdown
-                    </a>
-                  </div>
-                </details>
+                <Menu trigger={<Icon name="more" />} label={`v${v.version_no} 的其他操作`} title="其他操作" triggerClassName="btn btn-sm">
+                  {v.version_no !== headNo && (
+                    <MenuItem icon="diff" onSelect={() => setDiff({ from: v.version_no, to: headNo })}>
+                      與最新版比較
+                    </MenuItem>
+                  )}
+                  {v.version_no !== headNo && !archived && (
+                    <MenuItem icon="restore" onSelect={() => setRestoring(v.version_no)}>
+                      還原成這一版…
+                    </MenuItem>
+                  )}
+                  <MenuItem icon="tag" onSelect={() => setLabeling(v)}>
+                    {v.label ? '修改標籤' : '加標籤'}
+                  </MenuItem>
+                  <MenuItem icon="download" href={api.specExportUrl(specId, v.version_no)} download>
+                    下載 Markdown
+                  </MenuItem>
+                </Menu>
               </div>
             </div>
           </li>

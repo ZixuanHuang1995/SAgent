@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { createBrowserRouter, Link, Outlet, RouterProvider, useMatch, useParams, useRouteError } from 'react-router'
 import { Icon } from './components/icons'
 import logoUrl from './logo.svg'
@@ -77,59 +76,7 @@ function Breadcrumb() {
   )
 }
 
-/** 下拉選單（details.menu）：點選單外面或點了選單裡的項目就關起來 */
-function useAutoCloseMenus() {
-  useEffect(() => {
-    const onClick = (e: MouseEvent) => {
-      const target = e.target as Element
-      for (const menu of document.querySelectorAll<HTMLDetailsElement>('details.menu[open]')) {
-        const inside = menu.contains(target)
-        const picked = inside && target.closest('.menu-list button, .menu-list a') && !target.closest('[data-keep-open]')
-        if (!inside || picked) menu.open = false
-      }
-    }
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      for (const menu of document.querySelectorAll<HTMLDetailsElement>('details.menu[open]')) menu.open = false
-    }
-    // 會捲動的區塊（例如左側欄）會把選單裁掉。這種選單加 menu-float，打開時改成固定在畫面上，
-    // 對齊按鈕右邊；下面放不下就往上開
-    const onToggle = (e: Event) => {
-      const menu = e.target as HTMLDetailsElement
-      if (!menu.matches?.('details.menu.menu-float') || !menu.open) return
-      const list = menu.querySelector<HTMLElement>('.menu-list')
-      const button = menu.querySelector('summary')
-      if (!list || !button) return
-      const r = button.getBoundingClientRect()
-      Object.assign(list.style, { position: 'fixed', right: 'auto', bottom: 'auto' })
-      const { offsetWidth: w, offsetHeight: h } = list
-      const left = Math.min(Math.max(8, r.right - w), window.innerWidth - w - 8)
-      const top = r.bottom + 4 + h <= window.innerHeight - 8 ? r.bottom + 4 : Math.max(8, r.top - 4 - h)
-      Object.assign(list.style, { left: `${left}px`, top: `${top}px` })
-    }
-    // 固定位置的選單不會跟著捲動，捲動或改變視窗大小時就關掉
-    const closeFloating = (e: Event) => {
-      for (const menu of document.querySelectorAll<HTMLDetailsElement>('details.menu-float[open]')) {
-        if (!(e.target instanceof Node && menu.contains(e.target))) menu.open = false
-      }
-    }
-    document.addEventListener('click', onClick)
-    document.addEventListener('keydown', onKey)
-    document.addEventListener('toggle', onToggle, true)
-    document.addEventListener('scroll', closeFloating, true)
-    window.addEventListener('resize', closeFloating)
-    return () => {
-      document.removeEventListener('click', onClick)
-      document.removeEventListener('keydown', onKey)
-      document.removeEventListener('toggle', onToggle, true)
-      document.removeEventListener('scroll', closeFloating, true)
-      window.removeEventListener('resize', closeFloating)
-    }
-  }, [])
-}
-
 function Shell() {
-  useAutoCloseMenus()
   return (
     <div className="app">
       <header className="topbar">

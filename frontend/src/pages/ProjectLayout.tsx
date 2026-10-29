@@ -8,7 +8,21 @@ import { useMediaQuery, usePersistent, usePersistentNumber } from '../hooks/layo
 import { api, type Phase, type Spec } from '../api'
 import { SPEC_STATUS } from '../format'
 import { keys, useProjectTree, useTemplateCategories, useTemplates } from '../queries'
-import { CategoryBadge, ConfirmDialog, Empty, errorText, Field, Modal, Skeleton, Spinner, Splitter, useToast } from '../components/ui'
+import {
+  CategoryBadge,
+  ConfirmDialog,
+  Empty,
+  errorText,
+  Field,
+  Menu,
+  MenuItem,
+  MenuSeparator,
+  Modal,
+  Skeleton,
+  Spinner,
+  Splitter,
+  useToast,
+} from '../components/ui'
 import { Icon, type IconName } from '../components/icons'
 
 const PROJECT_NAV: { to: string; icon: IconName; label: string }[] = [
@@ -234,23 +248,27 @@ function ProjectSidebar(props: {
                     >
                       <Icon name="plus" size={14} />
                     </button>
-                    <details className="menu menu-float">
-                      <summary className="icon-btn" title="更多" aria-label={`「${phase.name}」的其他操作`}>
-                        <Icon name="more" size={14} />
-                      </summary>
-                      <div className="menu-list menu-narrow">
-                        <button onClick={() => setPhaseDialog(phase)}>重新命名</button>
-                        <button disabled={idx === 0} onClick={() => movePhase(phase, -1)}>
-                          往上移
-                        </button>
-                        <button disabled={idx === phases.length - 1} onClick={() => movePhase(phase, 1)}>
-                          往下移
-                        </button>
-                        <button className="danger" onClick={() => setDeletingPhase(phase)}>
-                          刪除階段
-                        </button>
-                      </div>
-                    </details>
+                    <Menu
+                      trigger={<Icon name="more" size={14} />}
+                      label={`「${phase.name}」的其他操作`}
+                      title="更多"
+                      triggerClassName="icon-btn tree-menu-btn"
+                    >
+                      <MenuItem icon="edit" onSelect={() => setPhaseDialog(phase)}>
+                        重新命名
+                      </MenuItem>
+                      <MenuSeparator />
+                      <MenuItem icon="arrow-up" disabled={idx === 0} onSelect={() => movePhase(phase, -1)}>
+                        往上移
+                      </MenuItem>
+                      <MenuItem icon="arrow-down" disabled={idx === phases.length - 1} onSelect={() => movePhase(phase, 1)}>
+                        往下移
+                      </MenuItem>
+                      <MenuSeparator />
+                      <MenuItem icon="trash" danger onSelect={() => setDeletingPhase(phase)}>
+                        刪除階段…
+                      </MenuItem>
+                    </Menu>
                   </span>
                 </div>
                 {!closed && (

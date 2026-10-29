@@ -103,6 +103,7 @@ uv run --project backend python scripts/seed_demo.py --data-dir data-demo-build 
 | Ctrl+K | 快速切換到同一個專案的其他 Spec 或頁面 |
 | Ctrl+Enter | 在 AI 需求欄裡按，開始 AI 撰寫 |
 | Esc | 關閉對話框或選單 |
+| ↑ ↓、Home、End | 在選單裡移動；在選單按鈕上按 ↓ 直接打開選單 |
 
 右上角的圖示可以切換顏色：跟著系統、淺色、深色。
 

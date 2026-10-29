@@ -1,8 +1,22 @@
-// 共用的小元件：對話框、通知、確認視窗、標籤
+// 共用的小元件：對話框、選單、通知、確認視窗、標籤
 
-import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from 'react'
 import { createPortal } from 'react-dom'
+import { Link } from 'react-router'
 import { CATEGORY_TONE } from '../format'
+import { Icon, type IconName } from './icons'
 
 // ---------------------------------------------------------------------------
 // 對話框
@@ -75,6 +89,312 @@ export function Modal(props: {
       </div>
     </div>,
     document.body,
+  )
+}
+
+// ---------------------------------------------------------------------------
+// 選單和彈出框
+//
+// 選單放在 body 底下、固定在畫面上，不會被會捲動的區塊（側欄、右側欄）裁掉。
+// 預設在按鈕下方；下方放不下時往上開，左右不超出畫面，太高時選單自己捲動。
+// 點外面、按 Esc、外面捲動或視窗大小改變時關掉。
+// ---------------------------------------------------------------------------
+
+type Align = 'start' | 'end'
+type Side = 'top' | 'bottom'
+const MENU_GAP = 4 // 按鈕和選單之間的距離
+const MENU_MARGIN = 8 // 選單和畫面邊緣至少留這麼多
+
+function placePanel(trigger: DOMRect, panel: HTMLElement, align: Align): { style: CSSProperties; side: Side } {
+  const width = panel.offsetWidth
+  const below = window.innerHeight - trigger.bottom - MENU_GAP - MENU_MARGIN
+  const above = trigger.top - MENU_GAP - MENU_MARGIN
+  const x = align === 'end' ? trigger.right - width : trigger.left
+  const left = Math.min(Math.max(MENU_MARGIN, x), window.innerWidth - width - MENU_MARGIN)
+  return panel.scrollHeight > below && above > below
+    ? { side: 'top', style: { left, bottom: window.innerHeight - trigger.top + MENU_GAP, maxHeight: above } }
+    : { side: 'bottom', style: { left, top: trigger.bottom + MENU_GAP, maxHeight: below } }
+}
+
+/** 選單和彈出框共用：開關、位置、什麼時候自動關掉 */
+function useDropdown(align: Align) {
+  const [open, setOpen] = useState(false)
+  const [place, setPlace] = useState<{ style: CSSProperties; side: Side } | null>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
+  const panel = useRef<HTMLDivElement>(null)
+
+  /** refocus：焦點回到按鈕（用鍵盤關掉或選了項目時） */
+  const close = useCallback((refocus = false) => {
+    setOpen(false)
+    setPlace(null)
+    if (refocus) trigger.current?.focus({ preventScroll: true })
+  }, [])
+
+  // 畫面更新前先量好位置，選單才不會先出現在左上角再跳過去
+  useLayoutEffect(() => {
+    if (open && trigger.current && panel.current) setPlace(placePanel(trigger.current.getBoundingClientRect(), panel.current, align))
+  }, [open, align])
+
+  useEffect(() => {
+    if (!open) return
+    const outside = (t: EventTarget | null) => !(t instanceof Node && (panel.current?.contains(t) || trigger.current?.contains(t)))
+    const onPointerDown = (e: PointerEvent) => outside(e.target) && close()
+    // 選單固定在畫面上，不會跟著外面捲動，所以外面一捲動就關掉；選單自己捲動不算
+    const onScroll = (e: Event) => outside(e.target) && close()
+    const onResize = () => close()
+    document.addEventListener('pointerdown', onPointerDown, true)
+    document.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', onResize)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('scroll', onScroll, true)
+      window.removeEventListener('resize', onResize)
+    }
+  }, [open, close])
+
+  const panelProps = {
+    ref: panel,
+    'data-side': place?.side,
+    // 還沒量好位置前先藏起來
+    style: place ? place.style : ({ top: 0, left: 0, visibility: 'hidden' } as CSSProperties),
+    // 選單在 React 裡還是按鈕的子元件，點擊會一路傳到外層（例如整列可以點的表格），在這裡擋掉
+    onClick: (e: { stopPropagation: () => void }) => e.stopPropagation(),
+  }
+  return { open, setOpen, close, trigger, panel, placed: place !== null, panelProps }
+}
+
+const MenuContext = createContext<(refocus?: boolean) => void>(() => {})
+
+interface TriggerProps {
+  /** 按鈕裡的內容（文字或圖示） */
+  trigger: ReactNode
+  /** 只有圖示的按鈕要給，讀螢幕軟體會念 */
+  label?: string
+  title?: string
+  /** 按鈕的 class，預設 btn */
+  triggerClassName?: string
+  /** 選單對齊按鈕的哪一邊，預設右邊（end） */
+  align?: Align
+  /** 加在選單上的 class，例如調整寬度 */
+  className?: string
+  children: ReactNode
+}
+
+/**
+ * 下拉選單。項目用 MenuItem，分組用 MenuLabel、MenuSeparator。
+ * 鍵盤：方向鍵移動、Home/End 到頭尾、打字跳到開頭相同的項目、Enter 選取、Esc 或 Tab 關掉
+ */
+export function Menu(props: TriggerProps) {
+  const d = useDropdown(props.align ?? 'end')
+  const id = useId()
+  // 打開後焦點放哪裡：用鍵盤打開時放在第一個（或最後一個）項目，用滑鼠打開時放在選單本身
+  const initialFocus = useRef<'first' | 'last' | 'panel'>('panel')
+
+  const items = () => [...(d.panel.current?.querySelectorAll<HTMLElement>('[role^="menuitem"]:not(:disabled)') ?? [])]
+
+  useEffect(() => {
+    if (!d.placed) return
+    const list = items()
+    const target = initialFocus.current === 'first' ? list[0] : initialFocus.current === 'last' ? list[list.length - 1] : undefined
+    ;(target ?? d.panel.current)?.focus({ preventScroll: true })
+  }, [d.placed])
+
+  const openWith = (focus: 'first' | 'last' | 'panel') => {
+    initialFocus.current = focus
+    d.setOpen(true)
+  }
+
+  const onKeyDown = (e: ReactKeyboardEvent) => {
+    const list = items()
+    const i = list.indexOf(document.activeElement as HTMLElement)
+    const go = (n: number) => {
+      e.preventDefault()
+      list[(n + list.length) % list.length]?.focus()
+    }
+    if (e.key === 'ArrowDown') go(i + 1)
+    else if (e.key === 'ArrowUp') go(i < 0 ? -1 : i - 1)
+    else if (e.key === 'Home') go(0)
+    else if (e.key === 'End') go(-1)
+    else if (e.key === 'Escape' || e.key === 'Tab') {
+      // 擋掉，不然對話框裡的選單按 Esc 會連對話框一起關掉
+      e.preventDefault()
+      e.stopPropagation()
+      d.close(true)
+    } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const key = e.key.toLowerCase()
+      const order = [...list.slice(i + 1), ...list.slice(0, i + 1)]
+      order.find((el) => el.textContent?.trim().toLowerCase().startsWith(key))?.focus()
+    }
+  }
+
+  return (
+    <>
+      <button
+        ref={d.trigger}
+        type="button"
+        className={props.triggerClassName ?? 'btn'}
+        aria-label={props.label}
+        title={props.title}
+        aria-haspopup="menu"
+        aria-expanded={d.open}
+        aria-controls={d.open ? id : undefined}
+        // 用鍵盤按 Enter、空白鍵時 detail 是 0
+        onClick={(e) => (d.open ? d.close() : openWith(e.detail === 0 ? 'first' : 'panel'))}
+        onKeyDown={(e) => {
+          if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+          e.preventDefault()
+          openWith(e.key === 'ArrowDown' ? 'first' : 'last')
+        }}
+      >
+        {props.trigger}
+      </button>
+      {d.open &&
+        createPortal(
+          <div
+            {...d.panelProps}
+            id={id}
+            role="menu"
+            aria-label={props.label}
+            tabIndex={-1}
+            className={`menu-list ${props.className ?? ''}`}
+            onKeyDown={onKeyDown}
+            // 滑鼠移到哪個項目，焦點就跟到哪裡，滑鼠和鍵盤的反白才不會各一個
+            onPointerMove={(e) => {
+              const item = (e.target as Element).closest<HTMLElement>('[role^="menuitem"]:not(:disabled)')
+              if (item && item !== document.activeElement) item.focus({ preventScroll: true })
+            }}
+          >
+            <MenuContext.Provider value={d.close}>{props.children}</MenuContext.Provider>
+          </div>,
+          document.body,
+        )}
+    </>
+  )
+}
+
+/** 選單項目。給 onSelect 是按鈕，給 to 是站內連結，給 href 是一般連結（例如下載） */
+export function MenuItem(props: {
+  icon?: IconName
+  danger?: boolean
+  disabled?: boolean
+  /** 有給就是單選項目，選中的項目右邊打勾 */
+  checked?: boolean
+  /** 右邊的淡色說明 */
+  hint?: ReactNode
+  title?: string
+  /** 選了之後選單不要關（例如切換選項） */
+  keepOpen?: boolean
+  onSelect?: () => void
+  to?: string
+  href?: string
+  download?: boolean
+  children: ReactNode
+}) {
+  const close = useContext(MenuContext)
+  const select = () => {
+    props.onSelect?.()
+    if (!props.keepOpen) close(true)
+  }
+  const common = {
+    role: props.checked === undefined ? 'menuitem' : 'menuitemradio',
+    'aria-checked': props.checked,
+    tabIndex: -1,
+    title: props.title,
+    className: `menu-item${props.danger ? ' danger' : ''}`,
+    onClick: select,
+  }
+  const body = (
+    <>
+      {props.icon && <Icon name={props.icon} />}
+      <span className="menu-label">{props.children}</span>
+      {props.hint && <span className="menu-hint">{props.hint}</span>}
+      {props.checked && (
+        <span className="menu-check">
+          <Icon name="check" />
+        </span>
+      )}
+    </>
+  )
+  if (props.to)
+    return (
+      <Link to={props.to} {...common}>
+        {body}
+      </Link>
+    )
+  if (props.href)
+    return (
+      <a href={props.href} download={props.download} {...common}>
+        {body}
+      </a>
+    )
+  return (
+    <button type="button" disabled={props.disabled} {...common}>
+      {body}
+    </button>
+  )
+}
+
+export function MenuSeparator() {
+  return <div role="separator" className="menu-sep" />
+}
+
+/** 選單裡一組項目的小標題 */
+export function MenuLabel({ children }: { children: ReactNode }) {
+  return (
+    <div role="presentation" className="menu-group">
+      {children}
+    </div>
+  )
+}
+
+/** 彈出框：外觀、位置跟選單一樣，裡面放表單之類的內容。焦點移到外面、按 Esc 時關掉 */
+export function Popover(props: TriggerProps) {
+  const d = useDropdown(props.align ?? 'start')
+  const id = useId()
+  useEffect(() => {
+    if (!d.placed) return
+    const el = d.panel.current
+    ;(el?.querySelector<HTMLElement>(FOCUSABLE) ?? el)?.focus({ preventScroll: true })
+  }, [d.placed])
+  return (
+    <>
+      <button
+        ref={d.trigger}
+        type="button"
+        className={props.triggerClassName ?? 'btn'}
+        aria-label={props.label}
+        title={props.title}
+        aria-haspopup="dialog"
+        aria-expanded={d.open}
+        aria-controls={d.open ? id : undefined}
+        onClick={() => (d.open ? d.close() : d.setOpen(true))}
+      >
+        {props.trigger}
+      </button>
+      {d.open &&
+        createPortal(
+          <div
+            {...d.panelProps}
+            id={id}
+            role="dialog"
+            aria-label={props.label}
+            tabIndex={-1}
+            className={`menu-list ${props.className ?? ''}`}
+            onKeyDown={(e) => {
+              if (e.key !== 'Escape') return
+              e.stopPropagation()
+              d.close(true)
+            }}
+            onBlur={(e) => {
+              const next = e.relatedTarget
+              if (next instanceof Node && !d.panel.current?.contains(next) && !d.trigger.current?.contains(next)) d.close()
+            }}
+          >
+            {props.children}
+          </div>,
+          document.body,
+        )}
+    </>
   )
 }
 

@@ -87,6 +87,26 @@ const PATHS: Record<string, ReactNode> = {
       <path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01" />
     </>
   ),
+  'chevron-down': <path d="m6 9 6 6 6-6" />,
+  check: <path d="M20 6 9 17l-5-5" />,
+  download: <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />,
+  diff: <path d="M8 3v13M4 12l4 4 4-4M16 21V8M12 12l4-4 4 4" />,
+  restore: (
+    <>
+      <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+      <path d="M3 3v5h5" />
+    </>
+  ),
+  edit: <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />,
+  archive: (
+    <>
+      <rect x="3" y="4" width="18" height="4" rx="1" />
+      <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4" />
+    </>
+  ),
+  trash: <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 6M10 11v6M14 11v6" />,
+  'arrow-up': <path d="M12 19V5M5 12l7-7 7 7" />,
+  'arrow-down': <path d="M12 5v14M19 12l-7 7-7-7" />,
 }
 
 export type IconName = keyof typeof PATHS

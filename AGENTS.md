@@ -63,7 +63,7 @@
 |---|---|
 | `api.ts` | 所有 API 的型別和呼叫。`request()` 會自動加 `X-SAgent-Client` 標頭 |
 | `queries.ts` | TanStack Query 的 hooks 和 query key |
-| `components/ui.tsx` | 共用元件：`Modal`、`ConfirmDialog`、`useToast`、`Badge`、`Field`、`Spinner`、`Skeleton`、`Empty`、`Splitter`。新畫面先用這些 |
+| `components/ui.tsx` | 共用元件：`Modal`、`ConfirmDialog`、`Menu`（加 `MenuItem`、`MenuSeparator`、`MenuLabel`）、`Popover`、`useToast`、`Badge`、`Field`、`Spinner`、`Skeleton`、`Empty`、`Splitter`。新畫面先用這些；下拉選單一律用 `Menu`，裡面要放表單時用 `Popover`，不要再用 `<details>` 自己做 |
 | `components/icons.tsx` | `Icon` 元件。新圖示加在 `PATHS` |
 | `format.ts` | 狀態的中文名稱、時間格式 |
 | `theme.ts`、`styles.css` | 顏色主題 |

@@ -6,7 +6,7 @@ import { Link, useNavigate, useParams } from 'react-router'
 import { api, type PlanTerm } from '../api'
 import { relativeTime, RUN_STATUS, SPEC_STATUS, termsToText, textToTerms } from '../format'
 import { keys, useBaselines, useProjectTree, useRuns, useTemplateCategories, useTemplates } from '../queries'
-import { Badge, CategoryBadge, ConfirmDialog, Empty, errorText, Field, Modal, Skeleton, useToast } from '../components/ui'
+import { Badge, CategoryBadge, ConfirmDialog, Empty, errorText, Field, Menu, MenuItem, MenuSeparator, Modal, Skeleton, useToast } from '../components/ui'
 import { NewSpecDialog } from './ProjectLayout'
 import { Icon } from '../components/icons'
 
@@ -49,17 +49,15 @@ export function ProjectHome() {
           <button className="btn btn-primary" onClick={() => setNewSpec(true)} disabled={phases.length === 0}>
             + 新增 Spec
           </button>
-          <details className="menu">
-            <summary className="btn" aria-label="專案的其他操作" title="其他操作">
-              <Icon name="more" />
-            </summary>
-            <div className="menu-list menu-right">
-              <button onClick={() => setEditing(true)}>編輯名稱和說明</button>
-              <button className="danger" onClick={() => setDeleting(true)}>
-                刪除專案…
-              </button>
-            </div>
-          </details>
+          <Menu trigger={<Icon name="more" />} label="專案的其他操作" title="其他操作">
+            <MenuItem icon="edit" onSelect={() => setEditing(true)}>
+              編輯名稱和說明
+            </MenuItem>
+            <MenuSeparator />
+            <MenuItem icon="trash" danger onSelect={() => setDeleting(true)}>
+              刪除專案…
+            </MenuItem>
+          </Menu>
         </div>
       </div>
 

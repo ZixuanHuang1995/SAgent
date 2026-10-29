@@ -720,57 +720,90 @@ details.card[open] > summary::before {
   background: var(--danger);
 }
 
-/* 選單（用 details 做的） */
-.menu {
-  position: relative;
-}
-.menu > summary {
-  list-style: none;
-  cursor: pointer;
-}
-.menu > summary::-webkit-details-marker {
-  display: none;
-}
+/* 選單和彈出框（ui.tsx 的 Menu、Popover）：放在 body 底下，位置由程式算好 */
 .menu-list {
-  position: absolute;
-  z-index: 20;
-  top: 100%;
-  left: 0;
-  min-width: 170px;
+  position: fixed;
+  /* 蓋過對話框（100），在通知（200）下面 */
+  z-index: 150;
+  min-width: 180px;
+  max-width: calc(100vw - 16px);
+  overflow-y: auto;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   box-shadow: var(--shadow-lg);
   padding: 4px;
   display: flex;
   flex-direction: column;
+  animation: menu-in 0.12s ease-out;
 }
-.menu-right {
-  left: auto;
-  right: 0;
+.menu-list[data-side='top'] {
+  animation-name: menu-in-up;
 }
-.menu-list > button,
-.menu-list > a {
+.menu-list:focus {
+  outline: none;
+}
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+@keyframes menu-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.menu-item {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   border: none;
   background: none;
   text-align: left;
-  padding: 7px 10px;
-  border-radius: 4px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
   font: inherit;
   color: var(--text);
+  white-space: nowrap;
   cursor: pointer;
 }
-.menu-list > button:hover:not(:disabled),
-.menu-list > a:hover {
+.menu-item .icon {
+  color: var(--muted);
+}
+/* 滑鼠移過去時焦點也會跟過去，所以反白只看焦點；用底色表示，不畫外框 */
+.menu-item:focus {
+  outline: none;
   background: var(--surface-2);
   text-decoration: none;
 }
-.menu-list > button:disabled {
+.menu-item:disabled {
   color: var(--muted);
   cursor: default;
+  opacity: 0.6;
 }
-.menu-list .danger {
+.menu-item.danger,
+.menu-item.danger .icon {
   color: var(--danger);
+}
+.menu-item.danger:focus {
+  background: var(--danger-soft);
+}
+.menu-label {
+  flex: 1;
+}
+.menu-hint {
+  margin-left: 8px;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+.menu-check {
+  display: inline-flex;
+}
+.menu-check .icon {
+  color: var(--accent);
 }
 
 /* ---------- 對話框和通知 ---------- */
@@ -981,14 +1014,11 @@ details.card[open] > summary::before {
 .project-card-head .project-code {
   flex: none;
 }
-/* 選單要蓋在整塊連結（z-index 0）和階段條（z-index 1）上面；打開的選單再蓋過其他卡片的按鈕 */
+/* 選單按鈕要蓋在整塊連結（z-index 0）和階段條（z-index 1）上面才點得到 */
 .project-menu {
   position: relative;
   z-index: 2;
   margin-left: auto;
-}
-.project-menu[open] {
-  z-index: 3;
 }
 .project-desc {
   color: var(--text-2);
@@ -1240,12 +1270,12 @@ details.card[open] > summary::before {
   display: flex;
 }
 /* ＋ 一直看得到；⋯ 平常淡一點，滑鼠移到階段上才清楚 */
-.tree-actions .menu {
+.tree-menu-btn {
   opacity: 0.4;
 }
-.tree-phase-head:hover .tree-actions .menu,
-.tree-actions .menu:focus-within,
-.tree-actions .menu[open] {
+.tree-phase-head:hover .tree-menu-btn,
+.tree-menu-btn:focus-visible,
+.tree-menu-btn[aria-expanded='true'] {
   opacity: 1;
 }
 .tree-empty {
@@ -2122,29 +2152,7 @@ body.is-resizing .cm-editor {
 }
 
 .insert-menu {
-  max-height: 70vh;
-  overflow: auto;
-  min-width: 280px; /* 改的話 DiagramMenu.tsx 的 MENU_WIDTH 要一起改 */
-}
-.insert-menu > .insert-item {
-  display: flex;
-  align-items: baseline;
-  gap: 16px;
-}
-.insert-hint {
-  margin-left: auto;
-  font-size: var(--fs-xs);
-  color: var(--muted);
-  white-space: nowrap;
-}
-/* 選單有最大高度，flex 會壓扁 overflow: hidden 的元素，所以不能縮 */
-.insert-syntax {
-  display: flex;
-  flex: none;
-  margin: 4px 6px;
-}
-.insert-syntax button {
-  flex: 1;
+  min-width: 280px;
 }
 .menu-sep {
   flex: none;
@@ -2153,16 +2161,15 @@ body.is-resizing .cm-editor {
   background: var(--border);
 }
 .props-menu {
-  min-width: 240px;
+  min-width: 280px;
+  max-width: 360px;
   padding: 12px 12px 2px;
-}
-.props-menu .field-hint {
-  white-space: normal;
 }
 .meta-summary {
   font-weight: var(--fw-normal);
 }
 .menu-group {
+  flex: none;
   font-size: var(--fs-xs);
   font-weight: var(--fw-semibold);
   color: var(--muted);
@@ -2253,6 +2260,9 @@ kbd {
   .stepper-active .stepper-dot,
   .spinner {
     animation-duration: 3s;
+  }
+  .menu-list {
+    animation: none;
   }
 }
 
@@ -2408,10 +2418,4 @@ kbd {
 .review-score,
 .step-meta {
   font-variant-numeric: tabular-nums;
-}
-
-/* 選項很短的選單（例如左側欄的階段選單），寬度跟著內容 */
-.menu-narrow {
-  min-width: 0;
-  white-space: nowrap;
 }
