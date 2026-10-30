@@ -526,12 +526,19 @@ export function CategoryBadge({ category, children }: { category: string; childr
   return <span className={`badge badge-${CATEGORY_TONE[category] ?? 'neutral'} badge-category`}>{children}</span>
 }
 
-export function Field(props: { label: string; hint?: ReactNode; children: ReactNode }) {
+/** error：有值時顯示成紅字，取代 hint */
+export function Field(props: { label: string; hint?: ReactNode; error?: ReactNode; children: ReactNode }) {
   return (
     <label className="field">
       <span className="field-label">{props.label}</span>
       {props.children}
-      {props.hint && <span className="field-hint">{props.hint}</span>}
+      {props.error ? (
+        <span className="field-error" role="alert">
+          {props.error}
+        </span>
+      ) : (
+        props.hint && <span className="field-hint">{props.hint}</span>
+      )}
     </label>
   )
 }

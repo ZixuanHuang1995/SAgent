@@ -446,14 +446,28 @@ export function NewSpecDialog(props: {
     onError: (e) => toast(errorText(e), 'error'),
   })
 
-  const ready = title.trim() && phaseId && template && (init !== 'ai' || requirement.trim())
+  // 建立按鈕不先灰掉：按下去時才標出缺的欄位，並把游標移過去（對話框高，缺的欄位常在看不到的地方）
+  const [showMissing, setShowMissing] = useState(false)
+  const titleRef = useRef<HTMLInputElement>(null)
+  const requirementRef = useRef<HTMLTextAreaElement>(null)
+  const missingTitle = !title.trim()
+  const missingRequirement = init === 'ai' && !requirement.trim()
+  const submit = () => {
+    if (missingTitle || missingRequirement) {
+      setShowMissing(true)
+      ;(missingTitle ? titleRef : requirementRef).current?.focus()
+      return
+    }
+    create.mutate()
+  }
+  const ready = phaseId && template
   const current = categories.data?.find((c) => c.key === category)
   const help = requirementHelp(template)
 
   if (!category) {
     return (
       <Modal
-        title="新增 Spec：先選類型"
+        title="新增 Spec：選擇類型"
         onClose={props.onClose}
         wide
         footer={
@@ -462,19 +476,46 @@ export function NewSpecDialog(props: {
           </button>
         }
       >
-        <p className="muted small mt-0">不同類型的文件，章節和寫法不一樣。選最接近你現在狀況的一種。</p>
+        <p className="muted small mt-0">不同類型的文件，章節和寫法不一樣。選最接近你現在狀況的一種，已經知道要寫哪種文件也可以直接點文件名稱。</p>
         {categories.isLoading && <Spinner />}
         <div className="category-grid">
           {categories.data?.map((c) => {
-            const names = (templates.data ?? []).filter((t) => t.category === c.key).map((t) => t.name)
+            const docs = (templates.data ?? []).filter((t) => t.category === c.key)
             return (
-              <button key={c.key} type="button" className="category-card" disabled={names.length === 0} onClick={() => setCategory(c.key)}>
-                <span className="category-card-name">
-                  <CategoryBadge category={c.key}>{c.name}</CategoryBadge>
-                </span>
-                <span className="category-card-desc">{c.description}</span>
-                <span className="category-card-docs muted small">{names.length ? names.join('、') : '沒有這個類型的文件範本'}</span>
-              </button>
+              <div key={c.key} className={`category-card${docs.length === 0 ? ' disabled' : ''}`}>
+                {/* 點卡片用這個類型的預設文件類型；點下面的文件名稱直接選那一種 */}
+                <button type="button" className="category-card-main" disabled={docs.length === 0}
+                  onClick={() => {
+                    setDocType('')
+                    setCategory(c.key)
+                  }}
+                >
+                  <span className="category-card-name">
+                    <CategoryBadge category={c.key}>{c.name}</CategoryBadge>
+                  </span>
+                  <span className="category-card-desc">{c.description}</span>
+                </button>
+                {docs.length === 0 ? (
+                  <span className="muted small">沒有這個類型的文件範本</span>
+                ) : (
+                  <span className="category-card-docs">
+                    {docs.map((t) => (
+                      <button
+                        key={t.key}
+                        type="button"
+                        className="doc-chip"
+                        title={t.description}
+                        onClick={() => {
+                          setDocType(t.key)
+                          setCategory(c.key)
+                        }}
+                      >
+                        {t.name}
+                      </button>
+                    ))}
+                  </span>
+                )}
+              </div>
             )
           })}
         </div>
@@ -502,7 +543,7 @@ export function NewSpecDialog(props: {
           <button className="btn" onClick={props.onClose}>
             取消
           </button>
-          <button className="btn btn-primary" disabled={!ready || create.isPending} onClick={() => create.mutate()}>
+          <button className="btn btn-primary" disabled={!ready || create.isPending} onClick={submit}>
             {init === 'ai' ? '建立並開始 AI 撰寫' : '建立'}
           </button>
         </>
@@ -514,8 +555,14 @@ export function NewSpecDialog(props: {
         </p>
       )}
       <div className="form-row">
-        <Field label="標題">
-          <input className="input" autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="例如：請假申請功能" />
+        <Field label="標題" error={showMissing && missingTitle && '請填標題'}>
+          <input
+            ref={titleRef}
+            className={`input${showMissing && missingTitle ? ' invalid' : ''}`}
+            autoFocus
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
         </Field>
         <Field label="階段">
           <select className="input" value={phaseId} onChange={(e) => setPhaseId(Number(e.target.value))}>
@@ -553,8 +600,14 @@ export function NewSpecDialog(props: {
         </div>
       </Field>
       {init === 'ai' && (
-        <Field label="需求內容" hint={help.hint}>
-          <textarea className="input textarea" rows={8} value={requirement} placeholder={help.placeholder} onChange={(e) => setRequirement(e.target.value)} />
+        <Field label="需求內容" hint={help.hint} error={showMissing && missingRequirement && '請填需求內容，AI 會照這些內容撰寫'}>
+          <textarea
+            ref={requirementRef}
+            className={`input textarea${showMissing && missingRequirement ? ' invalid' : ''}`}
+            rows={8}
+            value={requirement}
+            onChange={(e) => setRequirement(e.target.value)}
+          />
         </Field>
       )}
       {init === 'ai' && (
