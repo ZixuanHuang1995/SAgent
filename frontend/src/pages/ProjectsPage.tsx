@@ -4,10 +4,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { api, type PhaseSummary, type Project } from '../api'
-import { relativeTime } from '../format'
+import { PROJECT_CODE_HINT, PROJECT_DESC_HINT, relativeTime } from '../format'
 import { usePersistent } from '../hooks/layout'
 import { keys, useProjects } from '../queries'
-import { Badge, Empty, errorText, Field, Menu, MenuItem, MenuSeparator, Modal, Skeleton, useToast } from '../components/ui'
+import { Badge, Empty, errorText, Field, Menu, MenuItem, MenuSeparator, Modal, Skeleton, submitOnEnter, useToast } from '../components/ui'
 import { Icon } from '../components/icons'
 import { NewSpecDialog } from './ProjectLayout'
 
@@ -206,15 +206,8 @@ function CreateProjectDialog({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
   const [description, setDescription] = useState('')
-  const [phases, setPhases] = useState('需求分析\n系統設計\n詳細設計')
   const create = useMutation({
-    mutationFn: () =>
-      api.createProject({
-        name,
-        code,
-        description,
-        phases: phases.split('\n').map((s) => s.trim()).filter(Boolean),
-      }),
+    mutationFn: () => api.createProject({ name, code, description }),
     onSuccess: (p) => {
       qc.invalidateQueries({ queryKey: keys.projects })
       onClose()
@@ -222,6 +215,7 @@ function CreateProjectDialog({ onClose }: { onClose: () => void }) {
     },
     onError: (e) => toast(errorText(e), 'error'),
   })
+  const canCreate = !!name.trim() && !create.isPending
   return (
     <Modal
       title="建立專案"
@@ -231,23 +225,32 @@ function CreateProjectDialog({ onClose }: { onClose: () => void }) {
           <button className="btn" onClick={onClose}>
             取消
           </button>
-          <button className="btn btn-primary" disabled={!name.trim() || create.isPending} onClick={() => create.mutate()}>
+          <button className="btn btn-primary" disabled={!canCreate} onClick={() => create.mutate()}>
             建立
           </button>
         </>
       }
     >
       <Field label="專案名稱">
-        <input className="input" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：員工請假系統" />
+        <input
+          className="input"
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => submitOnEnter(e, canCreate, create.mutate)}
+        />
       </Field>
-      <Field label="專案代碼（選填）" hint="簡短的英文代號">
-        <input className="input" value={code} maxLength={40} placeholder="例如：HR、ORD" onChange={(e) => setCode(e.target.value)} />
+      <Field label="專案代碼" hint={PROJECT_CODE_HINT}>
+        <input
+          className="input"
+          value={code}
+          maxLength={40}
+          onChange={(e) => setCode(e.target.value)}
+          onKeyDown={(e) => submitOnEnter(e, canCreate, create.mutate)}
+        />
       </Field>
-      <Field label="說明（選填）" hint="AI 撰寫時會參考這段說明">
-        <textarea className="input textarea" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
-      </Field>
-      <Field label="功能階段" hint="一行一個，之後還可以新增、改名、調整順序">
-        <textarea className="input textarea" rows={4} value={phases} onChange={(e) => setPhases(e.target.value)} />
+      <Field label="說明" hint={PROJECT_DESC_HINT}>
+        <textarea className="input textarea" rows={5} value={description} onChange={(e) => setDescription(e.target.value)} />
       </Field>
     </Modal>
   )

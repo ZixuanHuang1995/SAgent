@@ -4,9 +4,19 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { api, type PlanTerm } from '../api'
-import { AI_STATUS, relativeTime, RUN_STATUS, SPEC_STATUS, TERMS_FORMAT, termsToText, textToTerms } from '../format'
+import {
+  AI_STATUS,
+  PROJECT_CODE_HINT,
+  PROJECT_DESC_HINT,
+  relativeTime,
+  RUN_STATUS,
+  SPEC_STATUS,
+  TERMS_FORMAT,
+  termsToText,
+  textToTerms,
+} from '../format'
 import { keys, useBaselines, useProjectTree, useRuns, useTemplateCategories, useTemplates } from '../queries'
-import { Badge, CategoryBadge, ConfirmDialog, Empty, errorText, Field, Menu, MenuItem, MenuSeparator, Modal, Skeleton, useToast } from '../components/ui'
+import { Badge, CategoryBadge, ConfirmDialog, Empty, errorText, Field, Menu, MenuItem, MenuSeparator, Modal, Skeleton, submitOnEnter, useToast } from '../components/ui'
 import { NewSpecDialog } from './ProjectLayout'
 import { Icon } from '../components/icons'
 
@@ -18,7 +28,8 @@ export function ProjectHome() {
   const [editing, setEditing] = useState(false)
   const [editingGlossary, setEditingGlossary] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [newSpec, setNewSpec] = useState(false)
+  // 要新增 Spec 時記下預設的階段（從某個階段的卡片點的就用那個階段）
+  const [newSpec, setNewSpec] = useState<{ phaseId: number | null } | null>(null)
   const navigate = useNavigate()
   const qc = useQueryClient()
   const toast = useToast()
@@ -32,6 +43,29 @@ export function ProjectHome() {
     )
   const { project, phases, specs } = tree.data
   const counts = specs.reduce<Record<string, number>>((acc, s) => ({ ...acc, [s.status]: (acc[s.status] ?? 0) + 1 }), {})
+  // 還沒有 Spec 時只突顯「新增第一份 Spec」，統計、AI 工作這些空的區塊先不顯示
+  const hasSpecs = specs.length > 0
+
+  const glossaryCard = (
+    <section className="card">
+      <div className="card-title">
+        專案詞彙表 <span className="muted small">{project.glossary.length} 個</span>
+        <span className="spacer" />
+        <button className="btn btn-sm" onClick={() => setEditingGlossary(true)}>
+          編輯
+        </button>
+      </div>
+      <ul className="glossary-list">
+        {project.glossary.map((t) => (
+          <li key={t.name}>
+            <strong>{t.name}</strong>
+            {t.kind && <span className="muted">（{t.kind}）</span>}
+            {t.note && <span className="muted small">：{t.note}</span>}
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
 
   return (
     <div className="page">
@@ -43,16 +77,20 @@ export function ProjectHome() {
           <p className="muted">{project.description || '（沒有說明）'}</p>
         </div>
         <div className="row gap-sm">
-          <a className="btn" href={api.projectExportUrl(projectId)} download>
-            匯出全部（zip）
-          </a>
-          <button className="btn btn-primary" onClick={() => setNewSpec(true)} disabled={phases.length === 0}>
-            + 新增 Spec
-          </button>
+          {hasSpecs && (
+            <button className="btn btn-primary" onClick={() => setNewSpec({ phaseId: phases[0]?.id ?? null })} disabled={phases.length === 0}>
+              + 新增 Spec
+            </button>
+          )}
           <Menu trigger={<Icon name="more" />} label="專案的其他操作" title="其他操作">
             <MenuItem icon="edit" onSelect={() => setEditing(true)}>
               編輯名稱和說明
             </MenuItem>
+            {hasSpecs && (
+              <MenuItem icon="download" href={api.projectExportUrl(projectId)} download>
+                匯出全部（zip）
+              </MenuItem>
+            )}
             <MenuSeparator />
             <MenuItem icon="trash" danger onSelect={() => setDeleting(true)}>
               刪除專案…
@@ -61,61 +99,58 @@ export function ProjectHome() {
         </div>
       </div>
 
-      <div className="stat-row">
-        <div className="stat">
-          <div className="stat-num">{specs.length}</div>
-          <div className="stat-label">Spec</div>
-        </div>
-        <div className="stat">
-          <div className="stat-num">{counts.approved ?? 0}</div>
-          <div className="stat-label">已核准</div>
-        </div>
-        <div className="stat">
-          <div className="stat-num">{phases.length}</div>
-          <div className="stat-label">功能階段</div>
-        </div>
-        <div className="stat">
-          <div className="stat-num">{baselines.data?.length ?? 0}</div>
-          <div className="stat-label">基準版本</div>
-        </div>
-      </div>
-
-      <section className="card">
-        <div className="card-title">
-          專案詞彙表 <span className="muted small">{project.glossary.length} 個</span>
-          <span className="spacer" />
-          <button className="btn btn-sm" onClick={() => setEditingGlossary(true)}>
-            編輯
-          </button>
-        </div>
-        {project.glossary.length === 0 ? (
-          <div className="muted small">
-            還沒有名詞。列出這個專案的角色、狀態、主要資料的名稱，AI 撰寫每一份文件時都會照這些名稱寫，文件之間才不會說法不一樣。
-          </div>
-        ) : (
-          <ul className="glossary-list">
-            {project.glossary.map((t) => (
-              <li key={t.name}>
-                <strong>{t.name}</strong>
-                {t.kind && <span className="muted">（{t.kind}）</span>}
-                {t.note && <span className="muted small">：{t.note}</span>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {specs.length === 0 && (
-        <Empty title="這個專案還沒有 Spec">
-          <button className="btn btn-primary" onClick={() => setNewSpec(true)} disabled={phases.length === 0}>
-            + 新增第一份 Spec
-          </button>
-        </Empty>
+      {!hasSpecs && (
+        <section className="card">
+          <Empty title="從第一份 Spec 開始">
+            <p>貼上需求讓 AI 撰寫，或從範本骨架、空白文件開始。</p>
+            <button className="btn btn-primary" onClick={() => setNewSpec({ phaseId: phases[0]?.id ?? null })} disabled={phases.length === 0}>
+              + 新增第一份 Spec
+            </button>
+          </Empty>
+        </section>
       )}
+
+      {hasSpecs && (
+        <div className="stat-row">
+          <div className="stat">
+            <div className="stat-num">{specs.length}</div>
+            <div className="stat-label">Spec</div>
+          </div>
+          <div className="stat">
+            <div className="stat-num">{counts.approved ?? 0}</div>
+            <div className="stat-label">已核准</div>
+          </div>
+          <div className="stat">
+            <div className="stat-num">{phases.length}</div>
+            <div className="stat-label">功能階段</div>
+          </div>
+          <div className="stat">
+            <div className="stat-num">{baselines.data?.length ?? 0}</div>
+            <div className="stat-label">基準版本</div>
+          </div>
+        </div>
+      )}
+
+      {project.glossary.length > 0 && glossaryCard}
 
       {phases.map((phase) => {
         const list = specs.filter((s) => s.phase_id === phase.id)
-        if (list.length === 0) return null
+        // 整個專案都還沒有 Spec 時，上面已經有引導，各階段不用再列
+        if (list.length === 0 && !hasSpecs) return null
+        if (list.length === 0)
+          return (
+            <section key={phase.id} className="card">
+              <div className="card-title">
+                {phase.name} <span className="muted small">0 份</span>
+                <span className="spacer" />
+                <button className="btn btn-sm" onClick={() => setNewSpec({ phaseId: phase.id })}>
+                  + 新增 Spec
+                </button>
+              </div>
+              {phase.description && <p className="muted small">{phase.description}</p>}
+              <div className="muted small">這個階段還沒有 Spec</div>
+            </section>
+          )
         return (
           <section key={phase.id} className="card">
             <div className="card-title">
@@ -172,25 +207,39 @@ export function ProjectHome() {
         )
       })}
 
-      <section className="card">
-        <div className="card-title">
-          最近的 AI 工作 <Link to={`/p/${projectId}/runs`} className="small">全部</Link>
-        </div>
-        {runs.data?.length === 0 && <div className="muted small">還沒有 AI 工作。</div>}
-        <ul className="plain-list">
-          {runs.data?.slice(0, 5).map((r) => (
-            <li key={r.id} className="row gap-sm">
-              <Badge tone={r.status === 'succeeded' ? 'green' : r.status === 'failed' ? 'red' : 'blue'}>{RUN_STATUS[r.status]}</Badge>
-              <Link to={`/p/${projectId}/s/${r.spec_id}`}>{r.spec_title}</Link>
-              <span className="muted small">
-                {r.mode === 'revise' ? '修訂' : '撰寫'}・{r.model}・{relativeTime(r.created_at)}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
+      {/* 剛開始通常還說不清有哪些名詞，AI 工作完成後也會提議加入，所以空的時候只留一行 */}
+      {project.glossary.length === 0 && (
+        <section className="card row gap-sm">
+          <strong>專案詞彙表</strong>
+          <span className="muted small">還沒有名詞，AI 撰寫完會提議加入</span>
+          <span className="spacer" />
+          <button className="btn btn-sm" onClick={() => setEditingGlossary(true)}>
+            新增名詞
+          </button>
+        </section>
+      )}
 
-      {newSpec && <NewSpecDialog projectId={projectId} phases={phases} phaseId={phases[0]?.id ?? null} onClose={() => setNewSpec(false)} />}
+      {hasSpecs && (
+        <section className="card">
+          <div className="card-title">
+            最近的 AI 工作 <Link to={`/p/${projectId}/runs`} className="small">全部</Link>
+          </div>
+          {runs.data?.length === 0 && <div className="muted small">還沒有 AI 工作。</div>}
+          <ul className="plain-list">
+            {runs.data?.slice(0, 5).map((r) => (
+              <li key={r.id} className="row gap-sm">
+                <Badge tone={r.status === 'succeeded' ? 'green' : r.status === 'failed' ? 'red' : 'blue'}>{RUN_STATUS[r.status]}</Badge>
+                <Link to={`/p/${projectId}/s/${r.spec_id}`}>{r.spec_title}</Link>
+                <span className="muted small">
+                  {r.mode === 'revise' ? '修訂' : '撰寫'}・{r.model}・{relativeTime(r.created_at)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {newSpec && <NewSpecDialog projectId={projectId} phases={phases} phaseId={newSpec.phaseId} onClose={() => setNewSpec(null)} />}
       {editing && <EditProjectDialog projectId={projectId} initial={project} onClose={() => setEditing(false)} />}
       {editingGlossary && <GlossaryDialog projectId={projectId} initial={project.glossary} onClose={() => setEditingGlossary(false)} />}
       {deleting && (
@@ -229,6 +278,7 @@ function EditProjectDialog(props: { projectId: number; initial: { name: string; 
     },
     onError: (e) => toast(errorText(e), 'error'),
   })
+  const canSave = !!form.name.trim() && !save.isPending
   return (
     <Modal
       title="編輯專案"
@@ -238,20 +288,30 @@ function EditProjectDialog(props: { projectId: number; initial: { name: string; 
           <button className="btn" onClick={props.onClose}>
             取消
           </button>
-          <button className="btn btn-primary" disabled={!form.name.trim() || save.isPending} onClick={() => save.mutate()}>
+          <button className="btn btn-primary" disabled={!canSave} onClick={() => save.mutate()}>
             儲存
           </button>
         </>
       }
     >
       <Field label="專案名稱">
-        <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        <input
+          className="input"
+          value={form.name}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+          onKeyDown={(e) => submitOnEnter(e, canSave, save.mutate)}
+        />
       </Field>
-      <Field label="專案代碼" hint="簡短的英文代號">
-        <input className="input" value={form.code} placeholder="例如：HR、ORD" onChange={(e) => setForm({ ...form, code: e.target.value })} />
+      <Field label="專案代碼" hint={PROJECT_CODE_HINT}>
+        <input
+          className="input"
+          value={form.code}
+          onChange={(e) => setForm({ ...form, code: e.target.value })}
+          onKeyDown={(e) => submitOnEnter(e, canSave, save.mutate)}
+        />
       </Field>
-      <Field label="說明" hint="AI 撰寫時會參考這段說明">
-        <textarea className="input textarea" rows={4} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+      <Field label="說明" hint={PROJECT_DESC_HINT}>
+        <textarea className="input textarea" rows={5} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
       </Field>
     </Modal>
   )

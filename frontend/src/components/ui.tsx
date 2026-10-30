@@ -536,6 +536,13 @@ export function Field(props: { label: string; hint?: ReactNode; children: ReactN
   )
 }
 
+/** 單行輸入框按 Enter 送出對話框。中文輸入法選字時按的 Enter 不算 */
+export function submitOnEnter(e: ReactKeyboardEvent, enabled: boolean, submit: () => void) {
+  if (e.key !== 'Enter' || e.nativeEvent.isComposing || !enabled) return
+  e.preventDefault()
+  submit()
+}
+
 
 // ---------------------------------------------------------------------------
 // 拖拉分隔線：左右拖動調整欄寬，也可以用方向鍵，雙擊恢復預設

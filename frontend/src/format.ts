@@ -149,6 +149,10 @@ export function textToTerms(text: string): PlanTerm[] {
 /** 名詞表的格式說明，專案詞彙表和確認大綱的名詞表共用 */
 export const TERMS_FORMAT = '一行一個：名稱（類型）：說明。類型用角色、狀態、資料或其他。'
 
+/** 建立、編輯專案共用的欄位說明 */
+export const PROJECT_CODE_HINT = '簡短的英文代號，例如 HR、ORD'
+export const PROJECT_DESC_HINT = '可以寫：給誰用、要解決什麼問題、預期帶來什麼效益'
+
 /** AI 撰寫一份文件大概要多久（CPU 推論），各處的說明都用這個 */
 export const RUN_TIME_TEXT = '本機 CPU 上一份文件約 30～70 分鐘'
 
