@@ -1,6 +1,8 @@
 import asyncio
 import json
 
+from conftest import BACKUP_TEMPLATES
+
 from sagent.agents.base import ListEmitter
 from sagent.agents.doc_templates import load_templates
 from sagent.agents.fake_llm import FakeLLM
@@ -30,6 +32,12 @@ from sagent.services.diagrams import extract_diagrams, lint_mermaid
 from sagent.services.markdown_doc import parse_markdown
 
 
+def find_template(key: str):
+    """內建範本；內建沒有的從備份讀（當成自訂範本）。用來測 advice、experiment 寫作規則和章節固定的範本"""
+    builtin = load_templates()
+    return builtin[key] if key in builtin else load_templates(BACKUP_TEMPLATES)[key]
+
+
 def make_input(mode="draft", existing="", template="functional_spec", **opts) -> RunInput:
     return RunInput(
         mode=mode,
@@ -37,7 +45,7 @@ def make_input(mode="draft", existing="", template="functional_spec", **opts) ->
         project_description="線上訂單管理",
         phase_name="需求分析",
         spec_title="下單功能",
-        template=load_templates()[template],
+        template=find_template(template),
         requirement="客戶可以在網站下單，訂單送出後要通知倉庫出貨。",
         existing_content=existing,
         options=PipelineOptions(**opts),
@@ -283,7 +291,7 @@ def test_revise_without_preamble_adds_nothing():
 
 
 def test_uiux_advice_template():
-    tpl = load_templates()["uiux_advice"]
+    tpl = find_template("uiux_advice")
     assert tpl.name == "UI/UX 設計建議"
     assert tpl.advice and not tpl.allow_diagrams
     assert tpl.role == "UI/UX 設計師"
@@ -324,18 +332,26 @@ def test_spec_doc_keeps_spec_rules():
 
 def test_template_categories_and_styles(tmp_path):
     templates = load_templates()
+    # 內建只留 8 個，排列順序就是寫 Spec 的順序
+    assert list(templates) == [
+        "idea_proposal",
+        "functional_spec",
+        "test_plan",
+        "tech_decision",
+        "architecture",
+        "database",
+        "algorithm_design",
+        "change_request",
+    ]
     assert templates["idea_proposal"].category == "idea" and templates["idea_proposal"].idea
     assert templates["change_request"].category == "change"
-    assert templates["change_record"].category == "change" and not templates["change_record"].allow_diagrams
-    assert templates["api_spec"].category == "design"
     assert templates["tech_decision"].category == "design" and templates["tech_decision"].decision
-    # Technical 類型裡，技術決策排在架構設計前面
-    design = [k for k, t in templates.items() if t.category == "design"]
-    assert design[:2] == ["tech_decision", "architecture"]
-    assert "use_case" in templates and templates["use_case"].sections[-1].heading == "驗證方式"
     assert templates["functional_spec"].category == "feature" and templates["functional_spec"].style == "spec"
-    # 預設範本還是功能規格書
-    assert next(iter(templates)) == "functional_spec"
+    assert templates["test_plan"].category == "feature"
+    # 移除的範本放進自訂範本照樣能用
+    assert find_template("change_record").category == "change" and not find_template("change_record").allow_diagrams
+    assert find_template("api_spec").category == "design"
+    assert find_template("use_case").sections[-1].heading == "驗證方式"
     # 自訂範本：舊寫法 advice: true 仍然有效；沒寫或寫錯類型歸到「功能」
     (tmp_path / "old.yaml").write_text(
         "key: old\nname: 舊範本\nadvice: true\ncategory: nope\nsections:\n  - heading: 一\n", encoding="utf-8"
@@ -381,7 +397,7 @@ def test_idea_doc_uses_idea_rules_and_one_diagram():
 
 
 def test_fixed_sections_follow_template():
-    tpl = load_templates()["sdd_five"]
+    tpl = find_template("sdd_five")
     assert tpl.fixed_sections and tpl.to_dict()["fixed_sections"] is True
     headings = [s.heading for s in tpl.sections]
     inp = make_input(template="sdd_five")
@@ -420,7 +436,7 @@ def test_fixed_sections_follow_template():
 def test_fixed_sections_schema_and_revise_keeps_sections():
     from sagent.agents.prompts import PLAN_SCHEMA, plan_schema
 
-    tpl = load_templates()["change_record"]
+    tpl = find_template("change_record")
     schema = plan_schema(tpl)
     secs = schema["properties"]["sections"]
     assert secs["items"]["properties"]["heading"]["enum"] == [s.heading for s in tpl.sections]
@@ -499,8 +515,8 @@ def test_algorithm_doc_uses_algorithm_rules_and_keeps_pseudocode():
 
 
 def test_experiment_doc_uses_experiment_rules():
-    templates = load_templates()
-    assert templates["experiment_design"].category == "design" and templates["experiment_design"].experiment
+    tpl = find_template("experiment_design")
+    assert tpl.category == "design" and tpl.experiment
     llm = FakeLLM()
     inp = make_input(template="experiment_design", diagrams=True, max_diagrams=4)
     result, _ = run(llm, inp)

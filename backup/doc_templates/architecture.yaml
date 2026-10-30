@@ -1,0 +1,24 @@
+key: architecture
+name: 系統架構設計
+description: 技術方向決定之後，說明系統由哪些元件組成、元件怎麼互動、怎麼部署，以及安全設計。還在比較方案時先寫「技術決策」。
+order: 21
+category: design
+role: 軟體架構師
+sections:
+  - heading: 設計目標與限制
+    goal: 列出架構要達成的目標（效能、可用性、安全等）和已知的限制；需求沒有數字就標（待確認）。
+  - heading: 系統環境
+    goal: 說明系統和使用者、外部系統之間的關係，以及彼此交換哪些資料。
+  - heading: 元件設計
+    goal: 用表格列出系統內部的元件，欄位是元件、職責、對外介面。
+    diagrams: [component]
+  - heading: 主要流程
+    goal: 挑兩三個重要情境，說明元件之間依什麼順序互動。
+    diagrams: [sequence]
+  - heading: 部署架構
+    goal: 說明執行環境、主機、網路區域和部署方式。
+    diagrams: [deployment]
+  - heading: 技術選型與決策
+    goal: 用表格列出已經決定的技術和做法，欄位是項目、選擇、原因、依據（技術決策文件或需求）。這裡只列結果，不重新比較方案。
+  - heading: 安全設計
+    goal: 說明身分驗證、授權、資料保護和稽核紀錄的做法。

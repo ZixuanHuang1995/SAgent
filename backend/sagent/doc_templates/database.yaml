@@ -1,7 +1,7 @@
 key: database
 name: 資料庫設計
 description: 說明資料模型、資料表欄位、索引，以及資料怎麼建立、封存、移轉和備份。
-order: 22
+order: 6
 category: design
 sections:
   - heading: 設計說明

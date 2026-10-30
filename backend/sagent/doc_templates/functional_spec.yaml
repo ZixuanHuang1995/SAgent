@@ -1,7 +1,7 @@
 key: functional_spec
 name: 功能規格書
-description: 最完整的功能規格：目的、需求、流程、資料、規則和驗收條件都寫，章節和圖最多，CPU 上跑最久。只想寫角色和系統的互動時用「使用案例規格」。
-order: 1
+description: 目的、需求、流程、資料、規則和驗收條件都寫。章節和圖比較多，CPU 上跑比較久。
+order: 2
 category: feature
 sections:
   - heading: 目的與範圍

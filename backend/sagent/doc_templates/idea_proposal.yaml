@@ -1,7 +1,7 @@
 key: idea_proposal
 name: 構想提案
 description: 把還在構想階段的想法整理清楚：要解決什麼問題、給誰用、使用者故事、怎樣算成功、可能的做法，以及要先確認的假設。不寫細節規格。
-order: 10
+order: 1
 category: idea
 style: idea
 max_diagrams: 1

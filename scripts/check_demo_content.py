@@ -42,12 +42,8 @@ from sagent.services.markdown_doc import normalize_heading, parse_markdown, stri
 DOC_TYPES = {
     "idea": "idea_proposal",
     "feature": "functional_spec",
-    "use_case": "use_case",
-    "uiux": "uiux_advice",
-    "sdd": "sdd_five",
     "architecture": "architecture",
     "database": "database",
-    "api": "api_spec",
     "change": "change_request",
     "test_plan": "test_plan",
 }
@@ -55,12 +51,8 @@ DOC_TYPES = {
 PHASES = {
     "idea": "需求萃取",
     "feature": "需求萃取",
-    "use_case": "需求萃取",
-    "uiux": "需求萃取",
-    "sdd": "系統設計",
     "architecture": "系統分析",
     "database": "系統分析",
-    "api": "系統設計",
     "change": "第二期",
     "test_plan": "驗收測試",
 }
@@ -76,7 +68,7 @@ _BAD_TEXT = [
 def keys_of(sc: Scenario | AlgoScenario) -> list[str]:
     if isinstance(sc, AlgoScenario):
         return [*sc.doc_types, "revise"]
-    keys = ["idea", "feature", "use_case", "uiux", "sdd", "architecture", "database", "api", "change"]
+    keys = ["idea", "feature", "architecture", "database", "change"]
     if sc.showcase:
         keys.append("test_plan")
     return [*keys, "revise"]

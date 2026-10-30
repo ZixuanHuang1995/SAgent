@@ -1,0 +1,34 @@
+key: functional_spec
+name: 功能規格書
+description: 最完整的功能規格：目的、需求、流程、資料、規則和驗收條件都寫，章節和圖最多，CPU 上跑最久。只想寫角色和系統的互動時用「使用案例規格」。
+order: 1
+category: feature
+sections:
+  - heading: 目的與範圍
+    goal: 說明這個功能要解決什麼問題、給誰用，再分成「包含」和「不包含」兩個清單列出範圍。
+  - heading: 名詞定義
+    goal: 用表格列出文件裡的專有名詞和縮寫，欄位是名詞、說明。只列需求裡出現的名詞。
+  - heading: 角色與使用案例
+    goal: 用表格列出會使用這個功能的角色，欄位是角色、說明、可以做的事。
+    diagrams: [usecase]
+  - heading: 功能需求
+    goal: 逐條列出系統要做的事，每條先用一句話說明，再用子項目寫輸入、處理和輸出。
+    ids: FR
+  - heading: 業務流程
+    goal: 用編號步驟說明主要流程，再列出例外情況和處理方式。
+    diagrams: [flowchart]
+  - heading: 系統互動
+    goal: 說明使用者、前端、後端和外部系統之間依什麼順序傳遞哪些資料。
+    diagrams: [sequence]
+  - heading: 資料需求
+    goal: 列出需要的資料實體、每個實體的主要欄位，以及實體之間的關聯。
+    diagrams: [er]
+  - heading: 業務規則
+    goal: 逐條列出業務規則和檢核條件，每條寫清楚在什麼條件下、系統要怎麼做。
+    ids: BR
+  - heading: 非功能需求
+    goal: 列出效能、安全、可用性、稽核等要求，盡量寫成可以量測的數字；需求沒有數字就標（待確認）。
+    ids: NFR
+  - heading: 驗收條件
+    goal: 用「假設…當…則…」的格式寫驗收條件，每條註明對應的功能需求編號。
+    ids: AC

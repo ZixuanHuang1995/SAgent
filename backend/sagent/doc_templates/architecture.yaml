@@ -1,7 +1,7 @@
 key: architecture
 name: 系統架構設計
 description: 技術方向決定之後，說明系統由哪些元件組成、元件怎麼互動、怎麼部署，以及安全設計。還在比較方案時先寫「技術決策」。
-order: 21
+order: 5
 category: design
 role: 軟體架構師
 sections:

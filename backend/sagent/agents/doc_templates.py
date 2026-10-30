@@ -44,19 +44,18 @@ CATEGORIES: list[Category] = [
     Category(
         "idea", "Concept", "只有想法，還沒確定要不要做。整理問題、使用者故事、怎樣算成功和可能的做法。"
     ),
-    Category("feature", "Functionality", "已經確定要做這個功能。寫清楚使用案例、規則和驗證方式。"),
+    Category("feature", "Functionality", "已經確定要做這個功能。寫清楚功能、規則和驗收條件，再安排測試。"),
     Category(
         "design",
         "Technical",
-        "要決定怎麼實作。先比較幾個做法、選出一個，再寫架構、資料庫、API；"
-        "需要數據才能決定時，用實驗設計去驗證。",
+        "要決定怎麼實作。先比較幾個做法、選出一個，再寫系統架構和資料庫設計。",
     ),
     Category(
         "algorithm",
         "Algorithm",
         "要設計演算法。定義輸入、輸出和限制，說明設計策略、解法、虛擬碼、複雜度和測試案例。",
     ),
-    Category("change", "Change", "要修改既有系統，或記錄已經改了什麼。說明差異、原因和影響範圍。"),
+    Category("change", "Change", "要修改既有系統。說明要改什麼、為什麼改、影響範圍和怎麼上線。"),
 ]
 CATEGORY_KEYS = {c.key for c in CATEGORIES}
 STYLES = ("spec", "advice", "idea", "decision", "algorithm", "experiment")

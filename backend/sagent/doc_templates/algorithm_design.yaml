@@ -1,7 +1,7 @@
 key: algorithm_design
 name: 演算法設計
 description: 定義問題的輸入、輸出和限制，說明設計策略和解法，寫出虛擬碼、分析複雜度並列出測試案例。
-order: 30
+order: 7
 category: algorithm
 role: 演算法工程師
 style: algorithm

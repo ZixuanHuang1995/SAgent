@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import time
 from pathlib import Path
 
@@ -7,8 +8,17 @@ import pytest
 from fastapi.testclient import TestClient
 
 from sagent.agents.fake_llm import FakeLLM
-from sagent.config import load_config
+from sagent.config import ROOT_DIR, load_config
 from sagent.main import create_app
+
+# 從內建移除的範本備份在這裡，放進自訂範本照樣能用
+BACKUP_TEMPLATES = ROOT_DIR / "backup" / "doc_templates"
+
+
+def install_backup_template(cfg, key: str) -> None:
+    """把備份的範本放進自訂範本資料夾，不用重新啟動就會生效"""
+    cfg.templates_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy(BACKUP_TEMPLATES / f"{key}.yaml", cfg.templates_dir)
 
 
 @pytest.fixture

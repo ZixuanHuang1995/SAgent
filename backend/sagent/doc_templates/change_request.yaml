@@ -1,7 +1,7 @@
 key: change_request
 name: 變更需求說明
-description: 改之前用：說明既有系統要改什麼、為什麼改、影響哪些地方，以及怎麼測試和上線。已經改完、只要記錄差異時用「變更紀錄」。
-order: 40
+description: 說明既有系統要改什麼、為什麼改、影響哪些地方，以及怎麼測試和上線。
+order: 8
 category: change
 sections:
   - heading: 變更原因

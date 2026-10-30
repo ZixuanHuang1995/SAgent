@@ -1,6 +1,6 @@
 import json
 
-from conftest import wait_run, wait_status
+from conftest import install_backup_template, wait_run, wait_status
 
 
 def _spec(client, project, init="none"):
@@ -99,7 +99,7 @@ def test_list_runs_and_templates_and_settings(client, project):
     runs = client.get("/api/agent/runs", params={"project_id": project["project"]["id"]}).json()
     assert runs[0]["id"] == run_id and runs[0]["spec_title"] == "下單功能"
     templates = client.get("/api/agent/templates").json()
-    assert templates[0]["key"] == "functional_spec"
+    assert templates[0]["key"] == "idea_proposal"  # 照寫 Spec 的順序
     assert client.get("/api/agent/models").json()["provider"] == "fake"
 
     s = client.put("/api/settings", json={"default_model": "qwen3:8b", "max_revisions": 2}).json()
@@ -111,7 +111,8 @@ def test_list_runs_and_templates_and_settings(client, project):
     assert client.post("/api/render/plantuml", json={"source": "@startuml\nA->B\n@enduml"}).status_code == 503
 
 
-def test_uiux_advice_run_never_draws(client, project):
+def test_uiux_advice_run_never_draws(cfg, client, project):
+    install_backup_template(cfg, "uiux_advice")
     templates = {t["key"]: t for t in client.get("/api/agent/templates").json()}
     assert templates["uiux_advice"]["advice"] is True
     assert templates["uiux_advice"]["allow_diagrams"] is False

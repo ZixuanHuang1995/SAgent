@@ -1,6 +1,8 @@
 import zipfile
 from io import BytesIO
 
+from conftest import install_backup_template
+
 
 def _create_spec(client, project, **kw):
     body = {"phase_id": project["phases"][0]["id"], "title": "登入功能", "doc_type": "functional_spec"}
@@ -230,18 +232,22 @@ def test_migration_adds_source_spec_id(tmp_path):
     assert row[0] is None
 
 
-def test_template_categories_api(client):
+def test_template_categories_api(cfg, client):
     cats = client.get("/api/agent/template-categories").json()
     assert [c["key"] for c in cats] == ["idea", "feature", "design", "algorithm", "change"]
     templates = {t["key"]: t for t in client.get("/api/agent/templates").json()}
+    assert "experiment_design" not in templates
     assert templates["idea_proposal"]["category"] == "idea"
     assert templates["idea_proposal"]["style"] == "idea"
     assert templates["algorithm_design"]["category"] == "algorithm"
     assert templates["algorithm_design"]["style"] == "algorithm"
-    assert templates["experiment_design"]["category"] == "design"
-    assert templates["experiment_design"]["style"] == "experiment"
     assert templates["tech_decision"]["category"] == "design"
     assert templates["tech_decision"]["style"] == "decision"
+    # 移除的範本放進自訂範本，不用重新啟動就出現
+    install_backup_template(cfg, "experiment_design")
+    templates = {t["key"]: t for t in client.get("/api/agent/templates").json()}
+    assert templates["experiment_design"]["category"] == "design"
+    assert templates["experiment_design"]["style"] == "experiment"
 
 
 def test_migration_adds_project_glossary(tmp_path):

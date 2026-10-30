@@ -3,16 +3,16 @@
 四個專案（情境和需求內容在 demo_scenarios.py）：
 - 設備報修系統（主打）、採購請購簽核系統、會議室與訪客預約系統、客服工單與知識庫系統
 
-每個專案都走完整流程：構想 → 轉成功能規格（來源追溯）→ 使用案例 → UI/UX 建議 → SDD 五節 → 系統架構 →
-資料庫 → API → 依需求修訂 → 第二期變更。九種文件類型、四種類型、四種狀態都有，另外有匯入 Markdown、範本骨架、
+每個專案都走完整流程：構想 → 轉成功能規格（來源追溯）→ 系統架構 → 資料庫 → 依需求修訂 → 第二期變更。
+內建的 8 種文件類型、五種類型、四種狀態都有（技術決策是範本骨架，測試計畫只在設備報修），另外有匯入 Markdown、
 手動編輯、版本標籤、封存、兩到三個基準版本（含只收一個階段的）、每個階段的說明。
 
 各專案另外強調不同的功能：
-- 設備報修：AI 工作失敗（選了沒安裝的模型）、中途取消、範本骨架接著 AI 撰寫、手動編輯後還原、自訂範本「測試計畫」、
-  手動插入類別圖、一份構想轉出兩份文件
-- 採購請購：修訂 SDD 五節、資料庫加暫存欄位再還原、不自動修訂的 AI 工作
-- 會議室與訪客預約：修訂使用案例、設計審查後才新增「第二期」階段、還沒有版本的 Spec、圖表只用 Mermaid
-- 客服工單：修訂 UI/UX 建議（建議類文件）、不自動修訂的 AI 工作、只收需求萃取階段的基準版本
+- 設備報修：AI 工作失敗（選了沒安裝的模型）、中途取消、範本骨架接著 AI 撰寫、手動編輯後還原、
+  自訂範本「測試計畫」（蓋過內建的）、修訂功能規格、手動插入類別圖
+- 採購請購：修訂功能規格（簽核規則）、資料庫加暫存欄位再還原、不自動修訂的 AI 工作
+- 會議室與訪客預約：修訂資料庫設計、設計審查後才新增「第二期」階段、還沒有版本的 Spec、圖表只用 Mermaid
+- 客服工單：修訂系統架構設計、資料庫加暫存欄位再還原、只收需求萃取階段的基準版本
 
 另外一個 Algorithm 類型的專案，流程比較短（seed_algorithm_project）：
 - 數獨解題與出題引擎：匯入規則說明 → AI 撰寫解題、出題兩份演算法設計 → 基準版本 → 依玩家測試的需求修訂解題演算法
@@ -32,7 +32,7 @@
     uv run --project backend python scripts/seed_demo.py --data-dir 暫存目錄 --fake   # 用假模型檢查腳本
     uv run --project backend python scripts/seed_demo.py --data-dir data-demo-build --script scripts/demo_content
 
-CPU 上用 qwen3.6:35b-a3b 全部跑完大約要 29～34 小時（一份文件 20～80 分鐘，總共約 39 份）。
+CPU 上用 qwen3.6:35b-a3b 全部跑完大約要 20～24 小時（一份文件 20～80 分鐘，總共約 28 份）。
 
 --script：用腳本模型（demo_llm.py）把事先寫好的內容檔回答給 AI 流程，幾分鐘就跑完。內容檔的格式見
 DEMO_DATA_PLAN.md。AI 工作紀錄的模型名稱還是 SAgent 設定的模型。
@@ -72,24 +72,19 @@ AI_SETTINGS = (
 RUN_OPTIONS = {
     "idea_proposal": {"max_diagrams": 1},
     "functional_spec": {"max_diagrams": 3},
-    "use_case": {"max_diagrams": 3},
-    "uiux_advice": {},
-    "sdd_five": {"max_diagrams": 2},
     "architecture": {"max_diagrams": 3},
     "database": {"max_diagrams": 2},
-    "api_spec": {"max_diagrams": 1},
     "change_request": {"max_diagrams": 1},
     "test_plan": {"max_diagrams": 1},
     "algorithm_design": {"max_diagrams": 2},
-    "experiment_design": {"max_diagrams": 2},
 }
 
-# 自訂範本：示範「設定」頁的自訂範本，以及用自訂範本讓 AI 撰寫
+# 自訂範本：示範「設定」頁的自訂範本（key 跟內建的一樣，會蓋過內建版本），以及用自訂範本讓 AI 撰寫
 TEST_PLAN_TEMPLATE = """key: test_plan
 name: 測試計畫
 description: 安排驗收測試的範圍、環境、重點情境、驗收標準和時程。
-order: 20
-category: design
+order: 3
+category: feature
 sections:
   - heading: 測試範圍
     goal: 列出這次要測試和不測試的功能。
@@ -108,12 +103,8 @@ sections:
 SCRIPT_KEYS = {
     "idea_proposal": "idea",
     "functional_spec": "feature",
-    "use_case": "use_case",
-    "uiux_advice": "uiux",
-    "sdd_five": "sdd",
     "architecture": "architecture",
     "database": "database",
-    "api_spec": "api",
     "change_request": "change",
     "test_plan": "test_plan",
 }
@@ -480,22 +471,14 @@ def seed_project(s: Seeder, sc: Scenario) -> int:
     s.label(feature, sc.labels["feature_review"])
     s.status(feature, "reviewing")
 
-    # 4. 其他需求萃取文件
-    use_case = s.draft(s.spec(pid, req, t["use_case"], "use_case"), x["use_case"], opts("use_case"))
-    s.status(use_case, "reviewing")
-    uiux_kw = {"source_spec_id": idea["id"]} if sc.showcase else {}
-    uiux = s.draft(s.spec(pid, req, t["uiux"], "uiux_advice", **uiux_kw), x["uiux"], opts("uiux_advice"))
-
-    # 5. 需求確認：基準版本，之後封存訪談紀錄、補名詞表，比較時才會有「移除」和「變更」
+    # 4. 需求確認：基準版本，之後封存訪談紀錄、補名詞表，比較時才會有「移除」和「變更」
     s.baseline(pid, *sc.baselines[0])
     if sc.phase_baseline:
         s.baseline(pid, *sc.phase_baseline, phase_id=req)
     s.archive(interview)
     s.edit(glossary, "補充名詞", lambda text: text.rstrip("\n") + "\n" + sc.glossary_row + "\n")
 
-    # 6. 系統分析、系統設計
-    sdd = s.draft(s.spec(pid, det, t["sdd"], "sdd_five"), x["sdd"], opts("sdd_five"))
-    s.status(sdd, "approved")
+    # 5. 系統分析：系統架構、資料庫；系統設計：還沒寫的技術決策
     arch = s.spec(pid, sys_ph, t["architecture"], "architecture", init="template")
     arch = s.draft(arch, x["architecture"], opts("architecture"))
     s.status(arch, "reviewing")
@@ -506,15 +489,13 @@ def seed_project(s: Seeder, sc: Scenario) -> int:
         ai_no = first_agent_version(s, db)
         s.edit(db, "加入暫存欄位", lambda text: text.rstrip("\n") + "\n\n" + x["db_temp"])
         s.restore(db, ai_no, f"暫存欄位不需要，還原到 v{ai_no}")
-    api = s.draft(s.spec(pid, det, t["api"], "api_spec"), x["api"], opts("api_spec"))
-    s.status(api, "reviewing")
     s.spec(pid, det, sc.skeleton[0], sc.skeleton[1], init="template")
     if sc.pending:
         phase, title, doc_type = sc.pending
         s.spec(pid, ph[phase], title, doc_type, init="none")
 
-    # 7. 依客戶補充修訂
-    targets = {"feature": feature, "use_case": use_case, "uiux": uiux, "sdd": sdd, "api": api}
+    # 6. 依客戶補充修訂
+    targets = {"feature": feature, "architecture": arch, "database": db}
     target = targets[sc.revise_target]
     target = s.revise(target, x["revise"], opts(target["doc_type"]))
     s.label(target, sc.labels["revised"])
@@ -522,7 +503,7 @@ def seed_project(s: Seeder, sc: Scenario) -> int:
 
     s.baseline(pid, *sc.baselines[1])
 
-    # 8. 第二期變更、驗收測試
+    # 7. 第二期變更、驗收測試
     phase2 = s.add_phase(pid, *sc.late_phase) if sc.late_phase else ph["第二期"]
     s.draft(s.spec(pid, phase2, t["change"], "change_request"), x["change"], opts("change_request"))
     if sc.showcase:

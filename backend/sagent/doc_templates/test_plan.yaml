@@ -1,7 +1,7 @@
 key: test_plan
 name: 測試計畫
-description: 安排測試的範圍、環境、測試案例、通過標準和時程。可以對照功能規格或使用案例的驗收條件來寫。
-order: 5
+description: 安排測試的範圍、環境、測試案例、通過標準和時程。可以對照功能規格的驗收條件來寫。
+order: 3
 category: feature
 role: 測試工程師
 sections:

@@ -1,7 +1,7 @@
 key: tech_decision
 name: 技術決策
-description: 比較幾個技術方案，依限制和評估標準選出一個，說明理由、影響和要先驗證的地方。決定之後再寫系統架構、資料庫、API。
-order: 20
+description: 比較幾個技術方案，依限制和評估標準選出一個，說明理由、影響和要先驗證的地方。決定之後再寫系統架構和資料庫設計。
+order: 4
 category: design
 role: 軟體架構師
 style: decision
