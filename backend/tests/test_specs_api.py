@@ -11,7 +11,7 @@ def _create_spec(client, project, **kw):
 
 
 def test_project_created_with_default_phases(client, project):
-    assert [p["name"] for p in project["phases"]] == ["需求分析", "系統設計", "詳細設計"]
+    assert [p["name"] for p in project["phases"]] == ["需求萃取", "系統分析", "系統設計"]
     assert project["project"]["code"] == "ORD"
     resp = client.post("/api/projects", json={"name": "訂單系統"})
     assert resp.status_code == 409
@@ -27,9 +27,9 @@ def test_project_list_has_phase_spec_counts(client, project):
     [item] = client.get("/api/projects").json()
     assert item["spec_count"] == 2
     assert [(p["name"], p["spec_count"]) for p in item["phases"]] == [
-        ("需求分析", 2),
+        ("需求萃取", 2),
+        ("系統分析", 0),
         ("系統設計", 0),
-        ("詳細設計", 0),
     ]
 
 
@@ -137,7 +137,7 @@ def test_search_archive_and_export(client, project):
     assert z.headers["content-type"] == "application/zip"
     names = zipfile.ZipFile(BytesIO(z.content)).namelist()
     assert "manifest.json" in names
-    assert "需求分析/登入功能.md" in names
+    assert "需求萃取/登入功能.md" in names
 
 
 def test_validation_errors_are_readable(client, project):

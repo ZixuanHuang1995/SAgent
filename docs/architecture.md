@@ -46,7 +46,7 @@ erDiagram
 | 資料表 | 說明 |
 |---|---|
 | projects | 專案，含專案詞彙表 `glossary`（`[{name, kind, note}]`，最多 40 個） |
-| phases | 功能階段，名稱自訂（例如「需求分析」「第二期」），可排序 |
+| phases | 功能階段，名稱自訂（例如「需求萃取」「第二期」），可排序 |
 | specs | Spec 文件，記錄目前最新版本號 `head_version_no`、狀態、是否封存，以及從哪一份 Spec 轉過來的 `source_spec_id`（例如構想 → 功能規格） |
 | spec_versions | 每個版本的完整內容，以及跟前一版比較新增、刪除幾行。建立後不再修改，只有「標籤」可以改 |
 | baselines / baseline_items | 基準版本：某個時間點每份 Spec 用的是哪一版 |

@@ -77,7 +77,7 @@ async def main() -> int:
         mode="revise" if existing else "draft",
         project_name="測試專案",
         project_description="",
-        phase_name="需求分析",
+        phase_name="需求萃取",
         spec_title=args.title,
         template=load_templates()[args.template],
         requirement=requirement,

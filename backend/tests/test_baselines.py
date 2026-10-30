@@ -48,7 +48,7 @@ def test_baseline_snapshot_compare_and_export(client, project):
     manifest = json.loads(zf.read("manifest.json"))
     assert manifest["baseline"] == "需求凍結 v1.0"
     assert sorted(s["title"] for s in manifest["specs"]) == ["報表功能", "登入功能"]
-    assert zf.read("需求分析/登入功能.md").decode().endswith("v1\n")
+    assert zf.read("需求萃取/登入功能.md").decode().endswith("v1\n")
 
     assert client.delete(f"/api/baselines/{base['id']}").status_code == 204
     assert client.get(f"/api/projects/{pid}/baselines").json() == []
@@ -70,8 +70,8 @@ def test_export_includes_diagrams(client, project):
     )
     zf = zipfile.ZipFile(BytesIO(client.get(f"/api/projects/{pid}/export").content))
     names = zf.namelist()
-    assert "diagrams/需求分析/流程-1.mmd" in names
-    assert "diagrams/需求分析/流程-2.puml" in names
+    assert "diagrams/需求萃取/流程-1.mmd" in names
+    assert "diagrams/需求萃取/流程-2.puml" in names
 
 
 def test_phase_baseline_compares_only_its_phase(client, project):

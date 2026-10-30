@@ -12,7 +12,7 @@
   手動插入類別圖、一份構想轉出兩份文件
 - 採購請購：修訂 SDD 五節、資料庫加暫存欄位再還原、不自動修訂的 AI 工作
 - 會議室與訪客預約：修訂使用案例、設計審查後才新增「第二期」階段、還沒有版本的 Spec、圖表只用 Mermaid
-- 客服工單：修訂 UI/UX 建議（建議類文件）、不自動修訂的 AI 工作、只收需求分析階段的基準版本
+- 客服工單：修訂 UI/UX 建議（建議類文件）、不自動修訂的 AI 工作、只收需求萃取階段的基準版本
 
 另外一個 Algorithm 類型的專案，流程比較短（seed_algorithm_project）：
 - 數獨解題與出題引擎：匯入規則說明 → AI 撰寫解題、出題兩份演算法設計 → 基準版本 → 依玩家測試的需求修訂解題演算法
@@ -438,7 +438,7 @@ def seed_project(s: Seeder, sc: Scenario) -> int:
     log(f"===== {sc.name} =====")
     s.code = sc.code
     pid, ph = s.project(sc)
-    req, sys_ph, det = ph["需求分析"], ph["系統設計"], ph["詳細設計"]
+    req, sys_ph, det = ph["需求萃取"], ph["系統分析"], ph["系統設計"]
 
     # 1. 匯入的文件：名詞表、舊流程說明（停用）、訪談紀錄（之後封存）
     glossary = s.spec(pid, req, t["glossary"], "functional_spec", init="content", content=x["glossary_md"])
@@ -480,7 +480,7 @@ def seed_project(s: Seeder, sc: Scenario) -> int:
     s.label(feature, sc.labels["feature_review"])
     s.status(feature, "reviewing")
 
-    # 4. 其他需求分析文件
+    # 4. 其他需求萃取文件
     use_case = s.draft(s.spec(pid, req, t["use_case"], "use_case"), x["use_case"], opts("use_case"))
     s.status(use_case, "reviewing")
     uiux_kw = {"source_spec_id": idea["id"]} if sc.showcase else {}
@@ -493,7 +493,7 @@ def seed_project(s: Seeder, sc: Scenario) -> int:
     s.archive(interview)
     s.edit(glossary, "補充名詞", lambda text: text.rstrip("\n") + "\n" + sc.glossary_row + "\n")
 
-    # 6. 系統設計、詳細設計
+    # 6. 系統分析、系統設計
     sdd = s.draft(s.spec(pid, det, t["sdd"], "sdd_five"), x["sdd"], opts("sdd_five"))
     s.status(sdd, "approved")
     arch = s.spec(pid, sys_ph, t["architecture"], "architecture", init="template")

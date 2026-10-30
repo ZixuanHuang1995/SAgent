@@ -20,7 +20,7 @@ from ..models import SPEC_STATUSES, VERSION_SOURCES, AgentRun, Phase, Project, S
 from .errors import BadRequest, Conflict, NotFound
 from .markdown_doc import normalize_heading, parse_markdown
 
-DEFAULT_PHASES = ["需求分析", "系統設計", "詳細設計"]
+DEFAULT_PHASES = ["需求萃取", "系統分析", "系統設計"]
 # planned 不占執行佇列，但同一份 Spec 還是不能再開新的 AI 工作
 ACTIVE_RUN_STATUSES = ("queued", "running", "planned")
 

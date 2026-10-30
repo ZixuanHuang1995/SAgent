@@ -40,7 +40,7 @@ class Project(Base):
 
 
 class Phase(Base):
-    """功能階段，例如「需求分析」「系統設計」「第二期」。名稱由使用者自訂。"""
+    """功能階段，例如「需求萃取」「系統分析」「第二期」。名稱由使用者自訂。"""
 
     __tablename__ = "phases"
     __table_args__ = (UniqueConstraint("project_id", "name"),)

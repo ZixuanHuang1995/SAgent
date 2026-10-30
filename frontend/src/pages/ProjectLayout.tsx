@@ -626,7 +626,7 @@ function PhaseDialog({ projectId, phase, onClose }: { projectId: number; phase: 
       }
     >
       <Field label="名稱">
-        <input className="input" autoFocus value={name} placeholder="例如：需求分析、系統設計、第二期" onChange={(e) => setName(e.target.value)} />
+        <input className="input" autoFocus value={name} placeholder="需求萃取、系統分析、第二期" onChange={(e) => setName(e.target.value)} />
       </Field>
       <Field label="說明（選填）">
         <textarea className="input textarea" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />

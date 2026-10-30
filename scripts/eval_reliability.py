@@ -63,7 +63,7 @@ async def run_once(llm: LLMClient, args: argparse.Namespace, requirement: str) -
         mode="draft",
         project_name="可靠度評估",
         project_description="",
-        phase_name="需求分析",
+        phase_name="需求萃取",
         spec_title=args.title,
         template=load_templates()[args.template],
         requirement=requirement,

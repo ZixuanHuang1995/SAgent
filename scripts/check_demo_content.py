@@ -53,14 +53,14 @@ DOC_TYPES = {
 }
 # key → Spec 所在階段（只影響提示詞裡的文件資訊）
 PHASES = {
-    "idea": "需求分析",
-    "feature": "需求分析",
-    "use_case": "需求分析",
-    "uiux": "需求分析",
-    "sdd": "詳細設計",
-    "architecture": "系統設計",
-    "database": "系統設計",
-    "api": "詳細設計",
+    "idea": "需求萃取",
+    "feature": "需求萃取",
+    "use_case": "需求萃取",
+    "uiux": "需求萃取",
+    "sdd": "系統設計",
+    "architecture": "系統分析",
+    "database": "系統分析",
+    "api": "系統設計",
     "change": "第二期",
     "test_plan": "驗收測試",
 }
