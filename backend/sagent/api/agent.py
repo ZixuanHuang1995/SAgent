@@ -170,16 +170,18 @@ def get_run(run_id: int, state: AppState = Depends(get_state)):
                 "plan": run.plan,
                 "review": run.review,
                 "review_checked": run.review_checked or [],
+                "review_labels": run.review_labels or {},
                 "events": [_event_out(e) for e in events],
             }
         )
 
 
 @router.put("/runs/{run_id}/review-checks")
-def set_review_check(run_id: int, body: ReviewCheckIn, state: AppState = Depends(get_state)) -> dict[str, list[str]]:
-    """把審查列出的一個項目標成已處理（或取消）。"""
+def set_review_check(run_id: int, body: ReviewCheckIn, state: AppState = Depends(get_state)) -> dict[str, Any]:
+    """把審查列出的一個項目標成處理過（或取消）。label：已處理、誤報或略過，沒給是已處理。"""
     with state.db() as s:
-        return {"checked": review_service.set_checked(s, run_id, body.key, body.done)}
+        checked, labels = review_service.set_checked(s, run_id, body.key, body.done, body.label)
+        return {"checked": checked, "labels": labels}
 
 
 @router.post("/runs/{run_id}/continue", response_model=RunOut)

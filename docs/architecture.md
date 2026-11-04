@@ -50,7 +50,7 @@ erDiagram
 | specs | Spec 文件，記錄目前最新版本號 `head_version_no`、狀態、是否封存，以及從哪一份 Spec 轉過來的 `source_spec_id`（例如構想 → 功能規格） |
 | spec_versions | 每個版本的完整內容，以及跟前一版比較新增、刪除幾行。建立後不再修改，只有「標籤」可以改 |
 | baselines / baseline_items | 基準版本：某個時間點每份 Spec 用的是哪一版 |
-| agent_runs | AI 工作：需求、選項、大綱、審查結果、用量、結果版本；`review_checked` 記使用者標成已處理的審查項目；`checkpoint` 是執行中的檢查點（見 4.5 節），工作結束就清掉。選項裡的 `prompt_version` 記這次用的提示詞、範本、程式版本 |
+| agent_runs | AI 工作：需求、選項、大綱、審查結果、用量、結果版本；`review_checked` 記使用者標成已處理的審查項目，`review_labels` 記怎麼處理的（`fixed` 已處理、`false` 誤報、`skip` 略過）；`checkpoint` 是執行中的檢查點（見 4.5 節），工作結束就清掉。選項裡的 `prompt_version` 記這次用的提示詞、範本、程式版本 |
 | agent_events | AI 工作的步驟紀錄（開始、結束、警告），可重播 |
 | settings | 畫面上可調整的設定 |
 
@@ -268,7 +268,7 @@ Reviewer 只做兩件事，不評論寫得好不好、完不完整，也不打�
 - 給審查模型的草稿裡，圖的程式碼換成一行「（這裡有一張 mermaid 圖，第一行是「flowchart TD」；審查時省略圖的程式碼）」，審查提示詞也寫明不要說缺少圖（`draft_for_review()`）。原本只寫「（mermaid 圖：flowchart TD）」，真模型以為圖沒有內容，每一輪都列「沒有提供 mermaid 程式碼」，Writer 怎麼改都消不掉。
 - 修訂後的再審查如果模型沒給出可用的結果，修改過的章節上一輪的錯誤改列 `review_points`（註明沒有重新審查），不會因為少了模型意見就看起來像通過。
 - 各種文件（規格、建議、構想、技術決策、演算法、實驗）共用 `reviewer_system()`，差別只在 `_REVIEW_STYLE_NOTE` 的一行說明。
-- 處理進度（`services/reviews.py`）：每份 Spec 看最近一次成功的 AI 工作的最後一次審查。使用者在 Spec 頁的「審查」分頁逐項標成已處理，存在 `agent_runs.review_checked`，項目代號是在 `issues`、`review_points` 裡的位置（`issue:0`、`point:3`），審查結果存好後不會再改，所以位置固定。專案清單（`GET /api/projects/{id}`）和單一 Spec 的 `review` 欄位帶項目總數和沒處理的數量，畫面上的「待處理 N」用這個（不叫「待確認」，免得跟文件裡標「待確認」的地方搞混）。
+- 處理進度（`services/reviews.py`）：每份 Spec 看最近一次成功的 AI 工作的最後一次審查。使用者在 Spec 頁的「審查」分頁逐項標成已處理，存在 `agent_runs.review_checked`，項目代號是在 `issues`、`review_points` 裡的位置（`issue:0`、`point:3`），審查結果存好後不會再改，所以位置固定。處理過的項目另外記處理結果（`agent_runs.review_labels`，`PUT …/review-checks` 帶 `label`）：`fixed` 已處理（確實有問題）、`false` 誤報（審查說錯了）、`skip` 略過；三種都算處理過，待處理數量的算法不變。沒有 `label` 的請求和舊資料都當成 `fixed`。`scripts/analyze_runs.py` 用這些標記算 Reviewer 的準確度（已處理 ÷（已處理＋誤報），依程式檢查、模型和錯誤類型分開），這是之後改提示詞、優化時唯一不靠模型的標註。專案清單（`GET /api/projects/{id}`）和單一 Spec 的 `review` 欄位帶項目總數和沒處理的數量，畫面上的「待處理 N」用這個（不叫「待確認」，免得跟文件裡標「待確認」的地方搞混）。
 
 ### 4.9 技術決策、演算法設計和實驗設計文件
 

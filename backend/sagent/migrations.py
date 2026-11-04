@@ -85,9 +85,18 @@ def _add_run_checkpoint(engine: Engine) -> None:
             conn.execute(text("ALTER TABLE agent_runs ADD COLUMN checkpoint JSON"))
 
 
+def _add_run_review_labels(engine: Engine) -> None:
+    """agent_runs 加上 review_labels（審查項目的處理結果：已處理、誤報、略過，JSON）。"""
+    with engine.begin() as conn:
+        columns = _columns(conn, "agent_runs")
+        if columns and "review_labels" not in columns:
+            conn.execute(text("ALTER TABLE agent_runs ADD COLUMN review_labels JSON NOT NULL DEFAULT '{}'"))
+
+
 def migrate(engine: Engine) -> None:
     _add_version_line_stats(engine)
     _add_spec_source(engine)
     _add_project_glossary(engine)
     _add_run_review_checked(engine)
     _add_run_checkpoint(engine)
+    _add_run_review_labels(engine)

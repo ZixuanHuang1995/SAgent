@@ -2706,6 +2706,16 @@ kbd {
 .check-list li.is-done .check-item {
   opacity: 0.5;
 }
+/* 處理結果選單（已處理、誤報、略過）：滑過那一項或用鍵盤選到時才明顯 */
+.check-list .check-item-menu {
+  flex: none;
+  opacity: 0.55;
+}
+.check-list li:hover .check-item-menu,
+.check-list .check-item-menu:focus-visible,
+.check-list .check-item-menu[aria-expanded='true'] {
+  opacity: 1;
+}
 
 /* ---------- 頂端列的 AI 工作指示 ---------- */
 

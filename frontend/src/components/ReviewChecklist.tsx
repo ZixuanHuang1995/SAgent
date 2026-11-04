@@ -1,16 +1,24 @@
-// 審查結果清單：最近一次 AI 工作的審查列出的錯誤和人工覆核項目，逐項標成已處理
+// 審查結果清單：最近一次 AI 工作的審查列出的錯誤和人工覆核項目，逐項標成已處理、誤報或略過
+// 誤報、略過也算處理過；記下來的處理結果用來算 Reviewer 有多準（scripts/analyze_runs.py）
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { api, type RunDetail, type SpecDetail } from '../api'
+import { api, type ReviewLabel, type RunDetail, type SpecDetail } from '../api'
 import { relativeTime } from '../format'
 import { usePersistent } from '../hooks/layout'
 import { keys } from '../queries'
+import { Icon } from './icons'
 import { RunDetailModal } from './RunDetail'
 import { SEVERITY } from './RunProgress'
-import { Badge, errorText, Skeleton, useToast } from './ui'
+import { Badge, errorText, Menu, MenuItem, MenuSeparator, Skeleton, useToast } from './ui'
 
 const ORDER = { high: 0, medium: 1, low: 2 }
+
+const LABELS: Record<ReviewLabel, { text: string; hint: string }> = {
+  fixed: { text: '已處理', hint: '確實有問題，改好或確認了' },
+  false: { text: '誤報', hint: '審查說錯了，不是問題' },
+  skip: { text: '略過', hint: '先不處理' },
+}
 
 interface Item {
   key: string
@@ -41,6 +49,8 @@ export function ReviewChecklist(props: {
   if (!review) return null
 
   const checked = new Set(run.data.review_checked)
+  const labels = run.data.review_labels ?? {}
+  const labelOf = (key: string): ReviewLabel => labels[key] ?? 'fixed'
   const issues: Item[] = review.issues
     .map((i, n) => ({
       key: `issue:${n}`,
@@ -63,15 +73,20 @@ export function ReviewChecklist(props: {
   const headingOf = (id: string | null) => (id ? run.data.plan?.sections.find((s) => s.id === id)?.heading ?? id : null)
   const stale = summary.version_no !== null && spec.head_version_no > summary.version_no
 
-  const toggle = async (key: string, value: boolean) => {
+  const marked = (kind: ReviewLabel) => [...issues, ...points].filter((i) => checked.has(i.key) && labelOf(i.key) === kind).length
+
+  const toggle = async (key: string, value: boolean, label: ReviewLabel = 'fixed') => {
     // 先改畫面，失敗再改回來
-    qc.setQueryData<RunDetail>(keys.run(runId), (old) =>
-      old
-        ? { ...old, review_checked: value ? [...old.review_checked, key] : old.review_checked.filter((k) => k !== key) }
-        : old,
-    )
+    qc.setQueryData<RunDetail>(keys.run(runId), (old) => {
+      if (!old) return old
+      const nextLabels = { ...(old.review_labels ?? {}) }
+      if (value) nextLabels[key] = label
+      else delete nextLabels[key]
+      const rest = old.review_checked.filter((k) => k !== key)
+      return { ...old, review_checked: value ? [...rest, key] : rest, review_labels: nextLabels }
+    })
     try {
-      await api.setReviewCheck(runId, key, value)
+      await api.setReviewCheck(runId, key, value, value ? label : undefined)
     } catch (e) {
       toast(errorText(e), 'error')
     } finally {
@@ -89,6 +104,7 @@ export function ReviewChecklist(props: {
       <ul className="check-list">
         {shown.map((i) => {
           const isDone = checked.has(i.key)
+          const label = isDone ? labelOf(i.key) : null
           const heading = headingOf(i.sectionId)
           return (
             <li key={i.key} className={isDone ? 'is-done' : ''}>
@@ -101,6 +117,7 @@ export function ReviewChecklist(props: {
               />
               <div className="check-item">
                 <div className="check-item-meta">
+                  {label && label !== 'fixed' && <Badge title={LABELS[label].hint}>{LABELS[label].text}</Badge>}
                   {i.severity && <Badge tone={SEVERITY[i.severity].tone}>{SEVERITY[i.severity].text}</Badge>}
                   {heading ? (
                     <button className="link-btn small" title="跳到文件裡的這一節" onClick={() => props.onJump(heading)}>
@@ -114,6 +131,24 @@ export function ReviewChecklist(props: {
                 <div className="check-item-text">{i.text}</div>
                 {i.note && <div className="muted small">{i.note}</div>}
               </div>
+              {!spec.archived && (
+                <Menu
+                  trigger={<Icon name="more" />}
+                  label={`處理結果：${i.text}`}
+                  title="標成已處理、誤報或略過"
+                  triggerClassName="icon-btn check-item-menu"
+                >
+                  {(Object.keys(LABELS) as ReviewLabel[]).map((k) => (
+                    <MenuItem key={k} checked={label === k} hint={LABELS[k].hint} onSelect={() => toggle(i.key, true, k)}>
+                      {LABELS[k].text}
+                    </MenuItem>
+                  ))}
+                  <MenuSeparator />
+                  <MenuItem disabled={!isDone} onSelect={() => toggle(i.key, false)}>
+                    取消標記
+                  </MenuItem>
+                </Menu>
+              )}
             </li>
           )
         })}
@@ -128,6 +163,13 @@ export function ReviewChecklist(props: {
           <strong>
             已處理 {done} / {total}
           </strong>
+          {(marked('false') > 0 || marked('skip') > 0) && (
+            <span className="muted small">
+              {[marked('false') > 0 && `誤報 ${marked('false')}`, marked('skip') > 0 && `略過 ${marked('skip')}`]
+                .filter(Boolean)
+                .join('、')}
+            </span>
+          )}
           <label className="check-row small muted">
             <input type="checkbox" checked={hideDone === '1'} onChange={(e) => setHideDone(e.target.checked ? '1' : '0')} />
             隱藏已處理

@@ -329,17 +329,27 @@ def test_review_checks(client, project):
     summary = client.get(f"/api/specs/{spec['id']}").json()["review"]
     assert summary == {"run_id": run_id, "version_no": 1, "total": 3, "open": 3}
 
+    # 舊的前端只送 done：當成已處理
     r = client.put(f"/api/agent/runs/{run_id}/review-checks", json={"key": "point:1", "done": True})
-    assert r.json() == {"checked": ["point:1"]}
-    client.put(f"/api/agent/runs/{run_id}/review-checks", json={"key": "issue:0", "done": True})
-    assert client.get(f"/api/agent/runs/{run_id}").json()["review_checked"] == ["issue:0", "point:1"]
+    assert r.json() == {"checked": ["point:1"], "labels": {"point:1": "fixed"}}
+    # 誤報也算處理過，待處理數量一樣會減少
+    client.put(f"/api/agent/runs/{run_id}/review-checks", json={"key": "issue:0", "done": True, "label": "false"})
+    detail = client.get(f"/api/agent/runs/{run_id}").json()
+    assert detail["review_checked"] == ["issue:0", "point:1"]
+    assert detail["review_labels"] == {"issue:0": "false", "point:1": "fixed"}
     tree = client.get(f"/api/projects/{project['project']['id']}").json()
     assert tree["specs"][0]["review"]["open"] == 1
 
+    # 改成略過；取消時處理結果也拿掉
+    r = client.put(f"/api/agent/runs/{run_id}/review-checks", json={"key": "point:1", "done": True, "label": "skip"})
+    assert r.json()["labels"] == {"issue:0": "false", "point:1": "skip"}
     client.put(f"/api/agent/runs/{run_id}/review-checks", json={"key": "issue:0", "done": False})
+    assert client.get(f"/api/agent/runs/{run_id}").json()["review_labels"] == {"point:1": "skip"}
     assert client.get(f"/api/specs/{spec['id']}").json()["review"]["open"] == 2
     r = client.put(f"/api/agent/runs/{run_id}/review-checks", json={"key": "point:9", "done": True})
     assert r.status_code == 400
+    r = client.put(f"/api/agent/runs/{run_id}/review-checks", json={"key": "point:0", "done": True, "label": "x"})
+    assert r.status_code == 422
 
     # 新的 AI 工作完成後，改看新的審查結果
     run2 = client.post("/api/agent/runs", json={"spec_id": spec["id"], "requirement": "y"}).json()["id"]

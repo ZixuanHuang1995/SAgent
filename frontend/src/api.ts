@@ -323,11 +323,16 @@ export interface RunEvent {
   ts?: string
 }
 
+/** 審查項目的處理結果：fixed 已處理（真的有問題）、false 誤報（審查說錯了）、skip 略過（先不處理） */
+export type ReviewLabel = 'fixed' | 'false' | 'skip'
+
 export interface RunDetail extends Run {
   plan: PlanOut | null
   review: { final: ReviewOut | null; rounds: ReviewOut[] } | null
   /** 最後一次審查裡已經處理的項目："issue:0"、"point:3"（數字是在 issues、review_points 的位置） */
   review_checked: string[]
+  /** 處理過的項目怎麼處理的；沒有記錄的當成 fixed（舊資料） */
+  review_labels: Record<string, ReviewLabel>
   events: RunEvent[]
 }
 
@@ -479,8 +484,12 @@ export const api = {
   run: (id: number) => request<RunDetail>('GET', `/api/agent/runs/${id}`),
   cancelRun: (id: number) => request<{ cancelled: boolean }>('POST', `/api/agent/runs/${id}/cancel`),
   continueRun: (id: number, body: RunContinue) => request<Run>('POST', `/api/agent/runs/${id}/continue`, body),
-  setReviewCheck: (id: number, key: string, done: boolean) =>
-    request<{ checked: string[] }>('PUT', `/api/agent/runs/${id}/review-checks`, { key, done }),
+  setReviewCheck: (id: number, key: string, done: boolean, label?: ReviewLabel) =>
+    request<{ checked: string[]; labels: Record<string, ReviewLabel> }>('PUT', `/api/agent/runs/${id}/review-checks`, {
+      key,
+      done,
+      label,
+    }),
   runEventsUrl: (id: number) => `/api/agent/runs/${id}/events`,
 
   // 系統

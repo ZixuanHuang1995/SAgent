@@ -1,6 +1,12 @@
 """分析資料庫裡的 AI 工作紀錄：時間花在哪、JSON 和截斷出錯的比例、修訂前後的錯誤數。
 
-不用跑模型，只讀 agent_runs 和 agent_events（資料庫只讀，不會修改）。改提示詞或流程前後各跑一次，就能比較。
+另外兩段：
+- 審查準確度：使用者在「審查」分頁把項目標成已處理、誤報或略過，算出 Reviewer 列的錯誤有幾成是真的
+- 監看指標：AI 產出文件的標註密度、表格數、章節長度。改提示詞、優化時，錯誤數變少不一定是寫得更好，
+  也可能是模型學會走捷徑（全部標「待確認」就不會被抓「寫了需求沒提的內容」，少畫表格就不會有欄數錯誤），
+  這幾個數字明顯偏離之前的時候要打開文件看
+
+不用跑模型，只讀 agent_runs、agent_events 和 spec_versions（資料庫只讀，不會修改）。改提示詞或流程前後各跑一次，就能比較。
 
 用法（在專案根目錄）：
     uv run --project backend python scripts/analyze_runs.py --db data-demo/sagent.db
@@ -11,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sqlite3
 import sys
 from collections import Counter, defaultdict
@@ -35,6 +42,75 @@ def _errors(review: dict) -> list[dict]:
 
 def _pct(n: float, total: float) -> str:
     return f"{n / total:.0%}" if total else "-"
+
+
+_MARK_RE = re.compile(r"[（(](假設|待確認)[）)]")
+_TABLE_SEP_RE = re.compile(r"^\s*\|?\s*:?-{3,}", re.M)
+_SECTION_RE = re.compile(r"^## ", re.M)
+
+
+def doc_signals(markdown: str) -> dict[str, float]:
+    """一份文件的監看指標：每千字幾個（假設）（待確認）、幾個表格、平均每節幾個字。"""
+    chars = len(re.sub(r"\s", "", markdown)) or 1
+    sections = len(_SECTION_RE.findall(markdown)) or 1
+    return {
+        "marks_per_1k": len(_MARK_RE.findall(markdown)) * 1000 / chars,
+        "tables": len(_TABLE_SEP_RE.findall(markdown)),
+        "chars_per_section": chars / sections,
+    }
+
+
+def _print_signals(db: sqlite3.Connection, ids: list[int]) -> None:
+    rows = db.execute(
+        f"select v.content from agent_runs r join spec_versions v "
+        f"on v.spec_id = r.spec_id and v.version_no = r.result_version_no where r.id in ({','.join('?' * len(ids))})",
+        ids,
+    ).fetchall()
+    if not rows:
+        return
+    signals = [doc_signals(r[0]) for r in rows]
+    avg = {k: sum(s[k] for s in signals) / len(signals) for k in signals[0]}
+    print(f"\n監看指標（{len(signals)} 份 AI 產出的文件，平均）：")
+    print(f"  （假設）（待確認）每千字 {avg['marks_per_1k']:.1f} 個、表格 {avg['tables']:.1f} 個、每節 {avg['chars_per_section']:.0f} 字")
+    print("  改提示詞後這幾個數字明顯偏離，就算錯誤數變少，也要打開文件看是不是在走捷徑")
+
+
+LABEL_NAMES = {"fixed": "已處理", "false": "誤報", "skip": "略過"}
+
+
+def _print_precision(db: sqlite3.Connection, ids: list[int]) -> None:
+    """使用者標記的審查項目：Reviewer 列的錯誤有幾成是真的（已處理 ÷（已處理＋誤報））。"""
+    columns = {r[1] for r in db.execute("pragma table_info(agent_runs)")}
+    has_labels = "review_labels" in columns
+    sql = f"select review, review_checked{', review_labels' if has_labels else ''} from agent_runs where id in "
+    counts: Counter[tuple[str, str]] = Counter()
+    for row in db.execute(sql + f"({','.join('?' * len(ids))})", ids):
+        final = (json.loads(row[0] or "{}") or {}).get("final") or {}
+        checked = json.loads(row[1] or "[]") or []
+        labels = (json.loads(row[2] or "{}") or {}) if has_labels else {}
+        for key in checked:
+            kind, _, n = key.partition(":")
+            items = final.get("issues" if kind == "issue" else "review_points") or []
+            if not n.isdigit() or int(n) >= len(items):
+                continue
+            item = items[int(n)]
+            if kind == "issue":
+                group = f"錯誤・{'程式檢查' if item.get('source') == 'check' else '模型'}"
+                if item.get("source") == "llm" and item.get("kind"):
+                    group += f"・{item['kind']}"
+            else:
+                group = f"人工覆核・{'文件標註' if item.get('source') == 'check' else '模型'}"
+            counts[(group, labels.get(key, "fixed"))] += 1
+    print("\n審查準確度（使用者在「審查」分頁標的）：")
+    if not counts:
+        print("  還沒有標記：在 Spec 頁的「審查」分頁把項目標成已處理、誤報或略過，就會出現在這裡")
+        return
+    if not has_labels:
+        print("  這個資料庫還沒有 review_labels 欄位（伺服器更新後啟動一次就有），處理過的都當成已處理")
+    print("  已處理  誤報  略過  準確度  項目")
+    for group in sorted({g for g, _ in counts}):
+        fixed, false, skip = (counts[(group, k)] for k in LABEL_NAMES)
+        print(f"  {fixed:6} {false:5} {skip:5} {_pct(fixed, fixed + false):>7}  {group}")
 
 
 def main() -> int:
@@ -157,6 +233,9 @@ def main() -> int:
     points = sum(len(r.get("review_points", [])) for r in last)
     print(f"最後的人工覆核：平均每份 {points / max(len(last), 1):.1f} 項")
 
+    if ids:
+        _print_precision(db, ids)
+        _print_signals(db, ids)
     if args.group_by == "prompt":
         _print_by_prompt(runs, run_minutes, rounds)
     return 0

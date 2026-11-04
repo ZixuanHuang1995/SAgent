@@ -284,12 +284,15 @@ class RunDetail(RunOut):
     plan: dict[str, Any] | None
     review: dict[str, Any] | None
     review_checked: list[str] = []
+    # 處理過的項目怎麼處理的：fixed 已處理、false 誤報、skip 略過（舊資料沒有記錄的當成 fixed）
+    review_labels: dict[str, str] = {}
     events: list[EventOut]
 
 
 class ReviewCheckIn(BaseModel):
     key: str = Field(max_length=40)
     done: bool
+    label: Literal["fixed", "false", "skip"] | None = None
 
 
 class RenderIn(BaseModel):
