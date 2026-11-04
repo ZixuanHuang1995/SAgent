@@ -351,16 +351,26 @@ def _outline(plan: Plan) -> str:
 
 
 def _term_lines(terms: list[Term]) -> str:
-    return "\n".join(
-        f"- {t.name}" + (f"（{t.kind}）" if t.kind else "") + (f"：{t.note}" if t.note else "") for t in terms
-    )
+    """依種類分組列出。不寫成「- 蛇（資料）：說明」：真模型會把「（資料）」照抄進內文，寫成「蛇（資料）」。"""
+    groups: dict[str, list[Term]] = {}
+    for t in terms:
+        groups.setdefault(t.kind if t.kind in TERM_KINDS else "其他", []).append(t)
+    parts = []
+    for kind in TERM_KINDS:
+        if kind in groups:
+            lines = "\n".join(f"- {t.name}" + (f"：{t.note}" if t.note else "") for t in groups[kind])
+            parts.append(f"{kind}：\n{lines}")
+    return "\n".join(parts)
 
 
 def _terms(plan: Plan) -> str:
     """名詞表。各節說法不一致（狀態名稱、角色名稱）是真模型最常見的邏輯錯誤，先定好名稱再寫。"""
     if not plan.terms:
         return ""
-    return f"\n\n## 名詞表（提到這些角色、狀態、資料時都用這裡的名稱，不要換說法）\n{_term_lines(plan.terms)}"
+    return (
+        "\n\n## 名詞表（提到這些角色、狀態、資料時都用這裡的名稱，不要換說法；"
+        f"內文只寫名稱，不要在後面加「（角色）」這類種類）\n{_term_lines(plan.terms)}"
+    )
 
 
 def _writer_context(inp: RunInput, plan: Plan) -> str:

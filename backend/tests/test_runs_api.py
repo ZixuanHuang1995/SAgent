@@ -265,7 +265,9 @@ def test_plan_first_answers_reach_writer(client, project, fake_llms):
     # 每一節的提示另外列出相關的回答，模型才不會只當成背景資料
     prompts = [c["messages"][-1]["content"] for c in fake_llms[-1].calls if ":section:" in c["purpose"]]
     assert any("使用者確認過的回答" in p and "答：約 200 人" in p.split("## 現在要寫的章節")[1] for p in prompts)
-    assert "## 名詞表" in prompt and "- 客戶（角色）：在網站下單的人" in prompt
+    # 依種類分組，名稱後面不加「（角色）」（真模型會照抄進內文）
+    assert "## 名詞表" in prompt and "角色：\n- 客戶：在網站下單的人" in prompt
+    assert "客戶（角色）" not in prompt
 
 
 def test_cancel_planned_run(client, project):
@@ -295,9 +297,9 @@ def test_project_glossary_reaches_prompts(client, project, fake_llms):
     assert [t["name"] for t in run["plan"]["terms"]] == ["報修人", "客戶", "已送出"]
     calls = fake_llms[-1].calls
     planner = next(c for c in calls if c["purpose"].startswith("planner:"))["messages"][-1]["content"]
-    assert "## 專案詞彙表" in planner and "- 報修人（角色）：提出報修的員工" in planner
+    assert "## 專案詞彙表" in planner and "角色：\n- 報修人：提出報修的員工" in planner
     writer = next(c for c in calls if ":section:" in c["purpose"])["messages"][-1]["content"]
-    assert "- 報修人（角色）：提出報修的員工" in writer
+    assert "- 報修人：提出報修的員工" in writer and "內文只寫名稱" in writer
 
 
 def test_continue_sends_confirmed_plan(client, project):
