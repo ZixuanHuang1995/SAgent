@@ -489,7 +489,8 @@ export function SpecPage() {
               )}
             </span>
           )}
-          {template?.category === 'idea' && !data.archived && (
+          {/* Concept 類型裡只有構想提案能轉成功能規格（UI/UX 設計建議也在 Concept，但不是構想） */}
+          {template?.style === 'idea' && !data.archived && (
             <button
               className="btn btn-sm"
               disabled={data.head_version_no === 0 || !!data.active_run_id}

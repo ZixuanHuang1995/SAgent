@@ -184,7 +184,7 @@ sequenceDiagram
 
 ### 4.6 建議類文件（`style: advice`）
 
-一般的規格文件只能寫需求裡有的內容。建議類文件的目的是提出需求沒寫的做法，所以規則不同。範本設 `style: advice`（舊寫法 `advice: true`）就會套用。內建範本已經沒有建議類文件，備份裡的 UI/UX 設計建議（`backup/doc_templates/uiux_advice.yaml`）是例子，放進 `data/templates/` 就能用：
+一般的規格文件只能寫需求裡有的內容。建議類文件的目的是提出需求沒寫的做法，所以規則不同。範本設 `style: advice`（舊寫法 `advice: true`）就會套用。內建的 UI/UX 設計建議（`uiux_advice.yaml`，類型 Concept）就是這種：
 
 | 項目 | 規格文件 | 建議類文件 |
 |---|---|---|
@@ -193,7 +193,7 @@ sequenceDiagram
 | 編號 | 照範本章節的 `ids`，例如 FR、BR | 照範本章節的 `ids`，例如 UX |
 | 審查 | 需求沒提到的具體內容列人工覆核 | 超出需求的建議不算錯誤；建議裡用到需求沒提到的事實列人工覆核 |
 
-範本設 `allow_diagrams: false` 時，不管畫面上怎麼選，這次 AI 工作都不畫圖（建立工作時和流程開始時都會檢查）。備份的 UI/UX 設計建議兩個都有設定。
+範本設 `allow_diagrams: false` 時，不管畫面上怎麼選，這次 AI 工作都不畫圖（建立工作時和流程開始時都會檢查）。UI/UX 設計建議兩個都有設定。
 
 提示詞寫在 `backend/sagent/agents/prompts.py`：`_SPEC_RULES` 和 `_ADVICE_RULES` 是兩組寫作規則。審查提示詞各種文件共用，見 4.8 節。
 
@@ -205,19 +205,19 @@ sequenceDiagram
 
 | 類型 | key | 內建文件類型 |
 |---|---|---|
-| Concept | `idea` | 構想提案 |
+| Concept | `idea` | 構想提案、UI/UX 設計建議 |
 | Functionality | `feature` | 功能規格書、測試計畫 |
 | Technical | `design` | 技術決策、系統架構設計、資料庫設計 |
 | Algorithm | `algorithm` | 演算法設計 |
 | Change | `change` | 變更需求說明 |
 
-內建範本的 `order` 是 1～8，照一般寫 Spec 的順序：構想提案 → 功能規格書 → 測試計畫 → 技術決策 → 系統架構設計 → 資料庫設計 → 演算法設計 → 變更需求說明。`GET /api/agent/templates` 照 `order` 排，同一類型裡第一個是新增時的預設。2026-10-30 從內建移除的使用案例規格、SDD 五節、UI/UX 設計建議、API 規格、實驗設計、變更紀錄備份在 `backup/doc_templates/`，後端測試也用這些檔案測各種寫作規則。
+內建範本的 `order` 是 1～9，照一般寫 Spec 的順序：構想提案 → UI/UX 設計建議 → 功能規格書 → 測試計畫 → 技術決策 → 系統架構設計 → 資料庫設計 → 演算法設計 → 變更需求說明。`GET /api/agent/templates` 照 `order` 排，同一類型裡第一個是新增時的預設。2026-10-30 從內建移除的使用案例規格、SDD 五節、API 規格、實驗設計、變更紀錄備份在 `backup/doc_templates/`（UI/UX 設計建議 2026-11-04 加回來，改放 Concept），後端測試也用這些檔案測各種寫作規則。
 
 類型由文件類型決定，`specs` 不另外存類型，舊資料不用升級。自訂範本沒寫 `category` 時歸到 Functionality。
 
 各類型的分工：
 
-- Concept：天馬行空，整理想法、使用者故事和怎樣算成功。轉成功能規格時，使用者故事和驗收條件接到功能規格的使用案例和驗收條件。
+- Concept：天馬行空，整理想法、使用者故事和怎樣算成功，也可以先用 UI/UX 設計建議想畫面和操作。構想提案轉成功能規格時，使用者故事和驗收條件接到功能規格的使用案例和驗收條件。「轉成功能規格」看寫作規則 `style: idea`，不是看類型，所以 UI/UX 設計建議沒有這個按鈕。
 - Functionality：解決具體問題，先寫功能規格（使用案例、規則、驗收條件，搭配 UML 圖），再寫測試計畫。
 - Technical：先用「技術決策」比較幾個方案、選出一個，再寫系統架構和資料庫設計。
 - Algorithm：演算法的規格和設計策略，搭配流程圖。

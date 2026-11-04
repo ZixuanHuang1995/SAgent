@@ -1,7 +1,7 @@
 key: change_request
 name: 變更需求說明
 description: 說明既有系統要改什麼、為什麼改、影響哪些地方，以及怎麼測試和上線。
-order: 8
+order: 9
 category: change
 sections:
   - heading: 變更原因

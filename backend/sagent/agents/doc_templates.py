@@ -42,7 +42,9 @@ class Category:
 # 類型：這件事想得多清楚了。順序就是畫面上的順序
 CATEGORIES: list[Category] = [
     Category(
-        "idea", "Concept", "只有想法，還沒確定要不要做。整理問題、使用者故事、怎樣算成功和可能的做法。"
+        "idea",
+        "Concept",
+        "只有想法，還沒確定要不要做。整理問題、使用者故事、怎樣算成功和可能的做法，也可以先提畫面和操作的建議。",
     ),
     Category("feature", "Functionality", "已經確定要做這個功能。寫清楚功能、規則和驗收條件，再安排測試。"),
     Category(

@@ -97,8 +97,8 @@
 
 - 模型是在 CPU 上跑的 8B 左右小模型，又慢又容易出錯。改提示詞或流程前，先讀 `docs/architecture.md` 第 4.2 節「為了小模型做的設計」。
 - 不要用 LangChain 之類的框架，代理是自己實作的。
-- 文件的寫作規則有六種，由範本的 `style` 決定：`spec` 規格文件（只寫需求有的內容）、`advice` 建議類文件（可以提出需求沒寫的做法）、`idea` 構想文件（不寫細節規格，有使用者故事和粗略的驗收條件，只有「可能的做法」一節可以提建議）、`decision` 技術決策文件（限制和評估標準照需求，方案可以由 AI 提出，不能編造數字）、`algorithm` 演算法設計文件（問題的事實照需求，解法、虛擬碼由 AI 設計）、`experiment` 實驗設計文件（評估對象和判斷標準照需求，實驗方法由 AI 設計，不能寫實驗結果）。每種的寫作規則不同，見 `docs/architecture.md` 第 4.6、4.7、4.9 節。改其中一種的寫作規則時，不要動到其他種。內建範本已經沒有 `advice`、`experiment`，但自訂範本還能用，程式和測試都要保留。
-- 內建範本只有 8 個，`order` 1～8 就是寫 Spec 的順序：構想提案、功能規格書、測試計畫、技術決策、系統架構設計、資料庫設計、演算法設計、變更需求說明。移除的 6 個（使用案例規格、SDD 五節、UI/UX 設計建議、API 規格、實驗設計、變更紀錄）備份在 `backup/doc_templates/`，測試用 `conftest.py` 的 `BACKUP_TEMPLATES`、`install_backup_template()` 讀它們，不要刪。
+- 文件的寫作規則有六種，由範本的 `style` 決定：`spec` 規格文件（只寫需求有的內容）、`advice` 建議類文件（可以提出需求沒寫的做法）、`idea` 構想文件（不寫細節規格，有使用者故事和粗略的驗收條件，只有「可能的做法」一節可以提建議）、`decision` 技術決策文件（限制和評估標準照需求，方案可以由 AI 提出，不能編造數字）、`algorithm` 演算法設計文件（問題的事實照需求，解法、虛擬碼由 AI 設計）、`experiment` 實驗設計文件（評估對象和判斷標準照需求，實驗方法由 AI 設計，不能寫實驗結果）。每種的寫作規則不同，見 `docs/architecture.md` 第 4.6、4.7、4.9 節。改其中一種的寫作規則時，不要動到其他種。內建範本已經沒有 `experiment`，但自訂範本還能用，程式和測試都要保留。
+- 內建範本有 9 個，`order` 1～9 就是寫 Spec 的順序：構想提案、UI/UX 設計建議（類型 Concept）、功能規格書、測試計畫、技術決策、系統架構設計、資料庫設計、演算法設計、變更需求說明。移除的 5 個（使用案例規格、SDD 五節、API 規格、實驗設計、變更紀錄）備份在 `backup/doc_templates/`，測試用 `conftest.py` 的 `BACKUP_TEMPLATES`、`install_backup_template()` 讀它們，不要刪。
 - Reviewer 只找格式、邏輯錯誤（交給 Writer 修）和需要人工覆核的地方（只列給使用者），不評論完整度、不打分數。格式問題盡量用程式檢查。各種文件共用審查提示詞 `reviewer_system()`，見 `docs/architecture.md` 第 4.8 節。
 - 新增 Spec 時先選類型（範本的 `category`：idea、feature、design、algorithm、change），類型清單在 `doc_templates.py` 的 `CATEGORIES`。新增內建範本要寫 `category` 和 `order`。同一類型裡範本照 `order` 排，第一個是新增時的預設。
 - 範本章節要編號時寫 `ids: FR`，不要把「編號 FR-01」寫在 `goal` 裡（舊寫法還認得，但內建範本不要用）。結構重要的範本設 `fixed_sections: true`，章節名稱、順序、目標由程式照範本套回去。見 `docs/architecture.md` 第 4.10 節。
@@ -124,7 +124,7 @@
 - 這台沒有 GPU，Ollama 只能用 CPU。不要隨便跑真模型。
 - 這台沒有 Java，PlantUML 還沒設定。
 - 這是地端系統，資料不能送到外部服務（例如公開的 PlantUML 伺服器）。
-- `data/` 是使用者的正式資料，不要刪改。測試和示範用暫存目錄或 `data-demo/`。`data-demo/` 目前沒有資料（2026-10-30 使用者清掉了，舊的真模型結果和備份都已刪除），需要時用 `scripts/seed_demo.py --script` 產生；畫面上測試新增的資料不影響。
+- `data/` 是使用者的正式資料，不要刪改。測試和示範用暫存目錄或 `data-demo/`。`data-demo/` 目前是 2026-11-02 從使用者提供的 5 個「匯出全部（zip）」檔匯入的示範資料（設備報修、採購請購、會議室預約、客服工單、數獨，共 32 份 Spec）：只匯入內建 8 種文件類型（略過使用案例規格、UI/UX、SDD、API 規格 20 份），階段改成新名稱，5 份文件裡提到被略過文件的句子改掉了；另外加了使用者自己的「貪食蛇遊戲」（構想提案、功能規格書各 1 份，匯入前審查修正過編號、流程圖、前後矛盾和沒有根據的數字），共 6 個專案、34 份 Spec。每份只有一個版本，沒有 AI 工作紀錄和基準版本。zip 和匯入腳本都不在 repo 裡，用 repo 的東西重建不出這份資料，不要隨便覆蓋；`scripts/seed_demo.py --script` 產生的是另一套。畫面上測試新增的資料不影響。
 - `agents/zh.py` 會把「峰」「群」改成「峯」「羣」，示範內容檔要避開這兩個字，不然 `check_demo_content.py` 會當成簡體字。
 - 8765 埠常被使用者自己開的 SAgent 占用，預覽用 8766。
 - 這台的 uv 可能不在（2026-10-28 被移除過）。`start.ps1` 和 `.claude/launch.json`（透過 `start.ps1`）沒有 uv 時會改用 `backend\.venv`。其他指令沒有 uv 時：`uv run --project backend python` 換成 `backend\.venv\Scripts\python.exe`，`backend` 目錄裡的 `uv run pytest`、`uv run ruff` 換成 `.\.venv\Scripts\pytest.exe`、`.\.venv\Scripts\ruff.exe`。`.venv` 是 uv 建的，底層 Python 在 `%APPDATA%\uv\python\`，那個資料夾不能刪。

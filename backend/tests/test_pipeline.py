@@ -332,9 +332,10 @@ def test_spec_doc_keeps_spec_rules():
 
 def test_template_categories_and_styles(tmp_path):
     templates = load_templates()
-    # 內建只留 8 個，排列順序就是寫 Spec 的順序
+    # 內建 9 個，排列順序就是寫 Spec 的順序
     assert list(templates) == [
         "idea_proposal",
+        "uiux_advice",
         "functional_spec",
         "test_plan",
         "tech_decision",
@@ -344,6 +345,8 @@ def test_template_categories_and_styles(tmp_path):
         "change_request",
     ]
     assert templates["idea_proposal"].category == "idea" and templates["idea_proposal"].idea
+    # UI/UX 設計建議放在 Concept，寫作規則還是建議類文件
+    assert templates["uiux_advice"].category == "idea" and templates["uiux_advice"].style == "advice"
     assert templates["change_request"].category == "change"
     assert templates["tech_decision"].category == "design" and templates["tech_decision"].decision
     assert templates["functional_spec"].category == "feature" and templates["functional_spec"].style == "spec"
