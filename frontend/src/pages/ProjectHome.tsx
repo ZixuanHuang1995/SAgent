@@ -102,7 +102,7 @@ export function ProjectHome() {
       {!hasSpecs && (
         <section className="card">
           <Empty title="從第一份 Spec 開始">
-            <p>貼上需求讓 AI 撰寫，或從範本骨架、空白文件開始。</p>
+            <p>選好文件類型，貼上需求讓 AI 照範本撰寫；沒有需求就先建立範本的章節。</p>
             <button className="btn btn-primary" onClick={() => setNewSpec({ phaseId: phases[0]?.id ?? null })} disabled={phases.length === 0}>
               + 新增第一份 Spec
             </button>

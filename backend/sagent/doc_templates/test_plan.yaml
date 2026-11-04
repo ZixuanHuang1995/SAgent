@@ -4,6 +4,11 @@ description: 安排測試的範圍、環境、測試案例、通過標準和時�
 order: 4
 category: feature
 role: 測試工程師
+requirement_hint: 貼上功能規格的功能需求和驗收條件，再補上測試環境、測試人員和時程。這些需求沒寫的話，AI 只能標「待確認」。
+requirement_example: |
+  依請假系統功能規格的 AC-01～AC-08 做驗收測試。
+  測試機一台，資料用去年的假單。
+  QA 2 人，6/1～6/10 測試，6/12 前交報告。
 sections:
   - heading: 測試範圍
     goal: 列出這次要測試和不測試的功能，以及依據的規格文件。

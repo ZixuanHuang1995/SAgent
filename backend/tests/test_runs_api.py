@@ -20,6 +20,8 @@ def test_run_creates_new_version(client, project):
     assert run["status"] == "succeeded", run["error"]
     assert run["result_version_no"] == 1
     assert run["options"]["uml_syntax"] == "auto"
+    # 預設最多修訂 2 輪、不限制圖的張數
+    assert run["options"]["max_revisions"] == 2 and run["options"]["max_diagrams"] is None
     assert run["plan"]["sections"][0]["id"] == "S1"
     assert run["review"]["final"]["verdict"] == "pass"
     assert len(run["review"]["rounds"]) == 2
@@ -100,6 +102,8 @@ def test_list_runs_and_templates_and_settings(client, project):
     assert runs[0]["id"] == run_id and runs[0]["spec_title"] == "下單功能"
     templates = client.get("/api/agent/templates").json()
     assert templates[0]["key"] == "idea_proposal"  # 照寫 Spec 的順序
+    # 內建範本都有需求欄的說明和例子
+    assert all(t["requirement_hint"] and t["requirement_example"] for t in templates if t["builtin"])
     assert client.get("/api/agent/models").json()["provider"] == "fake"
 
     s = client.put("/api/settings", json={"default_model": "qwen3:8b", "max_revisions": 2}).json()

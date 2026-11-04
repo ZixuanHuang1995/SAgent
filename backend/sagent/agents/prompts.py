@@ -12,7 +12,7 @@ import re
 
 from .diagram_kinds import KINDS, kinds_text
 from .doc_templates import DocTemplate
-from .types import Issue, Plan, RunInput, SectionPlan, Term
+from .types import Issue, PipelineOptions, Plan, RunInput, SectionPlan, Term
 
 _COMMON_RULES = [
     "使用繁體中文（台灣用語），技術名詞可以保留英文。",
@@ -135,7 +135,7 @@ PLAN_SCHEMA = {
                     "heading": {"type": "string"},
                     "goal": {"type": "string"},
                     "key_points": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
-                    "diagrams": {"type": "array", "items": _DIAGRAM_ITEM_SCHEMA, "maxItems": 2},
+                    "diagrams": {"type": "array", "items": _DIAGRAM_ITEM_SCHEMA},
                 },
                 "required": ["heading", "goal", "key_points", "diagrams"],
             },
@@ -198,7 +198,7 @@ REVISE_PLAN_SCHEMA = {
                     "heading": {"type": "string"},
                     "goal": {"type": "string"},
                     "key_points": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
-                    "diagrams": {"type": "array", "items": _DIAGRAM_ITEM_SCHEMA, "maxItems": 2},
+                    "diagrams": {"type": "array", "items": _DIAGRAM_ITEM_SCHEMA},
                 },
                 "required": ["after", "heading", "goal", "key_points", "diagrams"],
             },
@@ -210,11 +210,17 @@ REVISE_PLAN_SCHEMA = {
 }
 
 
+def can_draw(opts: PipelineOptions) -> bool:
+    """這次要不要畫圖。max_diagrams 是 None 表示不限制張數。"""
+    return opts.diagrams and (opts.max_diagrams is None or opts.max_diagrams > 0)
+
+
 def planner_messages(inp: RunInput) -> list[dict[str, str]]:
     opts = inp.options
+    limit = "" if opts.max_diagrams is None else f"整份文件最多 {opts.max_diagrams} 張圖。"
     diagram_rule = (
-        f"4. 只有真的需要圖的章節才放 diagrams，整份文件最多 {opts.max_diagrams} 張圖。kind 只能用：{kinds_text()}。"
-        if opts.diagrams and opts.max_diagrams > 0
+        f"4. 只有真的需要圖的章節才放 diagrams，{limit}kind 只能用：{kinds_text()}。"
+        if can_draw(opts)
         else "4. 這次不畫圖，每個章節的 diagrams 都給空陣列。"
     )
     tpl = inp.template
@@ -289,7 +295,7 @@ def revise_planner_messages(inp: RunInput, existing: list[tuple[str, str, str]])
     opts = inp.options
     diagram_rule = (
         f"新增章節需要圖時才放 diagrams，kind 只能用：{kinds_text()}。"
-        if opts.diagrams and opts.max_diagrams > 0
+        if can_draw(opts)
         else "這次不畫圖，diagrams 都給空陣列。"
     )
     fixed_rule = (

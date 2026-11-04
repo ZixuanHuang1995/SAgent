@@ -38,7 +38,7 @@ def _diagrams(raw_list: Any, opts: PipelineOptions) -> list[DiagramPlan]:
                 syntax=resolve_syntax(kind, opts.uml_syntax, opts.plantuml_available),
             )
         )
-    return out[:2]
+    return out
 
 
 # 專案詞彙表最多幾項。每次 AI 撰寫都會放進提示詞，太多小模型會抓不到重點
@@ -74,7 +74,9 @@ def parse_terms(raw_list: Any, limit: int = 12) -> list[Term]:
 
 
 def _limit_diagrams(sections: list[SectionPlan], opts: PipelineOptions) -> None:
-    budget = opts.max_diagrams if opts.diagrams else 0
+    if opts.diagrams and opts.max_diagrams is None:
+        return  # 不限制張數
+    budget = opts.max_diagrams if opts.diagrams and opts.max_diagrams is not None else 0
     for sec in sections:
         keep = sec.diagrams[: max(budget, 0)]
         budget -= len(keep)

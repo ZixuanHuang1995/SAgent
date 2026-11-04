@@ -35,6 +35,11 @@ log = logging.getLogger("sagent.runner")
 TOKEN_FLUSH_SECONDS = 0.15
 
 
+def _optional_int(value: Any) -> int | None:
+    """沒有值表示不限制（例如圖的張數）。舊的 AI 工作存的是數字，照樣用。"""
+    return None if value is None else int(value)
+
+
 class RunEmitter:
     def __init__(self, manager: RunManager, run_id: int):
         self.manager = manager
@@ -282,10 +287,10 @@ class RunManager:
                 options=PipelineOptions(
                     uml_syntax=opts.get("uml_syntax", "auto"),
                     plantuml_available=self.plantuml_available(),
-                    max_revisions=int(opts.get("max_revisions", 1)),
+                    max_revisions=int(opts.get("max_revisions", 2)),
                     temperature=float(opts.get("temperature", 0.4)),
                     diagrams=bool(opts.get("diagrams", True)),
-                    max_diagrams=int(opts.get("max_diagrams", 4)),
+                    max_diagrams=_optional_int(opts.get("max_diagrams")),
                 ),
             )
             answers = [a for a in opts.get("answers") or [] if str(a.get("answer", "")).strip()]

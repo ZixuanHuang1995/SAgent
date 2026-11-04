@@ -18,7 +18,7 @@ class AppSettings(BaseModel):
     default_model: str = "qwen3.6:35b-a3b"
     temperature: float = Field(0.4, ge=0, le=1.5)
     # 審查後最多修訂幾輪。0 = 只審查不修訂
-    max_revisions: int = Field(1, ge=0, le=3)
+    max_revisions: int = Field(2, ge=0, le=3)
     # auto：預設用 Mermaid；有 PlantUML 渲染時，使用案例圖/元件圖/部署圖改用 PlantUML
     uml_syntax: Literal["auto", "mermaid", "plantuml"] = "auto"
     diagrams: bool = True

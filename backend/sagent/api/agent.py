@@ -114,7 +114,7 @@ async def create_run(body: RunCreate, state: AppState = Depends(get_state)):
                 "temperature": current.temperature if o.temperature is None else o.temperature,
                 "diagrams": (current.diagrams if o.diagrams is None else o.diagrams)
                 and templates[doc_type].allow_diagrams,
-                "max_diagrams": 4 if o.max_diagrams is None else o.max_diagrams,
+                "max_diagrams": o.max_diagrams,  # None：不限制張數
                 "plan_first": bool(o.plan_first) and body.mode == "draft",
                 "ollama_url": current.ollama_url,
                 "num_ctx": current.num_ctx,

@@ -179,18 +179,17 @@ class Checker:
                     self.bad(name, f"plan.sections 第 {i} 節缺少 {field}")
             if re.match(r"^\d", str(sec.get("heading", ""))):
                 self.bad(name, f"第 {i} 節標題不要加編號：{sec.get('heading')}")
-            if len(sec.get("diagrams", [])) > 2:
-                self.bad(name, f"第 {i} 節超過 2 張圖")
             planned += len(sec.get("diagrams", []))
         bodies = data.get("sections", [])
         if len(bodies) != len(secs):
             self.bad(name, f"sections 有 {len(bodies)} 段，大綱有 {len(secs)} 節")
         self.check_bodies(name, {f"sections[{i}]": b for i, b in enumerate(bodies)})
         codes = data.get("diagrams", [])
-        limit = run_options(sc, doc_type).get("max_diagrams", 4) if tpl.allow_diagrams else 0
+        # 沒有設定張數就不限制；範本有設 max_diagrams 時照範本
+        limit = run_options(sc, doc_type).get("max_diagrams") if tpl.allow_diagrams else 0
         if tpl.max_diagrams is not None:
-            limit = min(limit, tpl.max_diagrams)
-        if planned > limit:
+            limit = tpl.max_diagrams if limit is None else min(limit, tpl.max_diagrams)
+        if limit is not None and planned > limit:
             self.bad(name, f"大綱有 {planned} 張圖，這種文件最多 {limit} 張")
         if len(codes) != planned:
             self.bad(name, f"diagrams 有 {len(codes)} 張，大綱有 {planned} 張")
@@ -296,9 +295,9 @@ class Checker:
             existing_content=existing,
             options=PipelineOptions(
                 uml_syntax=opts.get("uml_syntax", "auto"),
-                max_revisions=opts.get("max_revisions", 1),
+                max_revisions=opts.get("max_revisions", 2),
                 diagrams=tpl.allow_diagrams,
-                max_diagrams=opts.get("max_diagrams", 4),
+                max_diagrams=opts.get("max_diagrams"),
             ),
         )
         emitter = ListEmitter()

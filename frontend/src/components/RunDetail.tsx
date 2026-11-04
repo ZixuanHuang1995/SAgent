@@ -41,7 +41,8 @@ export function RunDetailModal(props: {
                 <dt>UML 語法</dt>
                 <dd>{UML_SYNTAX[String(run.options.uml_syntax ?? 'auto')] ?? String(run.options.uml_syntax)}</dd>
                 <dt>畫圖</dt>
-                <dd>{run.options.diagrams ? `是（最多 ${run.options.max_diagrams ?? 4} 張）` : '否'}</dd>
+                <dd>{/* 舊的 AI 工作有記張數上限；新的工作不限制張數，沒有這個值 */}
+                  {run.options.diagrams ? (run.options.max_diagrams != null ? `是（最多 ${run.options.max_diagrams} 張）` : '是') : '否'}</dd>
                 <dt>修訂輪數上限</dt>
                 <dd>{String(run.options.max_revisions ?? '')}</dd>
                 <dt>開始版本</dt>

@@ -16,10 +16,10 @@ SectionAction = Literal["write", "keep", "update"]
 class PipelineOptions:
     uml_syntax: str = "auto"  # auto | mermaid | plantuml
     plantuml_available: bool = False
-    max_revisions: int = 1
+    max_revisions: int = 2
     temperature: float = 0.4
     diagrams: bool = True
-    max_diagrams: int = 4
+    max_diagrams: int | None = None  # None：不限制張數（範本有設 max_diagrams 時照範本）
     max_sections: int = 10
 
 

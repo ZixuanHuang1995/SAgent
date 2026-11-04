@@ -4,6 +4,11 @@ description: 技術方向決定之後，說明系統由哪些元件組成、元�
 order: 6
 category: design
 role: 軟體架構師
+requirement_hint: 寫已經決定的技術方向（可以貼技術決策的建議方案）、要整合的既有系統、部署環境和安全要求。還在比較方案的話，先寫技術決策。
+requirement_example: |
+  用 Python 和 PostgreSQL，部署在內網兩台 VM。
+  登入接 AD，假單核准後要通知薪資系統。
+  只能內網連線，操作要留紀錄。
 sections:
   - heading: 設計目標與限制
     goal: 列出架構要達成的目標（效能、可用性、安全等）和已知的限制；需求沒有數字就標（待確認）。

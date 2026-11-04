@@ -4,8 +4,11 @@ description: 把還在構想階段的想法整理清楚：要解決什麼問題�
 order: 1
 category: idea
 style: idea
-max_diagrams: 1
 fixed_sections: true
+requirement_hint: 幾句話就可以：想解決什麼問題、給誰用、大概想怎麼做。不清楚的地方 AI 會列成待確認事項。
+requirement_example: |
+  現在請假要填紙本、找主管簽名，人資每個月要花兩天核對假單。
+  想做線上請假，先給總部試用。
 sections:
   - heading: 背景與問題
     goal: 說明現在遇到什麼問題、影響到誰、在什麼情況下發生。只寫需求提到的事實。

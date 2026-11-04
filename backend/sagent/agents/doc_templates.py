@@ -10,8 +10,10 @@
   algorithm 演算法設計文件、experiment 實驗設計文件
 - advice：舊寫法，true 等於 style: advice
 - allow_diagrams：false 表示這種文件不畫圖
-- max_diagrams：這種文件最多畫幾張圖，會蓋過畫面上設定的數量（只會變少）
+- max_diagrams：這種文件最多畫幾張圖，沒寫就不限制。內建範本都沒有設
 - fixed_sections：true 表示章節固定，AI 撰寫時不刪、不加、不改名
+- requirement_hint、requirement_example：需求欄的說明和例子（畫面上顯示「例如：」接例子）。
+  沒寫時依 style 顯示共用的說明
 
 章節的選用欄位：
 - diagrams：建議的圖（見 diagram_kinds.KINDS）
@@ -105,6 +107,9 @@ class DocTemplate:
     max_diagrams: int | None = None
     # 章節固定：AI 撰寫時章節名稱和順序照範本，Planner 只決定每節的要點和圖
     fixed_sections: bool = False
+    # 需求欄的說明和例子（新增 Spec、AI 撰寫）。空白時前端依 style 給共用的說明
+    requirement_hint: str = ""
+    requirement_example: str = ""
 
     def section_for(self, heading: str) -> TemplateSection | None:
         """找出跟這個標題對應的範本章節。先找完全一樣的，再找互相包含的。"""
@@ -156,6 +161,8 @@ class DocTemplate:
             "advice": self.advice,
             "allow_diagrams": self.allow_diagrams,
             "fixed_sections": self.fixed_sections,
+            "requirement_hint": self.requirement_hint,
+            "requirement_example": self.requirement_example,
             "sections": [
                 {"heading": s.heading, "goal": s.goal, "diagrams": s.diagrams, "ids": s.ids}
                 for s in self.sections
@@ -192,6 +199,8 @@ def _parse(path: Path, builtin: bool) -> DocTemplate:
         category=data["category"] if data.get("category") in CATEGORY_KEYS else "feature",
         max_diagrams=_max_diagrams(data.get("max_diagrams")),
         fixed_sections=data.get("fixed_sections") is True,
+        requirement_hint=str(data.get("requirement_hint") or "").strip(),
+        requirement_example=str(data.get("requirement_example") or "").strip(),
     )
 
 

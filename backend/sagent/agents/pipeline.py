@@ -51,8 +51,11 @@ class SpecPipeline:
     def _apply_template_limits(inp: RunInput) -> None:
         if not inp.template.allow_diagrams:
             inp.options.diagrams = False  # 這種文件類型不畫圖（例如 UI/UX 設計建議）
-        if inp.template.max_diagrams is not None:
-            inp.options.max_diagrams = min(inp.options.max_diagrams, inp.template.max_diagrams)
+        # 範本有設 max_diagrams 時（只有自訂範本會設）照範本，只會變少
+        limit = inp.template.max_diagrams
+        if limit is not None:
+            current = inp.options.max_diagrams
+            inp.options.max_diagrams = limit if current is None else min(current, limit)
 
     async def plan_only(self, inp: RunInput) -> Plan:
         """先確認大綱：只跑 Planner，大綱和待確認問題交給使用者確認後，再用 run(plan=…) 繼續。"""

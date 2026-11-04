@@ -6,6 +6,11 @@ category: idea
 role: UI/UX 設計師
 style: advice
 allow_diagrams: false
+requirement_hint: 寫清楚誰在用、用什麼裝置、在什麼情況下用、現在哪裡不好用。也可以直接貼上構想提案或功能規格。
+requirement_example: |
+  員工大多用手機請假，常在外面臨時請。
+  主管希望一次看完待簽核的假單。
+  現在紙本常漏填代理人。
 sections:
   - heading: 使用者與使用情境
     goal: 說明主要使用者是誰、在什麼情況下使用（裝置、環境、使用頻率、熟悉程度），以及最常做的工作。

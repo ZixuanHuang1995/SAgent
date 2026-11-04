@@ -401,9 +401,9 @@ export function NewSpecDialog(props: {
   const [title, setTitle] = useState(preset?.title ?? '')
   const [phaseId, setPhaseId] = useState(props.phaseId ?? props.phases[0]?.id)
   const [docType, setDocType] = useState('')
-  const [init, setInit] = useState<'template' | 'blank' | 'content' | 'ai'>('ai')
-  const [content, setContent] = useState('')
   const [requirement, setRequirement] = useState(preset?.requirement ?? '')
+  // 一律照範本：有填需求就讓 AI 照範本撰寫，沒填就建立範本的章節骨架
+  const useAi = requirement.trim() !== ''
   // 跟 AI 面板一樣預設先確認大綱
   const [planFirst, setPlanFirst] = useState(true)
 
@@ -417,11 +417,10 @@ export function NewSpecDialog(props: {
         phase_id: phaseId!,
         title,
         doc_type: template!.key,
-        init: init === 'ai' ? 'none' : init,
-        content: init === 'content' ? content : undefined,
+        init: useAi ? 'none' : 'template',
         source_spec_id: preset?.source.id ?? null,
       })
-      if (init === 'ai') {
+      if (useAi) {
         try {
           await api.createRun({
             spec_id: spec.id,
@@ -449,13 +448,11 @@ export function NewSpecDialog(props: {
   // 建立按鈕不先灰掉：按下去時才標出缺的欄位，並把游標移過去（對話框高，缺的欄位常在看不到的地方）
   const [showMissing, setShowMissing] = useState(false)
   const titleRef = useRef<HTMLInputElement>(null)
-  const requirementRef = useRef<HTMLTextAreaElement>(null)
   const missingTitle = !title.trim()
-  const missingRequirement = init === 'ai' && !requirement.trim()
   const submit = () => {
-    if (missingTitle || missingRequirement) {
+    if (missingTitle) {
       setShowMissing(true)
-      ;(missingTitle ? titleRef : requirementRef).current?.focus()
+      titleRef.current?.focus()
       return
     }
     create.mutate()
@@ -544,7 +541,7 @@ export function NewSpecDialog(props: {
             取消
           </button>
           <button className="btn btn-primary" disabled={!ready || create.isPending} onClick={submit}>
-            {init === 'ai' ? '建立並開始 AI 撰寫' : '建立'}
+            {useAi ? '建立並開始 AI 撰寫' : '建立'}
           </button>
         </>
       }
@@ -583,34 +580,16 @@ export function NewSpecDialog(props: {
           ))}
         </select>
       </Field>
-      <Field label="內容來源">
-        <div className="seg seg-wrap">
-          {(
-            [
-              ['ai', '用 AI 撰寫'],
-              ['template', '範本骨架'],
-              ['blank', '空白文件'],
-              ['content', '匯入 Markdown'],
-            ] as const
-          ).map(([k, label]) => (
-            <button key={k} type="button" className={init === k ? 'active' : ''} aria-pressed={init === k} onClick={() => setInit(k)}>
-              {label}
-            </button>
-          ))}
-        </div>
+      <Field label="需求內容（選填）" hint={help.hint}>
+        <textarea
+          className="input textarea"
+          rows={8}
+          placeholder={help.placeholder}
+          value={requirement}
+          onChange={(e) => setRequirement(e.target.value)}
+        />
       </Field>
-      {init === 'ai' && (
-        <Field label="需求內容" hint={help.hint} error={showMissing && missingRequirement && '請填需求內容，AI 會照這些內容撰寫'}>
-          <textarea
-            ref={requirementRef}
-            className={`input textarea${showMissing && missingRequirement ? ' invalid' : ''}`}
-            rows={8}
-            value={requirement}
-            onChange={(e) => setRequirement(e.target.value)}
-          />
-        </Field>
-      )}
-      {init === 'ai' && (
+      {useAi ? (
         <label className="check-row mb-sm">
           <input type="checkbox" checked={planFirst} onChange={(e) => setPlanFirst(e.target.checked)} />
           <span>
@@ -618,34 +597,14 @@ export function NewSpecDialog(props: {
             <span className="muted small check-row-hint">Planner 規劃完（約 3～5 分鐘）先停下來，讓你回答待確認問題、調整名詞表和要點。</span>
           </span>
         </label>
-      )}
-      {init === 'template' && template && (
-        <div className="muted small">會建立以下章節：{template.sections.map((s) => s.heading).join('、')}</div>
-      )}
-      {init === 'content' && (
-        <Field label="Markdown 內容" hint={<FileLoader onLoad={(text, name) => { setContent(text); if (!title) setTitle(name.replace(/\.(md|markdown|txt)$/i, '')) }} />}>
-          <textarea className="input textarea mono" rows={10} value={content} onChange={(e) => setContent(e.target.value)} />
-        </Field>
+      ) : (
+        template && (
+          <div className="muted small">
+            沒填需求就只建立空白章節（{template.sections.map((s) => s.heading).join('、')}），之後可以在右側「AI 撰寫」再寫。
+          </div>
+        )
       )}
     </Modal>
-  )
-}
-
-function FileLoader({ onLoad }: { onLoad: (text: string, name: string) => void }) {
-  return (
-    <label className="link-btn">
-      從檔案載入（.md）
-      <input
-        type="file"
-        accept=".md,.markdown,.txt"
-        hidden
-        onChange={async (e) => {
-          const f = e.target.files?.[0]
-          if (f) onLoad(await f.text(), f.name)
-          e.target.value = ''
-        }}
-      />
-    </label>
   )
 }
 

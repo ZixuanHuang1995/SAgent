@@ -184,12 +184,19 @@ const REQUIREMENT_HELP: Record<Template['style'], { hint: string; placeholder: s
   },
 }
 
-/** 需求欄的說明和 placeholder，依文件類型的寫作規則給不同的建議。新增 Spec 和 AI 撰寫表單共用 */
+/** 需求欄的說明和 placeholder。新增 Spec 和 AI 撰寫表單共用
+ *
+ * 範本有寫 requirement_hint、requirement_example（內建範本都有）就用範本的，
+ * 沒寫的（自訂範本）依寫作規則給共用的說明。 */
 export function requirementHelp(template: Template | undefined, mode: 'draft' | 'revise' = 'draft') {
   if (mode === 'revise')
     return {
       hint: '寫要改什麼就好，例如新增哪條規則、哪一節要調整、哪裡寫錯了。',
       placeholder: '例如：\n請假要支援「半天」為單位，並且新增「補休」假別。',
     }
-  return REQUIREMENT_HELP[template?.style ?? 'spec'] ?? REQUIREMENT_HELP.spec
+  const fallback = REQUIREMENT_HELP[template?.style ?? 'spec'] ?? REQUIREMENT_HELP.spec
+  return {
+    hint: template?.requirement_hint || fallback.hint,
+    placeholder: template?.requirement_example ? `例如：\n${template.requirement_example}` : fallback.placeholder,
+  }
 }

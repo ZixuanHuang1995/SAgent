@@ -177,6 +177,9 @@ export interface Template {
   allow_diagrams: boolean
   /** true：章節固定，AI 撰寫時不刪、不加、不改名 */
   fixed_sections: boolean
+  /** 需求欄的說明和例子，空字串時依 style 顯示共用的說明 */
+  requirement_hint: string
+  requirement_example: string
   /** ids：這一節的項目用什麼編號（例如 FR），空字串表示不編號 */
   sections: { heading: string; goal: string; diagrams: string[]; ids: string }[]
 }
@@ -220,7 +223,8 @@ export interface RunOptions {
   max_revisions?: number
   temperature?: number
   diagrams?: boolean
-  max_diagrams?: number
+  /** 最多畫幾張圖，沒有值表示不限制 */
+  max_diagrams?: number | null
   /** 規劃完先停下來確認大綱和待確認問題（只用在撰寫模式） */
   plan_first?: boolean
 }

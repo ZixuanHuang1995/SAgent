@@ -5,8 +5,11 @@ order: 5
 category: design
 role: 軟體架構師
 style: decision
-max_diagrams: 2
 fixed_sections: true
+requirement_hint: 寫要決定什麼、有哪些限制（時間、人力、預算、既有系統）、用什麼標準比較，想到的方案也列出來。AI 不會編造效能或成本的數字。
+requirement_example: |
+  請假系統的登入要接公司 AD，還是自己做帳號密碼？
+  兩個月內上線，只有一位工程師維護，公司已經有 AD。
 sections:
   - heading: 背景與問題
     goal: 說明要做什麼決定、為什麼現在要決定，以及不決定會有什麼影響。只寫需求提到的事實。

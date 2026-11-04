@@ -5,7 +5,10 @@ order: 8
 category: algorithm
 role: 演算法工程師
 style: algorithm
-max_diagrams: 2
+requirement_hint: 寫清楚要解決的問題、輸入和輸出、限制條件和效能要求。AI 會設計解法、寫虛擬碼、分析複雜度並列出測試案例。
+requirement_example: |
+  解 9×9 數獨，題目用 81 個字元表示，0 是空格。
+  沒有解或有多個解時要回報，每題要在 1 秒內解完。
 sections:
   - heading: 問題定義
     goal: 說明要解決的問題、輸入和輸出的格式、限制條件和效能要求。

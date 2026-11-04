@@ -8,7 +8,13 @@ from sagent.agents.doc_templates import load_templates
 from sagent.agents.fake_llm import FakeLLM
 from sagent.agents.pipeline import SpecPipeline
 from sagent.agents.planner import Planner
-from sagent.agents.prompts import PARTIAL_REVIEW_LIMITS, REVIEW_LIMITS, related_answers
+from sagent.agents.prompts import (
+    PARTIAL_REVIEW_LIMITS,
+    PLAN_SCHEMA,
+    REVIEW_LIMITS,
+    planner_messages,
+    related_answers,
+)
 from sagent.agents.reviewer import (
     marked_points,
     mismatched_ids,
@@ -203,6 +209,30 @@ def test_planner_normalizes_model_output():
     assert Planner.build_plan(inp, {"sections": [{"heading": "只有一節"}]}) is None
 
 
+def test_diagrams_unlimited_by_default():
+    """預設不限制圖的張數：每一節和整份文件都照 Planner 規劃的畫。"""
+    inp = make_input()
+    assert inp.options.max_diagrams is None
+    flow = {"kind": "flowchart", "title": "流程", "description": ""}
+    data = {
+        "summary": "摘要",
+        "sections": [
+            {"heading": f"第{i}節", "goal": "g", "key_points": [], "diagrams": [flow, flow, flow]}
+            for i in range(1, 4)
+        ],
+        "open_questions": [],
+    }
+    plan = Planner.build_plan(inp, data)
+    assert [len(s.diagrams) for s in plan.sections] == [3, 3, 3]
+
+    system = planner_messages(inp)[0]["content"]
+    assert "只有真的需要圖的章節才放 diagrams" in system and "張圖" not in system
+    diagrams_schema = PLAN_SCHEMA["properties"]["sections"]["items"]["properties"]["diagrams"]
+    assert "maxItems" not in diagrams_schema
+    # 不畫圖時照樣清空
+    assert all(not s.diagrams for s in Planner.build_plan(make_input(diagrams=False), data).sections)
+
+
 def test_textutil_helpers():
     assert parse_json_object('好的\n```json\n{"a": 1}\n```') == {"a": 1}
     assert parse_json_object('前言 {"a": {"b": 2}} 後記') == {"a": {"b": 2}}
@@ -362,14 +392,23 @@ def test_template_categories_and_styles(tmp_path):
     old = load_templates(tmp_path)["old"]
     assert old.advice and old.style == "advice" and old.category == "feature"
     assert old.max_diagrams is None
+    # 沒寫需求欄說明的自訂範本，前端改用寫作規則共用的說明
+    assert old.requirement_hint == "" and old.requirement_example == ""
+    (tmp_path / "hint.yaml").write_text(
+        "key: hint\nname: 有說明\nrequirement_hint: 寫要做什麼\nrequirement_example: |\n  第一行\n  第二行\n"
+        "sections:\n  - heading: 一\n",
+        encoding="utf-8",
+    )
+    hint = load_templates(tmp_path)["hint"]
+    assert hint.requirement_hint == "寫要做什麼" and hint.requirement_example == "第一行\n第二行"
+    assert hint.to_dict()["requirement_example"] == "第一行\n第二行"
 
 
-def test_idea_doc_uses_idea_rules_and_one_diagram():
+def test_idea_doc_uses_idea_rules():
     llm = FakeLLM()
-    inp = make_input(template="idea_proposal", diagrams=True, max_diagrams=4)
+    inp = make_input(template="idea_proposal", diagrams=True)
     result, _ = run(llm, inp)
-    assert inp.options.max_diagrams == 1
-    assert len(extract_diagrams(result.markdown)) <= 1
+    assert inp.options.max_diagrams is None  # 內建範本不限制圖的張數
 
     planner_system = llm.calls[0]["messages"][0]["content"]
     assert "「構想提案」文件" in planner_system and "這是構想文件" in planner_system
@@ -500,9 +539,9 @@ def test_algorithm_doc_uses_algorithm_rules_and_keeps_pseudocode():
     templates = load_templates()
     assert templates["algorithm_design"].category == "algorithm" and templates["algorithm_design"].algorithm
     llm = FakeLLM()
-    inp = make_input(template="algorithm_design", diagrams=True, max_diagrams=4)
+    inp = make_input(template="algorithm_design", diagrams=True)
     result, _ = run(llm, inp)
-    assert inp.options.max_diagrams == 2
+    assert inp.options.max_diagrams is None
 
     planner_system = llm.calls[0]["messages"][0]["content"]
     assert "「演算法設計」文件" in planner_system and "這是演算法設計文件" in planner_system
@@ -538,9 +577,9 @@ def test_experiment_doc_uses_experiment_rules():
 
 def test_decision_doc_uses_decision_rules():
     llm = FakeLLM()
-    inp = make_input(template="tech_decision", diagrams=True, max_diagrams=4)
+    inp = make_input(template="tech_decision", diagrams=True)
     result, _ = run(llm, inp)
-    assert inp.options.max_diagrams == 2
+    assert inp.options.max_diagrams is None
 
     planner_system = llm.calls[0]["messages"][0]["content"]
     assert "「技術決策」文件" in planner_system and "這是技術決策文件" in planner_system

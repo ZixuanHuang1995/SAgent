@@ -3,6 +3,11 @@ name: 資料庫設計
 description: 說明資料模型、資料表欄位、索引，以及資料怎麼建立、封存、移轉和備份。
 order: 7
 category: design
+requirement_hint: 貼上功能規格的資料需求和業務規則，再補上資料量、保存期限和備份要求。
+requirement_example: |
+  資料有員工、假別、假單、簽核紀錄、特休餘額。
+  員工約 800 人，一年約 1 萬張假單。
+  假單保存 5 年，每天備份一次。
 sections:
   - heading: 設計說明
     goal: 說明資料庫的用途、使用的資料庫產品和命名規則；需求沒寫的產品標（待確認）。

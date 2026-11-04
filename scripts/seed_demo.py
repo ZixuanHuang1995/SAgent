@@ -68,7 +68,7 @@ AI_SETTINGS = (
     "num_ctx",
 )
 
-# 各種文件的 AI 選項。圖的數量比預設（4 張）少，CPU 上比較快
+# 各種文件的 AI 選項。SAgent 預設不限制圖的張數，示範資料限制張數，CPU 上比較快
 RUN_OPTIONS = {
     "idea_proposal": {"max_diagrams": 1},
     "functional_spec": {"max_diagrams": 3},
