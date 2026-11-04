@@ -261,6 +261,16 @@ export interface PlanSection {
 }
 
 /** 名詞表：角色、狀態、主要資料的名稱，每一節都照這份用 */
+/** 從 Spec 抽出的名詞：new 專案詞彙表沒有；changed 名稱一樣但種類或說明不一樣（current_* 是詞彙表現在的） */
+export interface GlossarySuggestion {
+  name: string
+  kind: string
+  note: string
+  status: 'new' | 'changed'
+  current_kind: string
+  current_note: string
+}
+
 export interface PlanTerm {
   name: string
   kind: string
@@ -440,6 +450,11 @@ export const api = {
     },
   ) => request<SpecDetail>('POST', `/api/projects/${projectId}/specs`, body),
   spec: (id: number) => request<SpecDetail>('GET', `/api/specs/${id}`),
+  glossarySuggestions: (id: number) =>
+    request<{ version_no: number; glossary_count: number; suggestions: GlossarySuggestion[] }>(
+      'GET',
+      `/api/specs/${id}/glossary-suggestions`,
+    ),
   updateSpec: (id: number, body: Partial<Pick<Spec, 'title' | 'phase_id' | 'status' | 'doc_type'>>) =>
     request<Spec>('PATCH', `/api/specs/${id}`, body),
   saveContent: (id: number, body: { content: string; message?: string; base_version_no?: number | null }) =>

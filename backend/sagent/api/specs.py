@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from ..app_state import AppState
-from ..models import Spec
+from ..models import Project, Spec
 from ..schemas import (
     ContentSave,
     LabelIn,
@@ -21,6 +21,7 @@ from ..schemas import (
     VersionDetail,
     VersionMeta,
 )
+from ..services import glossary as glossary_service
 from ..services import reviews as review_service
 from ..services import specs as spec_service
 from ..services.errors import BadRequest
@@ -52,6 +53,23 @@ def spec_detail(s: Session, spec: Spec) -> SpecDetail:
 def get_spec(spec_id: int, state: AppState = Depends(get_state)):
     with state.db() as s:
         return spec_detail(s, spec_service.get_spec(s, spec_id))
+
+
+@router.get("/{spec_id}/glossary-suggestions")
+def glossary_suggestions(spec_id: int, state: AppState = Depends(get_state)) -> dict[str, Any]:
+    """從目前版本抽出名詞，跟專案詞彙表比對。只回建議，不寫入（使用者勾選後由前端更新專案詞彙表）。"""
+    with state.db() as s:
+        spec = spec_service.get_spec(s, spec_id)
+        head = spec_service.get_head(s, spec)
+        if head is None:
+            raise BadRequest("這份 Spec 還沒有內容")
+        project = s.get(Project, spec.project_id)
+        glossary = list(project.glossary or []) if project else []
+        return {
+            "version_no": head.version_no,
+            "glossary_count": len(glossary),
+            "suggestions": glossary_service.suggestions_dict(glossary, head.content),
+        }
 
 
 @router.patch("/{spec_id}", response_model=SpecOut)

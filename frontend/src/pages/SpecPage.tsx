@@ -7,6 +7,7 @@ import { api, ApiError, type SpecDetail, type SpecStatus } from '../api'
 import { AgentPanel } from '../components/AgentPanel'
 import { DiagramMenu, type DiagramLang } from '../components/DiagramMenu'
 import { DiffModal } from '../components/DiffView'
+import { GlossaryExtractDialog } from '../components/GlossaryExtract'
 import { MarkdownEditor, type EditorHandle } from '../components/Editor'
 import { MarkdownView } from '../components/MarkdownView'
 import { ReviewChecklist } from '../components/ReviewChecklist'
@@ -99,6 +100,7 @@ export function SpecPage() {
   const canSplit = !narrow && (docWidth === 0 || docWidth >= SPLIT_MIN_WIDTH)
   const mode: ViewMode = savedMode === 'split' && !canSplit ? 'edit' : savedMode
   const [archiving, setArchiving] = useState(false)
+  const [extracting, setExtracting] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const editor = useRef<EditorHandle>(null)
   // 預覽模式下插入圖表時，要等編輯器出現後才能插入
@@ -414,6 +416,11 @@ export function SpecPage() {
                 與前一版比較
               </MenuItem>
             )}
+            {data.head_version_no > 0 && !data.archived && (
+              <MenuItem icon="tag" title="名詞定義、角色、狀態加進專案詞彙表，這個專案的其他文件就會用一樣的名稱" onSelect={() => setExtracting(true)}>
+                從這份文件抽出名詞…
+              </MenuItem>
+            )}
             {data.head_version_no > 0 && <MenuSeparator />}
             {data.archived ? (
               <MenuItem icon="restore" onSelect={async () => { await api.unarchiveSpec(specId); refreshAll() }}>
@@ -715,6 +722,9 @@ export function SpecPage() {
           }}
           onClose={() => setConverting(false)}
         />
+      )}
+      {extracting && (
+        <GlossaryExtractDialog specId={specId} projectId={data.project_id} title={data.title} onClose={() => setExtracting(false)} />
       )}
       {archiving && (
         <ConfirmDialog

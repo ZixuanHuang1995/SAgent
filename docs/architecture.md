@@ -45,7 +45,7 @@ erDiagram
 
 | 資料表 | 說明 |
 |---|---|
-| projects | 專案，含專案詞彙表 `glossary`（`[{name, kind, note}]`，最多 40 個） |
+| projects | 專案，含專案詞彙表 `glossary`（`[{name, kind, note}]`，最多 40 個）。可以從 Spec 抽出名詞加進來（`services/glossary.py`）：程式抽名詞定義表、角色表、狀態表、實體表（英文代號改用說明開頭的中文名稱）、Mermaid 狀態圖，以及內文「狀態為「已提交」」這類寫法，不呼叫模型。跟詞彙表比對後分成新的名詞（預設勾選）和說法不一樣的（預設不勾，文件沒寫明種類時保留詞彙表原本的種類），使用者勾選後才更新。從文件自動寫進詞彙表會讓一份寫錯的文件影響之後所有的文件，所以一定要人確認。詞彙表用文字框編輯，所以不另外記每個名詞的來源 |
 | phases | 功能階段，名稱自訂（例如「需求萃取」「第二期」），可排序 |
 | specs | Spec 文件，記錄目前最新版本號 `head_version_no`、狀態、是否封存，以及從哪一份 Spec 轉過來的 `source_spec_id`（例如構想 → 功能規格） |
 | spec_versions | 每個版本的完整內容，以及跟前一版比較新增、刪除幾行。建立後不再修改，只有「標籤」可以改 |
@@ -356,6 +356,7 @@ Reviewer 只做兩件事，不評論寫得好不好、完不完整，也不打�
 | PUT | `/api/specs/{id}/versions/{no}/label` | 版本標籤 |
 | GET | `/api/specs/{id}/diff` | 差異比較 |
 | GET | `/api/specs/{id}/export` | 下載 Markdown |
+| GET | `/api/specs/{id}/glossary-suggestions` | 從目前版本抽出名詞，跟專案詞彙表比對（只回建議，不寫入） |
 | GET/POST | `/api/projects/{id}/baselines` | 基準版本 |
 | GET/DELETE | `/api/baselines/{id}` | 基準版本內容 |
 | GET | `/api/projects/{id}/compare` | 比較基準版本 |
