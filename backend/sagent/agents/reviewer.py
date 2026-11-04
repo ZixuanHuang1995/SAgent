@@ -27,6 +27,17 @@ _QUOTED_RE = re.compile(r"「([^」]{2,30})」")
 MAX_CHECK_POINTS = 20
 _UNSTATED_REASON = "需求沒提到，可能是撰寫者自己補的，要確認是否正確"
 _STALE_REASON = "上一輪審查指出的問題，修改後沒有重新審查成功，要確認是否已經修正"
+_KEEP_REASON = "這一節設定為保留原內容，不會自動修改，要確認是否需要調整"
+_NO_SECTION_REASON = "審查沒有指出是哪一節，不會自動修改，要人工確認"
+_LATE_REASON = "修改後再審查才找到的次要問題，不再自動修改，要確認是否需要處理"
+# 小模型常把「需求沒提到」標成 requirement（跟需求矛盾）。關鍵字前面是文件、章節時，
+# 意思是文件漏寫了需求要的東西，那是真的要修，不算
+_UNSTATED_HINT_RE = re.compile(
+    # 「未在需求中提及」「沒有在需求裡提到」也算（真模型實測的寫法）
+    r"未(?:在需求[中裡內]?)?(?:提及|提到)|沒(?:有)?(?:在需求[中裡內]?)?(?:提及|提到)"
+    r"|未要求|沒有要求|未指定|沒有指定|超出範圍|超出需求"
+)
+_DOC_SUBJECT_RE = re.compile(r"文件|章節|內文|草稿|S\d")
 
 
 def _without_code(text: str) -> str:
@@ -339,7 +350,11 @@ def marked_points(draft: Draft) -> list[ReviewPoint]:
 
 
 def draft_for_review(plan: Plan, draft: Draft, only: set[str] | None = None) -> str:
-    """給審查模型看的草稿：圖表程式碼換成一行說明，節省 token。only 有值時只放這些章節。"""
+    """給審查模型看的草稿：圖表程式碼換成一行說明，節省 token。only 有值時只放這些章節。
+
+    說明要寫清楚「有圖、只是省略程式碼」：只寫「（mermaid 圖：flowchart TD）」時，
+    真模型以為圖沒有內容，每一輪都列「沒有提供 mermaid 程式碼」，Writer 怎麼改都消不掉。
+    """
     parts = []
     for number, sec in enumerate(draft.sections, start=1):
         if only is not None and sec.id not in only:
@@ -348,22 +363,51 @@ def draft_for_review(plan: Plan, draft: Draft, only: set[str] | None = None) -> 
         for block in reversed(extract_diagrams(body)):
             lines = body.splitlines()
             first = block.code.strip().splitlines()[0] if block.code.strip() else ""
-            lines[block.start : block.end + 1] = [f"（{block.lang} 圖：{first[:40]}）"]
+            lines[block.start : block.end + 1] = [
+                f"（這裡有一張 {block.lang} 圖，第一行是「{first[:40]}」；審查時省略圖的程式碼）"
+            ]
             body = "\n".join(lines)
         parts.append(f"[{sec.id}] ## {number}. {sec.heading}\n{body.strip()}")
     return "\n\n".join(parts)
 
 
+def says_unstated(problem: str) -> bool:
+    """問題描述的意思是「需求沒提到，文件卻寫了」。"""
+    for m in _UNSTATED_HINT_RE.finditer(problem):
+        if not _DOC_SUBJECT_RE.search(problem[max(0, m.start() - 8) : m.start()]):
+            return True
+    return False
+
+
 def _is_unstated(raw: dict[str, Any]) -> bool:
-    return str(raw.get("kind", "")).strip().lower() == "unstated"
+    kind = str(raw.get("kind", "")).strip().lower()
+    if kind == "unstated":
+        return True
+    return kind == "requirement" and says_unstated(str(raw.get("problem", "")))
+
+
+def _point_reason(raw: dict[str, Any], plan: Plan) -> str | None:
+    """issues 裡 Writer 不會修的，回傳改列人工覆核的理由；要交給 Writer 修的回傳 None。
+
+    Writer 不會修的問題留在 issues 裡，會一直觸發修訂、文件也永遠「需要修訂」。
+    """
+    if _is_unstated(raw):
+        return _UNSTATED_REASON
+    sid = normalize_sid(raw.get("section_id"), "S", len(plan.sections))
+    sec = plan.section(sid) if sid else None
+    if sec is None:
+        return _NO_SECTION_REASON
+    if sec.action == "keep":
+        return _KEEP_REASON
+    return None
 
 
 def parse_llm_issues(data: dict[str, Any], plan: Plan) -> list[Issue]:
-    """模型標成 unstated（需求沒提到）的不算錯誤，由 parse_llm_points 轉成人工覆核。"""
+    """要交給 Writer 修的錯誤。需求沒提到的、保留的章節、沒指出章節的，由 parse_llm_points 轉成人工覆核。"""
     issues: list[Issue] = []
     seen: set[tuple[str | None, str]] = set()
     for raw in data.get("issues") or []:
-        if not isinstance(raw, dict) or _is_unstated(raw):
+        if not isinstance(raw, dict) or _point_reason(raw, plan) is not None:
             continue
         problem = str(raw.get("problem", "")).strip()
         if not problem:
@@ -391,7 +435,7 @@ def parse_llm_issues(data: dict[str, Any], plan: Plan) -> list[Issue]:
 
 
 def parse_llm_points(data: dict[str, Any], plan: Plan) -> list[ReviewPoint]:
-    """review_points，加上 issues 裡標成 unstated 的（照設計要人工覆核，不交給 Writer 修）。"""
+    """review_points，加上 issues 裡 Writer 不會修的（需求沒提到、保留的章節、沒指出章節）。"""
     raw_points: list[tuple[Any, str, str, bool]] = []
     for raw in data.get("review_points") or []:
         if isinstance(raw, dict):
@@ -399,8 +443,9 @@ def parse_llm_points(data: dict[str, Any], plan: Plan) -> list[ReviewPoint]:
                 (raw.get("section_id"), str(raw.get("item", "")), str(raw.get("reason", "")), False)
             )
     for raw in data.get("issues") or []:
-        if isinstance(raw, dict) and _is_unstated(raw):
-            raw_points.append((raw.get("section_id"), str(raw.get("problem", "")), _UNSTATED_REASON, True))
+        reason = _point_reason(raw, plan) if isinstance(raw, dict) else None
+        if reason is not None:
+            raw_points.append((raw.get("section_id"), str(raw.get("problem", "")), reason, True))
     points: list[ReviewPoint] = []
     seen: set[str] = set()
     for section_id, item, reason, from_issue in raw_points:
@@ -435,6 +480,8 @@ class Reviewer(AgentBase):
         """focus 有值時（修訂後的再審查）只請模型看修改過的章節，其他章節沿用上一輪的意見。
 
         CPU 上讀整份草稿要好幾分鐘，只看修改過的章節可以省下大部分時間。
+        再審查時把上一輪對這些章節的意見交給模型，請它標出哪些已經修正（resolved）。
+        沒修正的照原樣留著，新問題只收 high：不這樣做的話，每一輪都會找出一批新問題，修訂收不了尾。
         """
         step = f"review:{round_no}"
         label = (
@@ -450,12 +497,24 @@ class Reviewer(AgentBase):
             if inp.mode == "draft":  # 修訂模式的需求是要改什麼，不用每一點都在文件裡找得到
                 marked += requirement_gaps(inp.requirement, draft)
             notes = [f"[{i.section_id}] {i.problem}" for i in checks if i.severity != "low"]
+            ledger: list[Issue] = []
+            if focus and previous is not None:
+                ledger = [
+                    i
+                    for i in previous.issues
+                    if i.source == "llm" and i.section_id in focus and i.severity in ("high", "medium")
+                ]
             data = await self.chat_json(
                 step,
                 reviewer_messages(
-                    inp, plan, draft_for_review(plan, draft, focus), notes, partial=bool(focus)
+                    inp,
+                    plan,
+                    draft_for_review(plan, draft, focus),
+                    notes,
+                    partial=bool(focus),
+                    previous=[f"[{i.section_id}] {i.problem}" for i in ledger],
                 ),
-                review_schema(partial=bool(focus)),
+                review_schema(partial=bool(focus), resolved=len(ledger)),
                 temperature=0.1,
                 # 真模型實測審查輸出平均約 1500 tokens，2000 常被截斷
                 max_tokens=3000,
@@ -491,19 +550,64 @@ class Reviewer(AgentBase):
             else:
                 new_issues = parse_llm_issues(data, plan)
                 new_points = parse_llm_points(data, plan)
+                still_open: list[Issue] = []
+                resolved: list[str] = []
                 if focus:
                     new_issues = [i for i in new_issues if i.section_id is None or i.section_id in focus]
                     new_points = [p for p in new_points if p.section_id is None or p.section_id in focus]
+                    still_open, resolved, new_issues = _apply_ledger(
+                        ledger, resolved_numbers(data, len(ledger)), new_issues
+                    )
+                    # 修改後才找到的次要問題列給人看，不再觸發修訂
+                    late = [i for i in new_issues if i.severity == "medium"]
+                    new_issues = [i for i in new_issues if i.severity != "medium"]
+                    new_points += [ReviewPoint(i.section_id, i.problem, _LATE_REASON, "llm") for i in late]
                 review = Review(
                     round=round_no,
                     summary=str(data.get("summary", "")).strip()[:500],
-                    issues=checks + new_issues + carried,
+                    issues=checks + still_open + new_issues + carried,
                     review_points=marked + new_points + carried_points,
+                    resolved=resolved,
                 )
             info.output = review.to_dict()
-            errors = sum(1 for i in review.issues if i.severity in ("high", "medium"))
+            errors = review.error_count
             verdict = f"需要修訂（錯誤 {errors} 個）" if review.needs_revision else "沒有需要修正的錯誤"
             if not review.llm_ok:
                 verdict = f"審查模型沒有結果，只有程式檢查（錯誤 {errors} 個）"
-            info.message = f"審查結果：{verdict}，需要人工覆核 {len(review.review_points)} 項"
+            fixed = f"，上一輪的意見已修正 {len(review.resolved)} 個" if ledger and review.llm_ok else ""
+            info.message = f"審查結果：{verdict}{fixed}，需要人工覆核 {len(review.review_points)} 項"
         return review
+
+
+def resolved_numbers(data: dict[str, Any], count: int) -> set[int]:
+    """模型標成已修正的序號（1 起算），只留 1～count 之間的。"""
+    numbers: set[int] = set()
+    for value in data.get("resolved") or []:
+        try:
+            n = int(value)
+        except (TypeError, ValueError):
+            continue
+        if 1 <= n <= count:
+            numbers.add(n)
+    return numbers
+
+
+def _same_issue(a: Issue, b: Issue) -> bool:
+    return a.section_id == b.section_id and (
+        a.problem == b.problem or bool(_quoted(a.problem) & _quoted(b.problem))
+    )
+
+
+def _apply_ledger(
+    ledger: list[Issue], resolved: set[int], new_issues: list[Issue]
+) -> tuple[list[Issue], list[str], list[Issue]]:
+    """上一輪的意見：沒修正的照原樣留著（文字不變，才看得出是同一個問題）。
+
+    回傳 (沒修正的舊問題, 已修正的舊問題描述, 真正新的問題)。
+    模型標了已修正、卻又在 issues 寫一次的，當成沒修正。
+    """
+    repeated = {n for n, old in enumerate(ledger, start=1) if any(_same_issue(i, old) for i in new_issues)}
+    still_open = [old for n, old in enumerate(ledger, start=1) if n not in resolved or n in repeated]
+    fixed = [old.problem for n, old in enumerate(ledger, start=1) if n in resolved and n not in repeated]
+    fresh = [i for i in new_issues if not any(_same_issue(i, old) for old in ledger)]
+    return still_open, fixed, fresh

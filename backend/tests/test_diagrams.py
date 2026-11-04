@@ -82,6 +82,16 @@ def test_fix_keeps_valid_shapes():
     assert lint_mermaid(fixed) == []
 
 
+def test_fix_wrong_usecase_kind():
+    example = KINDS["usecase"].mermaid_example
+    # 小模型常把第一行寫成 PlantUML 式的名稱
+    fixed = fix_mermaid(example.replace("usecase-beta", "usecaseDiagram", 1))
+    assert fixed == example.strip() and lint_mermaid(fixed) == []
+    assert fix_mermaid("%% 說明\nuseCase;\n  direction LR").splitlines()[:2] == ["%% 說明", "usecase-beta"]
+    # 第一行不是只有這個字（PlantUML 的使用案例寫法）就不動
+    assert fix_mermaid('usecase "查詢" as UC1').startswith('usecase "查詢"')
+
+
 def test_fix_removes_leading_text():
     assert fix_mermaid("以下是流程圖：\nflowchart TD\n  A --> B").startswith("flowchart TD")
 

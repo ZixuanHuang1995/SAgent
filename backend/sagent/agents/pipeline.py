@@ -91,6 +91,16 @@ class SpecPipeline:
             if revisions >= inp.options.max_revisions:
                 await emit("log", "reviewer", "已達修訂次數上限，剩下的問題保留在審查報告", {"level": "info"})
                 break
+            if len(reviews) >= 2 and review.error_count >= reviews[-2].error_count:
+                # 改了一輪錯誤卻沒變少，再改多半也一樣，CPU 上一輪要十幾分鐘，交給人處理
+                await emit(
+                    "log",
+                    "reviewer",
+                    f"修訂後錯誤沒有變少（上一輪 {reviews[-2].error_count} 個，這一輪 {review.error_count} 個），"
+                    "停止自動修訂，剩下的問題保留在審查報告",
+                    {"level": "info"},
+                )
+                break
             revisions += 1
             await emit(
                 "phase",

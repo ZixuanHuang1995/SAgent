@@ -16,11 +16,15 @@ from sagent.agents.prompts import (
     related_answers,
 )
 from sagent.agents.reviewer import (
+    _apply_ledger,
+    draft_for_review,
     marked_points,
     mismatched_ids,
     parse_llm_issues,
     parse_llm_points,
     requirement_gaps,
+    resolved_numbers,
+    says_unstated,
     static_checks,
     table_problems,
     undefined_ids,
@@ -33,7 +37,18 @@ from sagent.agents.textutil import (
     parse_json_object,
     select_known_items,
 )
-from sagent.agents.types import Draft, PipelineOptions, Plan, RunInput, SectionDraft, SectionPlan
+from sagent.agents.types import (
+    DiagramPlan,
+    Draft,
+    Issue,
+    PipelineOptions,
+    Plan,
+    Review,
+    RunInput,
+    SectionDraft,
+    SectionPlan,
+)
+from sagent.agents.writer import Writer
 from sagent.services.diagrams import extract_diagrams, lint_mermaid
 from sagent.services.markdown_doc import parse_markdown
 
@@ -645,11 +660,12 @@ def test_reviewer_lists_marked_points():
 class _ReviewLLM(FakeLLM):
     """可以指定第幾輪審查回傳壞掉的 JSON、或第一次輸出被截斷。"""
 
-    def __init__(self, fail_rounds=(), truncate_first=False, review=None):
+    def __init__(self, fail_rounds=(), truncate_first=False, review=None, review2=None):
         super().__init__()
         self.fail_rounds = set(fail_rounds)
         self.truncate_first = truncate_first
         self.review = review
+        self.review2 = review2  # 第 2 輪審查的輸出
         self.reviewer_calls = 0
 
     async def chat(self, messages, **kwargs):
@@ -664,6 +680,8 @@ class _ReviewLLM(FakeLLM):
                 result.text, result.truncated = result.text[:30], True
             elif self.review is not None and round_no == 1:
                 result.text = json.dumps(self.review, ensure_ascii=False)
+            elif self.review2 is not None and round_no == 2:
+                result.text = json.dumps(self.review2, ensure_ascii=False)
         return result
 
 
@@ -824,3 +842,142 @@ def test_related_answers_go_to_matching_sections():
     # 「假別」只對得上功能需求；上線時間跟哪一節都對不上，每一節都列
     assert [q for q, _ in related_answers(plan, fr)] == ["有哪些假別尚未決定？", "上線時間？"]
     assert [q for q, _ in related_answers(plan, bg)] == ["上線時間？"]
+
+
+def _issue(sid, problem, kind="conflict", severity="high"):
+    return {"section_id": sid, "kind": kind, "severity": severity, "problem": problem, "suggestion": "改"}
+
+
+def test_issues_writer_cannot_fix_become_review_points():
+    # 修訂模式：S2 設定為保留，Writer 不會改；沒寫章節的也不會改。留在 issues 只會一直觸發修訂
+    review = {
+        "issues": [
+            _issue("S2", "S2 的流程跟 S1 寫得不一樣"),
+            _issue("", "全文的名詞不一致"),
+        ],
+        "review_points": [],
+        "summary": "s",
+    }
+    llm = _ReviewLLM(review=review)
+    result, emitter = run(llm, make_input(mode="revise", existing=EXISTING))
+    assert [s.action for s in result.plan.sections][1] == "keep"
+    first = result.reviews[0]
+    assert not any(i.source == "llm" for i in first.issues)
+    reasons = {p.item: p.reason for p in first.review_points}
+    assert "保留原內容" in reasons["S2 的流程跟 S1 寫得不一樣"]
+    assert "沒有指出是哪一節" in reasons["全文的名詞不一致"]
+    # 保留的章節不會因為審查意見被送去修改
+    assert not any(c["purpose"].startswith("writer:revise:S2") for c in llm.calls)
+
+
+def test_requirement_issue_meaning_unstated_becomes_point():
+    plan, _ = _draft("a", "b")
+    data = {
+        "issues": [
+            # 需求沒提到、文件卻寫了：改列人工覆核
+            _issue("S1", "S1 測試案例涉及暫停狀態，但需求內容未提及支援暫停功能", "requirement"),
+            _issue("S1", "效能要求寫 16ms，但需求僅要求延遲趨近於零，未指定具體毫秒數值", "requirement"),
+            # 文件漏寫需求要的東西、跟需求矛盾：留在 issues
+            _issue("S2", "需求要求匯出報表，但文件未提及匯出功能", "requirement"),
+            _issue("S2", "需求明確指出不支援自訂按鍵，但 S2 寫了 WASD", "requirement"),
+            # 章節之間不一致不算
+            _issue("S2", "S2 建議不放排行榜，但 S1 操作流程未提及對應處理"),
+        ]
+    }
+    assert [i.problem[:8] for i in parse_llm_issues(data, plan)] == [
+        "需求要求匯出報表",
+        "需求明確指出不支",
+        "S2 建議不放排",
+    ]
+    points = parse_llm_points(data, plan)
+    assert [p.section_id for p in points] == ["S1", "S1"]
+    assert all("需求沒提到" in p.reason for p in points)
+    assert says_unstated("此為超出範圍的功能假設") and not says_unstated("文件中未提及")
+    # 真模型的寫法：「此限制未在需求中提及」
+    assert says_unstated("S3 列出「不開發 Desktop 獨立執行檔」，此限制未在需求中提及")
+    assert says_unstated("需求沒有在需求裡提到暫停") and not says_unstated("S2 沒有提到 S1 的狀態")
+
+
+def test_review_draft_says_diagram_code_is_omitted():
+    plan, draft = _draft("流程如下圖。\n\n```mermaid\nflowchart TD\n  A --> B\n```\n\n- 其他說明")
+    text = draft_for_review(plan, draft)
+    # 只寫「（mermaid 圖：flowchart TD）」時，真模型以為圖沒有內容
+    assert "（這裡有一張 mermaid 圖，第一行是「flowchart TD」；審查時省略圖的程式碼）" in text
+    assert "A --> B" not in text and "- 其他說明" in text
+
+
+def test_writer_revises_high_severity_sections_first():
+    plan, draft = _draft(*[f"第{i}節的內容，寫得夠長才不會被當成內容太少。" for i in range(1, 7)])
+    issues = [Issue(f"S{i}", "medium", f"S{i} 格式錯誤") for i in range(1, 6)]
+    issues.append(Issue("S6", "high", "S6 跟需求矛盾"))
+    emitter = ListEmitter()
+    writer = Writer(FakeLLM(), emitter, {})
+    changed = asyncio.run(writer.revise(make_input(), plan, draft, Review(1, "s", issues), 1))
+    assert changed == {"S6", "S1", "S2", "S3"}
+    logs = [e["message"] for e in emitter.events if e["type"] == "log"]
+    assert any("最多修改 4 節" in m and "「第4節」、「第5節」" in m for m in logs)
+
+
+def test_fix_diagram_uses_planned_kind_when_first_line_is_wrong():
+    body = "使用案例如下。\n\n```mermaid\nuseCaseModel\nactor 玩家\n玩家 --> (開始遊戲)\n```"
+    plan, draft = _draft(body)
+    plan.sections[0].diagrams = [DiagramPlan(kind="usecase", title="使用案例圖")]
+    issue = Issue("S1", "high", "第 1 張圖語法錯誤", source="check", diagram_index=0)
+    llm = FakeLLM()
+    asyncio.run(Writer(llm, ListEmitter(), {}).revise(make_input(), plan, draft, Review(1, "s", [issue]), 1))
+    fix = next(c for c in llm.calls if c["purpose"].startswith("writer:fixdiagram:"))
+    assert "第一行寫 usecase-beta" in fix["messages"][-1]["content"]
+
+
+def test_second_review_checks_previous_issues():
+    llm = FakeLLM()
+    result, _ = run(llm, make_input())
+    second = [c for c in llm.calls if c["purpose"].startswith("reviewer:")][1]
+    schema = second["schema"]
+    assert list(schema["properties"])[0] == "resolved" and "resolved" in schema["required"]
+    assert schema["properties"]["resolved"]["maxItems"] == 1
+    first_problem = next(i.problem for i in result.reviews[0].issues if i.source == "llm")
+    assert f"## 上一輪對這些章節的意見\n1. [S2] {first_problem}" in second["messages"][-1]["content"]
+    assert result.reviews[1].resolved == [first_problem]
+    assert result.reviews[1].to_dict()["resolved"] == [first_problem]
+    # 第一輪不用 resolved
+    first = [c for c in llm.calls if c["purpose"].startswith("reviewer:")][0]
+    assert "resolved" not in first["schema"]["properties"]
+
+
+def test_unresolved_issues_stay_and_revision_stops_without_progress():
+    old = "第 2 節沒有寫發生例外時的處理，跟其他章節的流程接不起來"
+    review2 = {
+        "resolved": [],
+        "issues": [
+            _issue("S2", old),  # 舊問題又寫一次，不重複算
+            _issue("S2", "S2 的「已出貨」跟 S3 的「出貨完成」名稱不一樣"),
+            _issue("S2", "S2 的表格標題格式不一致", "format", "medium"),
+        ],
+        "review_points": [],
+        "summary": "s",
+    }
+    llm = _ReviewLLM(review2=review2)
+    result, emitter = run(llm, make_input(max_revisions=2))
+    first, second = result.reviews
+    llm_issues = [i.problem for i in second.issues if i.source == "llm"]
+    assert llm_issues == [old, "S2 的「已出貨」跟 S3 的「出貨完成」名稱不一樣"]
+    assert second.resolved == []
+    late = next(p for p in second.review_points if p.item == "S2 的表格標題格式不一致")
+    assert "再審查才找到" in late.reason
+    # 錯誤從 1 個變 2 個：不再修第 2 輪
+    logs = [e["message"] for e in emitter.events if e["type"] == "log"]
+    assert any("修訂後錯誤沒有變少（上一輪 1 個，這一輪 2 個）" in m for m in logs)
+    phases = [e["data"]["phase"] for e in emitter.events if e["type"] == "phase"]
+    assert phases.count("revise") == 1
+
+
+def test_resolved_but_repeated_issue_stays_open():
+    old = Issue("S2", "high", "S2 的「已出貨」跟 S3 不一樣")
+    repeat = Issue("S2", "high", "S2 寫「已出貨」，S3 寫「出貨完成」")
+    fresh = Issue("S2", "high", "S2 少了退貨的流程")
+    still_open, fixed, new = _apply_ledger(
+        [old], resolved_numbers({"resolved": [1, 7, "x"]}, 1), [repeat, fresh]
+    )
+    assert still_open == [old] and fixed == [] and new == [fresh]
+    assert resolved_numbers({"resolved": [1, "2", 9, None]}, 3) == {1, 2}

@@ -84,7 +84,7 @@ class FakeLLM:
         if role == "reviewer":
             if self.fail_json:
                 return "審查完成，沒有問題。"
-            return self._review(step)
+            return self._review(step, full)
         if step.startswith(("diagram", "fixdiagram")):
             return self._diagram(full)
         if step.startswith("revise"):
@@ -192,8 +192,11 @@ class FakeLLM:
         example = kind.plantuml_example if lang == "plantuml" else kind.mermaid_example
         return f"```{lang}\n{example}\n```"
 
-    def _review(self, step: str) -> str:
+    def _review(self, step: str, full: str = "") -> str:
         round_no = int(re.sub(r"\D", "", step) or 1)
+        # 再審查附上了上一輪的意見：假模型當成全部修好了
+        ledger = _between(full, "## 上一輪對這些章節的意見\n", "（上一輪的意見")
+        resolved = [int(n) for n in re.findall(r"^(\d+)\. ", ledger, re.M)]
         if round_no == 1:
             data = {
                 "issues": [
@@ -212,4 +215,6 @@ class FakeLLM:
             }
         else:
             data = {"issues": [], "review_points": [], "summary": "沒有發現格式或邏輯錯誤。"}
+        if resolved:
+            data = {"resolved": resolved, **data}
         return json.dumps(data, ensure_ascii=False)

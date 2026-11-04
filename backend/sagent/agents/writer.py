@@ -36,9 +36,11 @@ _MERMAID_TO_KIND = {
     "stateDiagram-v2": "state",
     "erDiagram": "er",
     "gantt": "gantt",
+    "usecase-beta": "usecase",
 }
 
 MAX_REVISE_SECTIONS = 4
+_SEVERITY_RANK = {"high": 0, "medium": 1, "low": 2}
 
 
 def append_diagram(body: str, caption: str, lang: str, code: str) -> str:
@@ -180,10 +182,18 @@ class Writer(AgentBase):
                 continue  # 沒有要改的舊章節不動
             targets.setdefault(issue.section_id, []).append(issue)
 
+        # 一輪最多改幾節，有 high 問題的章節先改（同樣嚴重時照章節順序）
+        ordered = sorted(targets.items(), key=lambda kv: min(_SEVERITY_RANK[i.severity] for i in kv[1]))
         changed: set[str] = set()
-        for count, (section_id, issues) in enumerate(targets.items()):
+        for count, (section_id, issues) in enumerate(ordered):
             if count >= MAX_REVISE_SECTIONS:
-                await self.log(f"這一輪最多修改 {MAX_REVISE_SECTIONS} 節，其餘問題保留在審查報告", "info")
+                skipped = "、".join(
+                    f"「{s.heading}」" for sid, _ in ordered[count:] if (s := plan.section(sid)) is not None
+                )
+                await self.log(
+                    f"這一輪最多修改 {MAX_REVISE_SECTIONS} 節，{skipped}的問題留到下一輪或保留在審查報告",
+                    "info",
+                )
                 break
             sec_plan = plan.section(section_id)
             sec = draft.section(section_id)
@@ -191,7 +201,7 @@ class Writer(AgentBase):
             diagram_issues = [i for i in issues if i.diagram_index is not None]
             text_issues = [i for i in issues if i.diagram_index is None]
             for issue in diagram_issues:
-                if await self._fix_diagram(inp, sec, issue, round_no):
+                if await self._fix_diagram(inp, sec_plan, sec, issue, round_no):
                     changed.add(section_id)
             if text_issues and await self._revise_text(
                 inp, plan, sec_plan, sec, text_issues, round_no, _other_items(draft, section_id)
@@ -230,7 +240,9 @@ class Writer(AgentBase):
         await self.section_update(sec)
         return True
 
-    async def _fix_diagram(self, inp: RunInput, sec: SectionDraft, issue: Issue, round_no: int) -> bool:
+    async def _fix_diagram(
+        self, inp: RunInput, sec_plan: SectionPlan, sec: SectionDraft, issue: Issue, round_no: int
+    ) -> bool:
         blocks = extract_diagrams(sec.body)
         idx = issue.diagram_index or 0
         if idx >= len(blocks):
@@ -239,8 +251,13 @@ class Writer(AgentBase):
         step = f"fixdiagram:{sec.id}:{idx + 1}:{round_no}"
         async with self.step(step, f"修正「{sec.heading}」的第 {idx + 1} 張圖") as info:
             kind = _MERMAID_TO_KIND.get(mermaid_kind(block.code), "") if block.lang == "mermaid" else ""
+            if not kind and idx < len(sec_plan.diagrams) and sec_plan.diagrams[idx].kind in KINDS:
+                # 第一行寫錯就認不出是哪種圖，改用大綱規劃的種類，才能附上正確的語法規則和範例
+                kind = sec_plan.diagrams[idx].kind
             guide = example = ""
-            if kind:
+            if kind and block.lang == "plantuml":
+                guide, example = KINDS[kind].plantuml_guide, KINDS[kind].plantuml_example
+            elif kind:
                 guide, example = KINDS[kind].mermaid_guide, KINDS[kind].mermaid_example
             content = f"## 有語法錯誤的圖\n{fence(block.lang, block.code)}\n"
             if guide:

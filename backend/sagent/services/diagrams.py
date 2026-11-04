@@ -553,9 +553,29 @@ def _fix_flowchart_line(line: str) -> str:
     return _quote_flowchart_line(line)
 
 
+# 小模型常把圖表類型寫成 PlantUML 或自己猜的名稱。只在第一行只有這個字時才換，
+# 換完內容還有錯的話，交給 lint 和修圖步驟處理
+_MERMAID_KIND_ALIASES = {
+    "usecasediagram": "usecase-beta",
+    "usecase": "usecase-beta",
+}
+
+
+def _fix_kind_alias(lines: list[str]) -> list[str]:
+    for i, ln in enumerate(lines):
+        s = ln.strip()
+        if not s or s.startswith("%%"):
+            continue
+        alias = _MERMAID_KIND_ALIASES.get(s.rstrip(";").lower())
+        if alias:
+            lines = [*lines[:i], ln[: len(ln) - len(ln.lstrip())] + alias, *lines[i + 1 :]]
+        break
+    return lines
+
+
 def fix_mermaid(code: str) -> str:
     code = code.replace("\r\n", "\n").strip()
-    lines = code.splitlines()
+    lines = _fix_kind_alias(code.splitlines())
     # 去掉圖表類型前面的說明文字
     for i, ln in enumerate(lines):
         word = ln.strip().split(" ")[0].rstrip(";") if ln.strip() else ""

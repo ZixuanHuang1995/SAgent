@@ -620,19 +620,30 @@ REVIEW_SCHEMA = {
 }
 
 
-def review_schema(partial: bool = False) -> dict:
-    """partial：修訂後的再審查，用較小的上限。"""
+def review_schema(partial: bool = False, resolved: int = 0) -> dict:
+    """partial：修訂後的再審查，用較小的上限。
+
+    resolved：上一輪對修改過的章節有幾個意見。有的話加 resolved 欄位（已修正的序號），
+    放在最前面，讓模型先逐條對照舊意見，再找新問題。
+    """
     if not partial:
         return REVIEW_SCHEMA
     props = REVIEW_SCHEMA["properties"]
     issues, points = PARTIAL_REVIEW_LIMITS
+    partial_props = {
+        **props,
+        "issues": {**props["issues"], "maxItems": issues},
+        "review_points": {**props["review_points"], "maxItems": points},
+    }
+    if not resolved:
+        return {**REVIEW_SCHEMA, "properties": partial_props}
     return {
         **REVIEW_SCHEMA,
         "properties": {
-            **props,
-            "issues": {**props["issues"], "maxItems": issues},
-            "review_points": {**props["review_points"], "maxItems": points},
+            "resolved": {"type": "array", "items": {"type": "integer"}, "maxItems": resolved},
+            **partial_props,
         },
+        "required": ["resolved", *REVIEW_SCHEMA["required"]],
     }
 
 # 每種文件的審查重點一樣（格式、邏輯錯誤，以及要人工覆核的地方），只差這一行說明
@@ -692,13 +703,20 @@ def reviewer_system(template: DocTemplate) -> str:
 6. 沒有問題時給空陣列，不要硬找。
 7. 需求內容裡的條列編號（1、2、3…）只是順序，跟文件裡的編號無關，不要拿來對照。
 8. 同一件事在不同章節出現（例如功能需求和驗收條件都提到）是正常的，只有寫得不一樣才算錯誤。
-9. summary 用一兩句話說明審查結果。
-10. 使用繁體中文。只輸出 JSON，不要縮排和多餘的空白。"""
+9. 草稿裡的圖只留一行「（這裡有一張…圖…）」，程式碼是省略的，不是沒有畫；圖的語法由程式檢查，不要說缺少圖或程式碼。
+10. summary 用一兩句話說明審查結果。
+11. 使用繁體中文。只輸出 JSON，不要縮排和多餘的空白。"""
 
 
 def reviewer_messages(
-    inp: RunInput, plan: Plan, draft_text: str, check_notes: list[str], partial: bool = False
+    inp: RunInput,
+    plan: Plan,
+    draft_text: str,
+    check_notes: list[str],
+    partial: bool = False,
+    previous: list[str] | None = None,
 ) -> list[dict[str, str]]:
+    """previous：修訂後的再審查，上一輪對修改過的章節的意見（「[S2] 問題」）。"""
     outline = "\n".join(
         f"[{s.id}] {s.heading}" + (f"（定義 {s.ids} 編號）" if s.ids else "") for s in plan.sections
     )
@@ -709,6 +727,14 @@ def reviewer_messages(
         if partial
         else "## 文件草稿"
     )
+    ledger = ""
+    if previous:
+        items = "\n".join(f"{n}. {p}" for n, p in enumerate(previous, start=1))
+        ledger = f"""## 上一輪對這些章節的意見
+{items}
+（上一輪的意見程式會記住。請對照修改後的內容，在 resolved 寫出已經修正的序號，例如 [1, 3]；還沒修正的不用再寫進 issues。issues 只寫這次新發現的邏輯錯誤或跟需求矛盾。）
+
+"""
     user = f"""## 文件資訊
 {_doc_info(inp)}
 
@@ -721,7 +747,7 @@ def reviewer_messages(
 ## 程式檢查找到的格式問題（已經列入，不用重複）
 {checks}
 
-{draft_title}
+{ledger}{draft_title}
 {draft_text}
 
 請輸出審查結果 JSON。"""

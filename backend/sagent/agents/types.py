@@ -186,10 +186,17 @@ class Review:
     issues: list[Issue] = field(default_factory=list)
     review_points: list[ReviewPoint] = field(default_factory=list)
     llm_ok: bool = True
+    # 修訂後的再審查：上一輪的意見裡，模型確認已經修正的（問題描述）
+    resolved: list[str] = field(default_factory=list)
+
+    @property
+    def error_count(self) -> int:
+        """high、medium 的錯誤數（會觸發修訂的）。"""
+        return sum(1 for i in self.issues if i.severity in ("high", "medium"))
 
     @property
     def needs_revision(self) -> bool:
-        return any(i.severity in ("high", "medium") for i in self.issues)
+        return self.error_count > 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -199,6 +206,7 @@ class Review:
             "llm_ok": self.llm_ok,
             "issues": [asdict(i) for i in self.issues],
             "review_points": [asdict(p) for p in self.review_points],
+            "resolved": self.resolved,
         }
 
 
