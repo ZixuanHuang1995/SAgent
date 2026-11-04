@@ -23,7 +23,7 @@
 | 前端型別檢查 | `cd frontend; npm run typecheck` |
 | 前端打包 | `cd frontend; npm run build`（會先跑型別檢查） |
 | 檢查示範資料內容檔 | `uv run --project backend python scripts/check_demo_content.py scripts/demo_content`（可加 `--only FIX --keys idea,feature`） |
-| 重新產生示範資料（腳本模型，約 2 分鐘） | `uv run --project backend python scripts/seed_demo.py --data-dir data-demo-build --script scripts/demo_content`，確認後改名成 `data-demo`。內容檔格式見 `DEMO_DATA_PLAN.md` |
+| 重新產生示範資料（腳本模型，約 2 分鐘） | `uv run --project backend python scripts/seed_demo.py --data-dir data-demo-build --script scripts/demo_content`，確認後改名成 `data-demo`。內容檔格式見 `scripts/demo_content/README.md` |
 | 重新產生示範資料（真模型，約 20～24 小時） | 上一行去掉 `--script …`。四個情境的需求內容在 `scripts/demo_scenarios.py`，模型預設讀 `data/sagent.db` 的設定 |
 | 用真模型跑一次 AI 流程 | `uv run --project backend python scripts/run_pipeline.py --requirement-file 需求.txt --out 輸出.md` |
 | 分析 AI 工作紀錄（時間佔比、JSON 和截斷出錯、修訂前後錯誤數） | `uv run --project backend python scripts/analyze_runs.py --db data-demo/sagent.db`（不跑模型，資料庫只讀；可加 `--model`、`--doc-type`、`--from-run`） |

@@ -35,7 +35,7 @@
 CPU 上用 qwen3.6:35b-a3b 全部跑完大約要 20～24 小時（一份文件 20～80 分鐘，總共約 28 份）。
 
 --script：用腳本模型（demo_llm.py）把事先寫好的內容檔回答給 AI 流程，幾分鐘就跑完。內容檔的格式見
-DEMO_DATA_PLAN.md。AI 工作紀錄的模型名稱還是 SAgent 設定的模型。
+scripts/demo_content/README.md。AI 工作紀錄的模型名稱還是 SAgent 設定的模型。
 """
 
 from __future__ import annotations

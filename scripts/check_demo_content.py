@@ -1,4 +1,4 @@
-"""檢查示範資料的內容檔（格式見 DEMO_DATA_PLAN.md 第 3 節）。
+"""檢查示範資料的內容檔（格式見 scripts/demo_content/README.md）。
 
 檢查項目：
 - JSON 格式、欄位齊全，sections 數量對得上 plan.sections，圖數對得上大綱

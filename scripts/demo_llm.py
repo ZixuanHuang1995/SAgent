@@ -1,6 +1,6 @@
 """腳本模型：把子代理事先寫好的內容檔，依序回答給 SAgent 真正的 AI 流程（Planner → Writer → Reviewer）。
 
-內容檔放在 <內容目錄>/<專案代碼>/<key>.json，格式見 DEMO_DATA_PLAN.md 第 3 節。
+內容檔放在 <內容目錄>/<專案代碼>/<key>.json，格式見 scripts/demo_content/README.md。
 AI 工作紀錄、步驟事件、大綱、審查結果、人工覆核項目、版本都跟真的模型跑出來的一樣，只是幾秒就跑完。
 
 用法：

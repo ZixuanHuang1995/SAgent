@@ -72,7 +72,7 @@ uv run --project backend python scripts/check_demo_content.py scripts/demo_conte
 uv run --project backend python scripts/seed_demo.py --data-dir data-demo-build --script scripts/demo_content
 ```
 
-第一行檢查內容檔（格式、Mermaid 語法、簡體字，並用腳本模型實際跑一次 AI 流程），第二行大約 2 分鐘。產生完確認沒問題，再把 `data-demo-build` 改名成 `data-demo`。內容檔的格式見 `DEMO_DATA_PLAN.md`。
+第一行檢查內容檔（格式、Mermaid 語法、簡體字，並用腳本模型實際跑一次 AI 流程），第二行大約 2 分鐘。產生完確認沒問題，再把 `data-demo-build` 改名成 `data-demo`。內容檔的格式見 [`scripts/demo_content/README.md`](scripts/demo_content/README.md)。
 
 不加 `--script` 就是用真的地端模型寫，模型和 AI 設定跟 SAgent 目前的設定一樣，在 CPU 上大約要 20～24 小時（約 28 份 AI 文件）。中途停掉再跑一次，會從沒做完的地方繼續；Ollama 連不到時會先等它啟動。加 `--fake` 可以用假模型約 10 分鐘跑完，只檢查流程。
 
