@@ -102,7 +102,7 @@
 - 內建範本有 9 個，`order` 1～9 就是寫 Spec 的順序：構想提案、UI/UX 設計建議（類型 Concept）、功能規格書、測試計畫、技術決策、系統架構設計、資料庫設計、演算法設計、變更需求說明。移除的 5 個（使用案例規格、SDD 五節、API 規格、實驗設計、變更紀錄）備份在 `backup/doc_templates/`，測試用 `conftest.py` 的 `BACKUP_TEMPLATES`、`install_backup_template()` 讀它們，不要刪。
 - Reviewer 只找格式、邏輯錯誤（交給 Writer 修）和需要人工覆核的地方（只列給使用者），不評論完整度、不打分數。格式問題盡量用程式檢查。各種文件共用審查提示詞 `reviewer_system()`，見 `docs/architecture.md` 第 4.8 節。
 - 新增 Spec 時先選類型（範本的 `category`：idea、feature、design、algorithm、change），類型清單在 `doc_templates.py` 的 `CATEGORIES`。新增內建範本要寫 `category` 和 `order`。同一類型裡範本照 `order` 排，第一個是新增時的預設。
-- 範本章節要編號時寫 `ids: FR`，不要把「編號 FR-01」寫在 `goal` 裡（舊寫法還認得，但內建範本不要用）。結構重要的範本設 `fixed_sections: true`，章節名稱、順序、目標由程式照範本套回去。見 `docs/architecture.md` 第 4.10 節。
+- 範本章節要編號時寫 `ids: FR`，不要把「編號 FR-01」寫在 `goal` 裡（舊寫法還認得，但內建範本不要用）。內建範本都設 `fixed_sections: true`，章節名稱、順序、目標由程式照範本套回去（Planner 不用寫 goal）；不固定的寫法留給自訂範本，測試用 `test_pipeline.py` 的 `free_input()`。見 `docs/architecture.md` 第 4.10 節。
 - 改了範本的章節，`scripts/demo_content/` 對應的內容檔也要跟著改，再跑 `check_demo_content.py`；章節固定的範本，內容檔少一節就會失敗。
 - 編輯器「插入圖表」選單的骨架在 `services/diagram_snippets.py`，跟 AI 的圖表種類分開。只想讓選單多一種圖時加在這裡，不要加進 `diagram_kinds.py` 的 `KINDS`（會寫進 Planner 的提示詞，種類越多小模型越容易選錯）。
 - 範本 `allow_diagrams: false` 表示不畫圖，`api/agent.py` 建立工作時和 `pipeline.py` 開始時都會強制關掉畫圖。

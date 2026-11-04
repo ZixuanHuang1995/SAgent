@@ -122,10 +122,11 @@ _DIAGRAM_ITEM_SCHEMA = {
 
 TERM_KINDS = ("角色", "狀態", "資料", "其他")
 
+# CPU 上生成（decode）佔六成時間，用不到的欄位不要叫模型寫：
+# 沒有 title（文件標題用 Spec 的名稱）；章節固定的範本沒有 goal（程式照範本套回去，見 plan_schema）
 PLAN_SCHEMA = {
     "type": "object",
     "properties": {
-        "title": {"type": "string"},
         "summary": {"type": "string"},
         "sections": {
             "type": "array",
@@ -156,18 +157,24 @@ PLAN_SCHEMA = {
             "maxItems": 12,
         },
     },
-    "required": ["title", "summary", "sections", "open_questions", "terms"],
+    "required": ["summary", "sections", "open_questions", "terms"],
 }
 
 def plan_schema(template: DocTemplate) -> dict:
-    """章節固定的範本：章節名稱只能從範本選，數量跟範本一樣。"""
+    """章節固定的範本：章節名稱只能從範本選，數量跟範本一樣。
+
+    也不用寫 goal：程式會用範本的 goal 蓋掉（planner._fit_template），叫模型寫只是浪費生成時間
+    （2026-11-04 構想提案實測，goal 佔 Planner 輸出的四分之一左右）。
+    """
     if not template.fixed_sections:
         return PLAN_SCHEMA
     headings = [s.heading for s in template.sections]
     section = PLAN_SCHEMA["properties"]["sections"]
+    props = {k: v for k, v in section["items"]["properties"].items() if k != "goal"}
     items = {
         **section["items"],
-        "properties": {**section["items"]["properties"], "heading": {"type": "string", "enum": headings}},
+        "properties": {**props, "heading": {"type": "string", "enum": headings}},
+        "required": [r for r in section["items"]["required"] if r != "goal"],
     }
     sections = {**section, "items": items, "minItems": len(headings), "maxItems": len(headings)}
     return {**PLAN_SCHEMA, "properties": {**PLAN_SCHEMA["properties"], "sections": sections}}
@@ -252,12 +259,18 @@ def planner_messages(inp: RunInput) -> list[dict[str, str]]:
         if tpl.fixed_sections
         else f"1. 參考「建議章節」，依照需求內容調整：跟需求無關的章節可以刪除，缺少的可以新增。章節數量 4 到 {opts.max_sections} 個。"
     )
+    points = "key_points（2 到 4 個具體要點，每個要點一句短句，盡量使用需求裡的名詞）"
+    point_rule = (
+        f"每個章節寫 {points}。每一節要寫什麼已經寫在「建議章節」，不用另外寫 goal。"
+        if tpl.fixed_sections
+        else f"每個章節寫 goal（這一節要寫什麼，一句話）和 {points}。"
+    )
     system = f"""你是{_with_role("資深", tpl)}，現在要「規劃」一份{_doc_noun(tpl)}的大綱。你只負責規劃，不用寫內文。
 
 規劃規則：
 {section_rule}
 2. heading 只寫章節名稱，不要加編號。不要規劃「待確認事項」章節，系統會自動加。
-3. 每個章節寫 goal（這一節要寫什麼，一句話）和 key_points（2 到 4 個具體要點，每個要點一句短句，盡量使用需求裡的名詞）。
+3. {point_rule}
 {diagram_rule}
 5. 需求中不清楚、缺少或互相矛盾的地方，寫進 open_questions，不要自己猜。
 6. summary 用一兩句話說明這份文件的內容。

@@ -100,6 +100,9 @@ def defined_ids(text: str) -> list[str]:
     return ids
 
 
+_LIST_JOIN_RE = re.compile(r"^\s*[*`\]]*\s*(?:[～~、/]|和|及|與|至|到|或)")
+
+
 def _phrase(rest: str) -> str:
     """編號後面接的名稱，例如「[UC-04] 審核與退回報修單。」的「審核與退回報修單」。"""
     rest = rest.lstrip(" \t*`]）)：:|-–")
@@ -145,14 +148,20 @@ def mismatched_ids(draft: Draft) -> dict[str, list[str]]:
         found: list[str] = []
         for line in _without_code(sec.body).splitlines():
             for m in _ID_RE.finditer(line):
+                if _LIST_JOIN_RE.match(line[m.end() :]):
+                    continue  # 「TC-05～TC-08」「TC-11 和 TC-12」是範圍、並列，後面不是這個編號的名稱
                 item_id, phrase = m.group(0), _phrase(line[m.end() :])
                 own = titles.get(item_id, "")
                 if len(phrase) < 2 or (own and _similar(phrase, own)):
                     continue
+                # 另一個編號的名稱本來就提到這個編號（「TC-14：TC-05～TC-08 產生的每一題」），不算對錯
                 others = [
                     other
                     for other, title in titles.items()
-                    if other != item_id and other.split("-")[0] == m.group(1) and _similar(phrase, title)
+                    if other != item_id
+                    and other.split("-")[0] == m.group(1)
+                    and item_id not in title
+                    and _similar(phrase, title)
                 ]
                 if len(others) != 1:
                     continue

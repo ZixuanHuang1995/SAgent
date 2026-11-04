@@ -3,6 +3,7 @@ name: 資料庫設計
 description: 說明資料模型、資料表欄位、索引，以及資料怎麼建立、封存、移轉和備份。
 order: 7
 category: design
+fixed_sections: true
 requirement_hint: 貼上功能規格的資料需求和業務規則，再補上資料量、保存期限和備份要求。
 requirement_example: |
   資料有員工、假別、假單、簽核紀錄、特休餘額。

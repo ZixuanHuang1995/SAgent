@@ -5,6 +5,7 @@ order: 8
 category: algorithm
 role: 演算法工程師
 style: algorithm
+fixed_sections: true
 requirement_hint: 寫清楚要解決的問題、輸入和輸出、限制條件和效能要求。AI 會設計解法、寫虛擬碼、分析複雜度並列出測試案例。
 requirement_example: |
   解 9×9 數獨，題目用 81 個字元表示，0 是空格。

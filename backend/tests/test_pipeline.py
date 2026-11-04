@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 import json
 
 from conftest import BACKUP_TEMPLATES
@@ -74,6 +75,13 @@ def make_input(mode="draft", existing="", template="functional_spec", **opts) ->
     )
 
 
+def free_input(**opts) -> RunInput:
+    """章節不固定的範本（自訂範本可以這樣設）。內建範本現在都是固定章節，用功能規格書改成不固定來測"""
+    inp = make_input(**opts)
+    inp.template = dataclasses.replace(inp.template, fixed_sections=False)
+    return inp
+
+
 def run(llm, inp):
     emitter = ListEmitter()
     result = asyncio.run(SpecPipeline(llm, emitter).run(inp))
@@ -132,7 +140,7 @@ def test_fallback_when_model_cannot_output_json():
     llm = FakeLLM(fail_json=True)
     result, emitter = run(llm, make_input(max_revisions=0))
     assert result.plan.fallback is True
-    assert len(result.plan.sections) == 10  # 範本的章節
+    assert len(result.plan.sections) == len(find_template("functional_spec").sections)  # 範本的章節
     assert result.reviews[0].llm_ok is False
     warnings = [e["message"] for e in emitter.events if e["type"] == "log"]
     assert any("改用範本章節" in w for w in warnings)
@@ -191,7 +199,7 @@ def test_revise_without_sections_falls_back_to_draft():
 
 
 def test_planner_normalizes_model_output():
-    inp = make_input(max_diagrams=2)
+    inp = free_input(max_diagrams=2)
     data = {
         "summary": "摘要",
         "sections": [
@@ -227,7 +235,7 @@ def test_planner_normalizes_model_output():
 
 def test_diagrams_unlimited_by_default():
     """預設不限制圖的張數：每一節和整份文件都照 Planner 規劃的畫。"""
-    inp = make_input()
+    inp = free_input()
     assert inp.options.max_diagrams is None
     flow = {"kind": "flowchart", "title": "流程", "description": ""}
     data = {
@@ -434,15 +442,11 @@ def test_idea_doc_uses_idea_rules():
     reviewer = [c["messages"][0]["content"] for c in llm.calls if c["purpose"].startswith("reviewer")]
     assert reviewer and all("這是構想文件" in s and "不要要求補上細節" in s for s in reviewer)
     assert all("使用者故事（US 編號）" in s for s in reviewer)
-    # 章節固定：假模型只規劃了前 6 節，後面 2 節照範本補上
+    # 章節固定：假模型只規劃了前 6 節，最後一節照範本補上
     headings = [s.heading for s in parse_markdown(result.markdown).sections]
-    assert headings[:8] == [
-        f"{i}. {h}"
-        for i, h in enumerate(
-            ["背景與問題", "目標使用者與情境", "構想說明", "使用者故事", "驗收條件", "可能的做法", "假設與風險", "下一步"],
-            start=1,
-        )
-    ]
+    expected = ["背景與問題", "目標使用者與情境", "構想說明", "使用者故事", "驗收條件", "可能的做法", "假設與風險"]
+    assert [s.heading for s in find_template("idea_proposal").sections] == expected
+    assert headings[: len(expected)] == [f"{i}. {h}" for i, h in enumerate(expected, start=1)]
     # 使用者故事、驗收條件照範本的 ids 編號
     users = [c["messages"][1]["content"] for c in llm.calls if ":section:" in c["purpose"]]
     assert any("第 4 節：使用者故事" in u and "編號：這一節的項目用 US-01" in u for u in users)
@@ -478,7 +482,7 @@ def test_fixed_sections_follow_template():
     assert plan.sections[3].key_points == ["規則要點"] and plan.sections[1].key_points == []
     # 不固定的範本照 Planner 的章節，對得上範本的章節才有 ids
     free = Planner.build_plan(
-        make_input(),
+        free_input(),
         {
             "summary": "s",
             "sections": [
@@ -499,7 +503,16 @@ def test_fixed_sections_schema_and_revise_keeps_sections():
     secs = schema["properties"]["sections"]
     assert secs["items"]["properties"]["heading"]["enum"] == [s.heading for s in tpl.sections]
     assert secs["minItems"] == secs["maxItems"] == len(tpl.sections)
-    assert plan_schema(load_templates()["functional_spec"]) is PLAN_SCHEMA
+    assert plan_schema(free_input().template) is PLAN_SCHEMA
+    # 內建範本現在都是固定章節
+    assert all(t.fixed_sections for t in load_templates().values())
+    # 用不到的欄位不叫模型寫：標題用 Spec 的名稱；章節固定時 goal 照範本
+    assert "title" not in PLAN_SCHEMA["properties"] and "title" not in PLAN_SCHEMA["required"]
+    assert "goal" not in secs["items"]["properties"] and "goal" not in secs["items"]["required"]
+    assert "goal" in PLAN_SCHEMA["properties"]["sections"]["items"]["required"]
+    fixed_prompt = planner_messages(make_input(template="change_record"))[0]["content"]
+    assert "不用另外寫 goal" in fixed_prompt
+    assert "不用另外寫 goal" not in planner_messages(free_input())[0]["content"]
     # 修訂：章節固定的文件不刪範本裡的章節，其他章節可以刪
     inp = make_input(mode="revise", template="change_record")
     existing = [("E1", "變更摘要", "a"), ("E2", "差異對照", "b"), ("E3", "補充說明", "c")]
@@ -817,6 +830,13 @@ def test_reviewer_checks_id_title_mismatch():
     assert undefined_ids(draft) == {}
     # 只有名稱剛好是另一個編號的名稱才算錯；「確認結案」對不到其他編號，不算
     assert mismatched_ids(draft) == {"S2": ["UC-03 後面寫「審核與退回報修單」，這是 UC-02 的名稱（UC-03 是「指派維修人員」）"]}
+    # 範圍、並列不是「編號＋名稱」；另一個編號的名稱本來就提到這個編號時也不算（示範資料的數獨測試案例）
+    _, cases = _draft(
+        "| 編號 | 項目 |\n|---|---|\n| TC-05 | 簡單題 100 題 |\n| TC-08 | 專家題 100 題 |\n"
+        "| TC-11 | 專家難度的題目 |\n| TC-12 | 困難題 |\n"
+        "| TC-13 | TC-11 和 TC-12 的題目再解一次 |\n| TC-14 | TC-05～TC-08 產生的每一題 |"
+    )
+    assert mismatched_ids(cases) == {}
     issues = static_checks(plan, draft)
     assert [(i.section_id, i.severity, i.kind) for i in issues] == [("S2", "medium", "conflict")]
 

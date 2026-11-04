@@ -21,11 +21,11 @@ uv run --project backend python scripts/check_demo_content.py scripts/demo_conte
 | `CS` | 客服工單 | 同上 |
 | `SUDOKU` | 數獨解題與出題 | `solver`、`generator`、`revise` |
 
-key 對應的文件類型：
+key 對應的文件類型（內建範本都是章節固定，內容檔的章節標題和順序要跟範本一樣）：
 
 | key | 文件類型 |
 |---|---|
-| `idea` | 構想提案（`idea_proposal`，章節固定） |
+| `idea` | 構想提案（`idea_proposal`） |
 | `feature` | 功能規格書（`functional_spec`） |
 | `architecture` | 系統架構設計 |
 | `database` | 資料庫設計 |

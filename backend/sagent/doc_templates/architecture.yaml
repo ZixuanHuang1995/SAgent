@@ -4,6 +4,7 @@ description: 技術方向決定之後，說明系統由哪些元件組成、元�
 order: 6
 category: design
 role: 軟體架構師
+fixed_sections: true
 requirement_hint: 寫已經決定的技術方向（可以貼技術決策的建議方案）、要整合的既有系統、部署環境和安全要求。還在比較方案的話，先寫技術決策。
 requirement_example: |
   用 Python 和 PostgreSQL，部署在內網兩台 VM。
