@@ -77,8 +77,17 @@ def _add_run_review_checked(engine: Engine) -> None:
             conn.execute(text("ALTER TABLE agent_runs ADD COLUMN review_checked JSON NOT NULL DEFAULT '[]'"))
 
 
+def _add_run_checkpoint(engine: Engine) -> None:
+    """agent_runs 加上 checkpoint（續跑用的檢查點，JSON）。"""
+    with engine.begin() as conn:
+        columns = _columns(conn, "agent_runs")
+        if columns and "checkpoint" not in columns:
+            conn.execute(text("ALTER TABLE agent_runs ADD COLUMN checkpoint JSON"))
+
+
 def migrate(engine: Engine) -> None:
     _add_version_line_stats(engine)
     _add_spec_source(engine)
     _add_project_glossary(engine)
     _add_run_review_checked(engine)
+    _add_run_checkpoint(engine)

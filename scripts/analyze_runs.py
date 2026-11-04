@@ -44,6 +44,11 @@ def main() -> int:
     parser.add_argument("--model", help="只看這個模型")
     parser.add_argument("--doc-type", help="只看這種文件（範本 key）")
     parser.add_argument("--from-run", type=int, default=0, help="只看編號大於等於這個的 AI 工作")
+    parser.add_argument(
+        "--group-by",
+        choices=["prompt"],
+        help="prompt：依提示詞、範本和程式的版本分組，比較改提示詞前後的時間和錯誤數",
+    )
     args = parser.parse_args()
 
     db = sqlite3.connect(f"file:{args.db.as_posix()}?mode=ro", uri=True)
@@ -55,7 +60,8 @@ def main() -> int:
         where.append("doc_type = ?")
         params.append(args.doc_type)
     runs = db.execute(
-        f"select id, status, model, doc_type, mode, stats from agent_runs where {' and '.join(where)} order by id",
+        f"select id, status, model, doc_type, mode, stats, options from agent_runs where {' and '.join(where)} "
+        "order by id",
         params,
     ).fetchall()
     if not runs:
@@ -72,6 +78,7 @@ def main() -> int:
     out_tokens: Counter[str] = Counter()
     logs: Counter[str] = Counter()
     rounds: dict[int, list[dict]] = defaultdict(list)
+    run_minutes: Counter[int] = Counter()
     plan_fallback = 0
     ids = [r[0] for r in runs if r[1] == "succeeded"]
     for run_id, typ, message, data in db.execute(
@@ -81,14 +88,19 @@ def main() -> int:
     ):
         d = json.loads(data or "{}")
         if typ == "step_end":
+            if "duration_ms" not in d:
+                continue  # 伺服器重啟時補上的「中斷」，不是真的執行了這一步
             step = d.get("step", "")
             kind = step.split(":")[0]
             if kind == "review":
                 kind = "review:1" if step == "review:1" else "review:2+"
             minutes[kind] += d.get("duration_ms", 0) / 60000
+            run_minutes[run_id] += d.get("duration_ms", 0) / 60000
             calls[kind] += 1
             out_tokens[kind] += d.get("completion_tokens", 0) or 0
             if step.startswith("review:") and d.get("output"):
+                if step == "review:1":
+                    rounds[run_id] = []  # 續跑時從第一次審查重來，只算最後那一次
                 rounds[run_id].append(d["output"])
             if step == "plan" and (d.get("output") or {}).get("fallback"):
                 plan_fallback += 1
@@ -144,7 +156,33 @@ def main() -> int:
         )
     points = sum(len(r.get("review_points", [])) for r in last)
     print(f"最後的人工覆核：平均每份 {points / max(len(last), 1):.1f} 項")
+
+    if args.group_by == "prompt":
+        _print_by_prompt(runs, run_minutes, rounds)
     return 0
+
+
+def _version_label(options_json: str | None) -> str:
+    v = (json.loads(options_json or "{}") or {}).get("prompt_version") or {}
+    if not v:
+        return "（沒有記錄，舊的工作）"
+    return f"提示詞 {v.get('prompts', '')[:7]}、範本 {v.get('template', '')[:7]}、程式 {v.get('code') or '?'}"
+
+
+def _print_by_prompt(runs: list, run_minutes: Counter, rounds: dict[int, list[dict]]) -> None:
+    """改提示詞前後的比較。同一個版本的工作放在一起，只算成功的。"""
+    groups: dict[str, list[int]] = defaultdict(list)
+    for run_id, status, *_rest, options in runs:
+        if status == "succeeded":
+            groups[_version_label(options)].append(run_id)
+    print("\n依提示詞版本：")
+    print("  份數  平均分鐘  第 1 輪錯誤  最後錯誤  版本")
+    for label, ids in groups.items():
+        rs = [rounds[i] for i in ids if rounds.get(i)]
+        first = sum(len(_errors(r[0])) for r in rs) / max(len(rs), 1)
+        last = sum(len(_errors(r[-1])) for r in rs) / max(len(rs), 1)
+        avg = sum(run_minutes[i] for i in ids) / len(ids)
+        print(f"  {len(ids):4} {avg:9.0f} {first:12.1f} {last:9.1f}  {label}")
 
 
 if __name__ == "__main__":

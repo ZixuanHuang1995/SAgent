@@ -346,3 +346,103 @@ def test_review_checks(client, project):
     wait_run(client, run2)
     review = client.get(f"/api/specs/{spec['id']}").json()["review"]
     assert review is None or review["run_id"] == run2
+
+
+def _checkpoint(client, run_id):
+    from sagent.db import session_scope
+    from sagent.models import AgentRun
+
+    with session_scope(client.app.state.sagent.session_factory) as s:
+        run = s.get(AgentRun, run_id)
+        return run.status, run.checkpoint, run.started_at
+
+
+def test_resume_after_server_restart(cfg, project):
+    """寫到一半伺服器關掉：下次啟動從檢查點繼續，寫好的章節和大綱不再送模型。"""
+    import time
+
+    from fastapi.testclient import TestClient
+
+    from sagent.agents.fake_llm import FakeLLM
+    from sagent.main import create_app
+
+    app = create_app(cfg, llm_factory=lambda model, opts: FakeLLM(model=model, call_delay=0.2))
+    with TestClient(app, headers={"X-SAgent-Client": "test"}) as c:
+        spec = _spec(c, project)
+        body = {"spec_id": spec["id"], "requirement": "線上下單"}
+        run_id = c.post("/api/agent/runs", json=body).json()["id"]
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            status, cp, started = _checkpoint(c, run_id)
+            if cp and len(cp["progress"]["sections"]) >= 2:
+                break
+            time.sleep(0.02)
+        else:
+            raise AssertionError("沒有存檢查點")
+    # 正常關閉：不標成取消，留給下次續跑
+    status, cp, _ = _checkpoint(c, run_id)
+    assert status == "running" and cp["plan"]["sections"]
+    written = set(cp["progress"]["sections"])
+
+    llms = []
+
+    def factory(model, opts):
+        llms.append(FakeLLM(model=model))
+        return llms[-1]
+
+    with TestClient(create_app(cfg, llm_factory=factory), headers={"X-SAgent-Client": "test"}) as c2:
+        run = wait_run(c2, run_id)
+        status, cp, started_after = _checkpoint(c2, run_id)
+    assert run["status"] == "succeeded", run["error"]
+    assert cp is None and started_after == started  # 檢查點清掉；開始時間照第一次的
+    purposes = [call["purpose"] for call in llms[0].calls]
+    assert not any(p.startswith("planner") for p in purposes)
+    assert not any(p == f"writer:section:{sid}" for sid in written for p in purposes)
+    assert any(p.startswith("writer:section:") for p in purposes)
+    messages = [e["message"] for e in run["events"]]
+    assert any("伺服器重新啟動後繼續執行" in m and f"已經寫好 {len(written)} 節" in m for m in messages)
+    # 中斷的那一步補上結束（step_end 寫「中斷」），畫面才不會一直轉
+    starts = [e["data"]["step"] for e in run["events"] if e["type"] == "step_start"]
+    ends = [e["data"]["step"] for e in run["events"] if e["type"] == "step_end"]
+    assert sorted(starts) == sorted(ends)
+    # 用量包含中斷前的部分（規劃只在第一次跑）
+    assert run["stats"]["planner"]["calls"] == 1
+    detail = c2.get(f"/api/specs/{spec['id']}").json()
+    assert detail["head"]["run_id"] == run_id and "待確認事項" in detail["content"]
+
+
+def test_running_without_checkpoint_fails_on_restart(cfg, project):
+    from fastapi.testclient import TestClient
+
+    from sagent.agents.fake_llm import FakeLLM
+    from sagent.db import session_scope
+    from sagent.main import create_app
+    from sagent.models import AgentRun
+
+    def make_app():
+        return create_app(cfg, llm_factory=lambda m, o: FakeLLM(model=m))
+
+    with TestClient(make_app(), headers={"X-SAgent-Client": "test"}) as c:
+        spec = _spec(c, project)
+        run_id = c.post("/api/agent/runs", json={"spec_id": spec["id"], "requirement": "x"}).json()["id"]
+        wait_run(c, run_id)
+        with session_scope(c.app.state.sagent.session_factory) as s:
+            run = s.get(AgentRun, run_id)
+            run.status, run.checkpoint = "running", None  # 規劃還沒完成就中斷
+    with TestClient(make_app(), headers={"X-SAgent-Client": "test"}) as c2:
+        run = c2.get(f"/api/agent/runs/{run_id}").json()
+    assert run["status"] == "failed" and run["error"] == "伺服器重新啟動，工作被中斷"
+
+
+def test_run_records_prompt_version(client, project):
+    from sagent.agents.doc_templates import load_templates
+    from sagent.agents.versioning import prompts_hash, template_hash
+
+    spec = _spec(client, project)
+    run_id = client.post("/api/agent/runs", json={"spec_id": spec["id"], "requirement": "x"}).json()["id"]
+    version = wait_run(client, run_id)["options"]["prompt_version"]
+    templates = load_templates()
+    assert version["prompts"] == prompts_hash() and len(version["prompts"]) == 12
+    assert version["template"] == template_hash(templates["functional_spec"])
+    assert version["template"] != template_hash(templates["test_plan"])
+    assert isinstance(version["code"], str)  # 不是 git 目錄時是空字串

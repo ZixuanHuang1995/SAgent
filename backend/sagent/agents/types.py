@@ -111,6 +111,24 @@ class Plan:
             ],
         )
 
+    def to_state(self) -> dict[str, Any]:
+        """完整的大綱（含修訂模式的原內容），存進續跑用的檢查點。to_dict 是給畫面看的，不含原內容。"""
+        return asdict(self)
+
+    @classmethod
+    def from_state(cls, data: dict[str, Any]) -> Plan:
+        return cls(
+            **{
+                **data,
+                "sections": [
+                    SectionPlan(**{**s, "diagrams": [DiagramPlan(**d) for d in s.get("diagrams") or []]})
+                    for s in data.get("sections") or []
+                ],
+                "terms": [Term(**t) for t in data.get("terms") or []],
+                "answered": [(str(q), str(a)) for q, a in data.get("answered") or []],
+            }
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "title": self.title,
@@ -148,6 +166,30 @@ class Draft:
 
     def section(self, section_id: str) -> SectionDraft | None:
         return next((s for s in self.sections if s.id == section_id), None)
+
+
+@dataclass
+class WriteProgress:
+    """撰寫到哪裡了，伺服器重啟後從這裡繼續（CPU 上一份文件要寫幾十分鐘，重來太浪費）。
+
+    sections：寫好的章節目前的內容（已經畫好的圖也附在後面）；diagrams：每一節畫好了幾張圖。
+    """
+
+    sections: dict[str, str] = field(default_factory=dict)
+    diagrams: dict[str, int] = field(default_factory=dict)
+    done: bool = False  # 文字和圖都寫完了，接下來是審查
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> WriteProgress:
+        data = data or {}
+        return cls(
+            sections={str(k): str(v) for k, v in (data.get("sections") or {}).items()},
+            diagrams={str(k): int(v) for k, v in (data.get("diagrams") or {}).items()},
+            done=bool(data.get("done")),
+        )
 
 
 @dataclass

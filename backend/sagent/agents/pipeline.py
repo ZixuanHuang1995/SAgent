@@ -2,14 +2,27 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+
 from ..services.markdown_doc import MdDoc, MdSection, render_markdown
 from .base import Emitter
 from .llm import LLMClient
 from .planner import Planner
 from .reviewer import Reviewer
 from .textutil import bullet_text, is_bullet
-from .types import OPEN_QUESTIONS_HEADING, AgentStats, Draft, PipelineResult, Plan, Review, RunInput
+from .types import (
+    OPEN_QUESTIONS_HEADING,
+    AgentStats,
+    Draft,
+    PipelineResult,
+    Plan,
+    Review,
+    RunInput,
+    WriteProgress,
+)
 from .writer import Writer
+
+CheckpointCallback = Callable[[Plan, WriteProgress], Awaitable[None]]
 
 
 def assemble(inp: RunInput, plan: Plan, draft: Draft) -> str:
@@ -63,16 +76,32 @@ class SpecPipeline:
         await self.emitter.emit("phase", "planner", "Planner：規劃文件", {"phase": "plan"})
         return await self.planner.plan(inp)
 
-    async def run(self, inp: RunInput, plan: Plan | None = None) -> PipelineResult:
-        """plan 有值時（使用者已經確認過的大綱）跳過 Planner。"""
+    async def run(
+        self,
+        inp: RunInput,
+        plan: Plan | None = None,
+        progress: WriteProgress | None = None,
+        on_checkpoint: CheckpointCallback | None = None,
+    ) -> PipelineResult:
+        """plan 有值時（使用者已經確認過的大綱，或續跑時存好的大綱）跳過 Planner。
+
+        progress：續跑時上次寫到哪裡。on_checkpoint：規劃完、每寫完一節或一張圖時呼叫，讓執行器存檢查點。
+        審查和修訂不存檢查點：中斷後從第一次審查重來（大部分的時間花在撰寫）。
+        """
         self._apply_template_limits(inp)
         emit = self.emitter.emit
         if plan is None:
             await emit("phase", "planner", "Planner：規劃文件", {"phase": "plan"})
             plan = await self.planner.plan(inp)
+        if on_checkpoint is not None and progress is None:
+            await on_checkpoint(plan, WriteProgress())  # 有大綱就能續跑，不用重新規劃
+
+        async def on_progress(p: WriteProgress) -> None:
+            if on_checkpoint is not None:
+                await on_checkpoint(plan, p)
 
         await emit("phase", "writer", "Writer：撰寫內容", {"phase": "write"})
-        draft = await self.writer.write(inp, plan)
+        draft = await self.writer.write(inp, plan, progress, on_progress if on_checkpoint else None)
 
         reviews: list[Review] = []
         revisions = 0

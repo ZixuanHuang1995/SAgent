@@ -47,6 +47,7 @@ from sagent.agents.types import (
     RunInput,
     SectionDraft,
     SectionPlan,
+    WriteProgress,
 )
 from sagent.agents.writer import Writer
 from sagent.services.diagrams import extract_diagrams, lint_mermaid
@@ -981,3 +982,40 @@ def test_resolved_but_repeated_issue_stays_open():
     )
     assert still_open == [old] and fixed == [] and new == [fresh]
     assert resolved_numbers({"resolved": [1, "2", 9, None]}, 3) == {1, 2}
+
+
+def test_plan_state_round_trip_keeps_revise_details():
+    llm = FakeLLM()
+    result, _ = run(llm, make_input(mode="revise", existing=EXISTING, max_revisions=0))
+    plan = result.plan
+    plan.answered = [("付款方式", "信用卡")]
+    restored = Plan.from_state(json.loads(json.dumps(plan.to_state(), ensure_ascii=False)))
+    assert restored == plan
+    assert restored.sections[1].action == "keep" and restored.sections[1].source_body
+    assert restored.preamble == plan.preamble and restored.existing_questions_body
+
+
+def test_writer_resumes_from_progress():
+    llm = FakeLLM()
+    result, _ = run(llm, make_input(max_revisions=0))
+    plan = result.plan
+    with_diagram = next(s for s in plan.sections if s.diagrams)
+    done = {s.id: f"{s.heading}已經寫好的內容" for s in plan.sections[:2]}
+    progress = WriteProgress(sections=dict(done))
+    saved = []
+
+    async def on_progress(p):
+        saved.append((dict(p.sections), dict(p.diagrams), p.done))
+
+    llm2 = FakeLLM()
+    draft = asyncio.run(Writer(llm2, ListEmitter(), {}).write(make_input(), plan, progress, on_progress))
+    purposes = [c["purpose"] for c in llm2.calls]
+    assert not any(p in (f"writer:section:{sid}" for sid in done) for p in purposes)
+    assert draft.section(plan.sections[0].id).body == done[plan.sections[0].id]
+    # 每寫完一節、畫完一張圖都存一次，最後標成寫完
+    assert saved[-1][2] is True and saved[-1][1].get(with_diagram.id) == len(with_diagram.diagrams)
+
+    # 圖也畫好了：再續跑一次不會再呼叫模型
+    llm3 = FakeLLM()
+    asyncio.run(Writer(llm3, ListEmitter(), {}).write(make_input(), plan, progress))
+    assert llm3.calls == []

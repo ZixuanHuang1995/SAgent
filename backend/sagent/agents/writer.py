@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+
 from ..services.diagrams import extract_code, extract_diagrams, fence, mermaid_kind, normalize_diagram
 from .base import AgentBase
 from .diagram_kinds import KINDS
@@ -25,7 +27,19 @@ from .textutil import (
     select_known_items,
     text_length,
 )
-from .types import DiagramPlan, Draft, Issue, Plan, Review, RunInput, SectionDraft, SectionPlan
+from .types import (
+    DiagramPlan,
+    Draft,
+    Issue,
+    Plan,
+    Review,
+    RunInput,
+    SectionDraft,
+    SectionPlan,
+    WriteProgress,
+)
+
+ProgressCallback = Callable[[WriteProgress], Awaitable[None]]
 
 _MERMAID_TO_KIND = {
     "flowchart": "flowchart",
@@ -68,10 +82,32 @@ class Writer(AgentBase):
             {"section_id": sec.id, "heading": sec.heading, "body": sec.body},
         )
 
-    async def write(self, inp: RunInput, plan: Plan) -> Draft:
+    async def write(
+        self,
+        inp: RunInput,
+        plan: Plan,
+        progress: WriteProgress | None = None,
+        on_progress: ProgressCallback | None = None,
+    ) -> Draft:
+        """progress：上次寫到哪裡（伺服器重啟後續跑），寫好的章節和圖不再送模型。
+
+        on_progress：每寫完一節、畫完一張圖就呼叫，讓執行器存檢查點。
+        """
+        progress = progress if progress is not None else WriteProgress()
+
+        async def saved() -> None:
+            if on_progress is not None:
+                await on_progress(progress)
+
         drafts: dict[str, SectionDraft] = {}
         known_items: list[str] = []
         for number, sec in enumerate(plan.sections, start=1):
+            if sec.id in progress.sections:
+                draft = SectionDraft(sec.id, sec.heading, progress.sections[sec.id])
+                drafts[sec.id] = draft
+                known_items.extend(extract_item_ids(draft.body))
+                await self.section_update(draft)
+                continue
             if sec.action == "keep":
                 draft = SectionDraft(sec.id, sec.heading, sec.source_body.strip())
                 known_items.extend(extract_item_ids(draft.body))
@@ -84,13 +120,23 @@ class Writer(AgentBase):
                 known_items.extend(extract_item_ids(body))
             drafts[sec.id] = draft
             await self.section_update(draft)
+            progress.sections[sec.id] = draft.body
+            if sec.action != "keep":
+                await saved()
 
         for number, sec in enumerate(plan.sections, start=1):
             for k, dp in enumerate(sec.diagrams, start=1):
+                if k <= progress.diagrams.get(sec.id, 0):
+                    continue
                 draft = drafts[sec.id]
                 code, lang = await self._draw(inp, sec, draft.body, dp, f"{number}-{k}")
                 draft.body = append_diagram(draft.body, f"圖 {number}-{k}：{dp.title}", lang, code)
                 await self.section_update(draft)
+                progress.sections[sec.id] = draft.body
+                progress.diagrams[sec.id] = k
+                await saved()
+        progress.done = True
+        await saved()
         return Draft([drafts[s.id] for s in plan.sections])
 
     async def _write_section(

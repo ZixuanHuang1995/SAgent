@@ -3,7 +3,9 @@
 - 工作排隊，一次只跑一個（CPU 推論同時跑多個只會更慢）
 - 執行過程的事件存進資料庫，並即時推給正在看的畫面（SSE）
 - 逐字串流不存資料庫，只即時推送，每 0.15 秒合併送一次
-- 伺服器重啟時：排隊中的工作重新排隊，執行到一半的標成失敗
+- 伺服器重啟時：排隊中的工作重新排隊；執行到一半的工作有檢查點（大綱和寫好的章節）就重新排隊、
+  從中斷的地方繼續，沒有才標成失敗。審查和修訂不存檢查點，續跑時從第一次審查重來
+- 伺服器正常關閉時，執行中的工作不標成取消，留給下次啟動續跑
 - 先確認大綱的工作：規劃完存成 planned 停下來（不占佇列），使用者確認後重新排隊，沿用存好的大綱繼續
 """
 
@@ -14,7 +16,7 @@ import logging
 import time
 from collections import defaultdict
 from collections.abc import Callable
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -28,11 +30,29 @@ from .doc_templates import DocTemplate, get_template
 from .llm import LLMClient
 from .pipeline import SpecPipeline
 from .planner import GLOSSARY_LIMIT, parse_terms
-from .types import AgentStats, PipelineOptions, Plan, RunInput
+from .types import AgentStats, PipelineOptions, Plan, RunInput, WriteProgress
+from .versioning import prompt_version
 
 log = logging.getLogger("sagent.runner")
 
 TOKEN_FLUSH_SECONDS = 0.15
+INTERRUPTED = "伺服器重新啟動，工作被中斷"
+
+
+@dataclass
+class _Loaded:
+    """開始執行時從資料庫讀出來的東西。"""
+
+    inp: RunInput
+    model: str
+    opts: dict[str, Any]
+    saved_plan: dict[str, Any] | None  # 使用者確認過的大綱
+    saved_stats: dict[str, Any]
+    checkpoint: dict[str, Any] | None  # 伺服器重啟前存的檢查點
+
+
+def can_resume(checkpoint: dict[str, Any] | None) -> bool:
+    return bool(checkpoint) and isinstance(checkpoint.get("plan"), dict)
 
 
 def _optional_int(value: Any) -> int | None:
@@ -91,23 +111,32 @@ class RunManager:
         self._seq: dict[int, int] = {}
         self._idle = asyncio.Event()
         self._idle.set()
+        self._stopping = False
 
     # --- 生命週期 ---
 
     async def start(self) -> None:
+        self._stopping = False
+        resumed: list[int] = []
         with session_scope(self.session_factory) as s:
-            for run in s.scalars(select(AgentRun).where(AgentRun.status == "running")):
-                run.status = "failed"
-                run.error = "伺服器重新啟動，工作被中斷"
-                run.finished_at = utcnow()
+            for run in s.scalars(select(AgentRun).where(AgentRun.status == "running").order_by(AgentRun.id)):
+                if can_resume(run.checkpoint):
+                    run.status = "queued"  # 有檢查點：先跑，從中斷的地方繼續
+                    resumed.append(run.id)
+                else:
+                    run.status = "failed"
+                    run.error = INTERRUPTED
+                    run.finished_at = utcnow()
             queued = list(
                 s.scalars(select(AgentRun.id).where(AgentRun.status == "queued").order_by(AgentRun.id))
             )
-        for run_id in queued:
+        for run_id in resumed + [r for r in queued if r not in resumed]:
             self._queue.put_nowait(run_id)
         self._worker = asyncio.create_task(self._work_loop(), name="sagent-run-worker")
 
     async def stop(self) -> None:
+        # 伺服器關閉：執行中的工作維持 running，下次啟動時有檢查點就續跑
+        self._stopping = True
         tasks = list(self._tasks.values())
         for task in tasks:
             task.cancel()
@@ -163,6 +192,7 @@ class RunManager:
                 run.status = "cancelled"
                 run.finished_at = utcnow()
                 run.error = "使用者取消"
+                run.checkpoint = None
                 if pipeline is not None:
                     run.stats = {k: asdict(v) for k, v in pipeline.stats.items()}
                 return True
@@ -240,7 +270,7 @@ class RunManager:
             try:
                 await task
             except asyncio.CancelledError:
-                if not task.cancelled():
+                if not task.cancelled() or self._stopping:
                     raise  # worker 自己被取消（伺服器關閉）
                 # 工作還沒開始執行就被取消，_execute 沒有機會處理，這裡補上
                 await self._mark_cancelled(run_id)
@@ -249,12 +279,10 @@ class RunManager:
             finally:
                 self._tasks.pop(run_id, None)
 
-    def _load_input(
-        self, run_id: int
-    ) -> tuple[RunInput, str, dict[str, Any], dict[str, Any] | None, dict[str, Any]] | str | None:
+    def _load_input(self, run_id: int) -> _Loaded | str | None:
         """讀取執行需要的資料並標成執行中。None：不用執行；字串：失敗原因。
 
-        使用者確認過大綱的工作，另外回傳存好的大綱和規劃階段的用量。
+        使用者確認過大綱的工作，另外回傳存好的大綱和規劃階段的用量；續跑的工作回傳檢查點。
         """
         with session_scope(self.session_factory) as s:
             run = s.get(AgentRun, run_id)
@@ -269,11 +297,21 @@ class RunManager:
                 return run.error
             phase = s.get(Phase, spec.phase_id)
             head = spec_service.get_head(s, spec)
+            checkpoint = dict(run.checkpoint) if can_resume(run.checkpoint) else None
             run.status = "running"
-            run.started_at = utcnow()
-            run.base_version_no = spec.head_version_no
+            if checkpoint is None:
+                run.started_at = utcnow()
+                run.base_version_no = spec.head_version_no
+            # 續跑：開始時間和根據的版本照第一次開始時的，才看得出執行期間有沒有人改過文件
             opts = dict(run.options or {})
             template = get_template(self.templates_provider(), run.doc_type or spec.doc_type)
+            # 記下用的是哪一版提示詞、範本和程式（D41）。續跑時程式可能改過，另外記一份
+            version = prompt_version(template)
+            if checkpoint is None or "prompt_version" not in opts:
+                opts["prompt_version"] = version
+            elif opts["prompt_version"] != version:
+                opts["prompt_version_resumed"] = version
+            run.options = opts
             inp = RunInput(
                 mode="revise" if run.mode == "revise" else "draft",
                 project_name=project.name,
@@ -299,7 +337,37 @@ class RunManager:
                     f"- 問：{a['question']}\n  答：{a['answer'].strip()}" for a in answers
                 )
             saved_plan = run.plan if opts.get("plan_confirmed") and run.plan else None
-            return inp, run.model, opts, saved_plan, dict(run.stats or {}) if saved_plan else {}
+            keep_stats = saved_plan is not None or checkpoint is not None
+            return _Loaded(
+                inp, run.model, opts, saved_plan, dict(run.stats or {}) if keep_stats else {}, checkpoint
+            )
+
+    def _interrupted_steps(self, run_id: int) -> list[tuple[str, str, str]]:
+        """開始了、沒有結束的步驟（伺服器重啟時中斷的）：[(agent, step, 標籤)]。"""
+        with session_scope(self.session_factory) as s:
+            events = s.scalars(
+                select(AgentEvent)
+                .where(AgentEvent.run_id == run_id, AgentEvent.type.in_(("step_start", "step_end")))
+                .order_by(AgentEvent.seq)
+            ).all()
+            open_steps: dict[str, tuple[str, str, str]] = {}
+            for ev in events:
+                step = str((ev.data or {}).get("step", ""))
+                if ev.type == "step_start":
+                    open_steps[step] = (ev.agent, step, ev.message)
+                else:
+                    open_steps.pop(step, None)
+            return list(open_steps.values())
+
+    def _save_checkpoint(
+        self, run_id: int, plan: Plan, progress: WriteProgress, pipeline: SpecPipeline
+    ) -> None:
+        with session_scope(self.session_factory) as s:
+            run = s.get(AgentRun, run_id)
+            if run is None or run.status != "running":
+                return
+            run.checkpoint = {"plan": plan.to_state(), "progress": progress.to_dict()}
+            run.stats = {k: asdict(v) for k, v in pipeline.stats.items()}
 
     async def _in_thread(self, fn, *args):
         """在執行緒跑資料庫工作。被取消時先等執行緒裡的交易結束再往外丟，避免狀態事後被它蓋掉。"""
@@ -326,16 +394,33 @@ class RunManager:
                     "run_end", "system", f"失敗：{loaded}", {"status": "failed", "error": loaded}
                 )
                 return
-            inp, model, opts, saved_plan, saved_stats = loaded
-            verb = "繼續執行" if saved_plan else "開始執行"
-            await emitter.emit("run_status", "system", f"{verb}（模型：{model}）", {"status": "running"})
+            inp, model, opts, saved_plan = loaded.inp, loaded.model, loaded.opts, loaded.saved_plan
+            checkpoint = loaded.checkpoint
+            progress: WriteProgress | None = None
+            plan: Plan | None = Plan.from_dict(saved_plan) if saved_plan else None
+            if checkpoint is not None:
+                plan = Plan.from_state(checkpoint["plan"])
+                progress = WriteProgress.from_dict(checkpoint.get("progress"))
+                for agent, step, label in await self._in_thread(self._interrupted_steps, run_id):
+                    await emitter.emit(
+                        "step_end",
+                        agent,
+                        f"{label}：伺服器重新啟動，中斷",
+                        {"step": step, "ok": False, "error": INTERRUPTED},
+                    )
+                done = sum(1 for s in plan.sections if s.id in progress.sections)
+                where = "從第一次審查重來" if progress.done else f"已經寫好 {done} 節，接著寫"
+                message = f"伺服器重新啟動後繼續執行（模型：{model}），{where}"
+            else:
+                message = f"{'繼續執行' if saved_plan else '開始執行'}（模型：{model}）"
+            await emitter.emit("run_status", "system", message, {"status": "running"})
             if inp.mode == "revise" and not inp.existing_content.strip():
                 inp.mode = "draft"
                 await emitter.emit("log", "system", "文件目前沒有內容，改用撰寫模式", {"level": "info"})
 
             llm = self.llm_factory(model, opts)
-            pipeline = SpecPipeline(llm, emitter, {k: AgentStats(**v) for k, v in saved_stats.items()})
-            if saved_plan is None and opts.get("plan_first") and inp.mode == "draft":
+            pipeline = SpecPipeline(llm, emitter, {k: AgentStats(**v) for k, v in loaded.saved_stats.items()})
+            if plan is None and opts.get("plan_first") and inp.mode == "draft":
                 plan = await pipeline.plan_only(inp)
                 await self._in_thread(self._save_planned, run_id, plan, pipeline)
                 await emitter.emit(
@@ -345,7 +430,13 @@ class RunManager:
                     {"status": "planned"},
                 )
                 return
-            result = await pipeline.run(inp, plan=Plan.from_dict(saved_plan) if saved_plan else None)
+            assert pipeline is not None
+            running = pipeline
+
+            async def save_checkpoint(p: Plan, w: WriteProgress) -> None:
+                await self._in_thread(self._save_checkpoint, run_id, p, w, running)
+
+            result = await pipeline.run(inp, plan=plan, progress=progress, on_checkpoint=save_checkpoint)
             stats = {k: asdict(v) for k, v in pipeline.stats.items()}
 
             def _finish() -> tuple[int | None, bool, int]:
@@ -370,6 +461,7 @@ class RunManager:
                         "rounds": [r.to_dict() for r in result.reviews],
                     }
                     run.stats = stats
+                    run.checkpoint = None
                     run.result_version_no = version.version_no if created else None
                     return run.result_version_no, edited_during_run, version.version_no
 
@@ -397,6 +489,8 @@ class RunManager:
             # 結果已經存好了，這時候就算被取消也要把完成的消息送出去
             await asyncio.shield(_announce())
         except asyncio.CancelledError:
+            if self._stopping:
+                raise  # 伺服器關閉：維持 running，下次啟動時從檢查點續跑
             await self._mark_cancelled(run_id, pipeline=pipeline)
         except Exception as exc:
             log.exception("AI 工作 %s 失敗", run_id)
@@ -424,5 +518,6 @@ class RunManager:
             run.status = status
             run.error = error
             run.finished_at = utcnow()
+            run.checkpoint = None
             if pipeline is not None:
                 run.stats = {k: asdict(v) for k, v in pipeline.stats.items()}

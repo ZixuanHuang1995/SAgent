@@ -159,6 +159,8 @@ class AgentRun(Base):
     # 最後一次審查裡，使用者標成已處理的項目（"issue:0"、"point:3"，數字是在 issues、review_points 的位置）
     review_checked: Mapped[list[str]] = mapped_column(JSON, default=list)
     stats: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # 執行中的檢查點：完整大綱和寫好的章節，伺服器重啟後從這裡續跑。工作結束就清掉
+    checkpoint: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     result_version_no: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
