@@ -310,7 +310,7 @@ Context 長度設 0（「由 Ollama 決定」）時由 Ollama 決定：有設環
 每次啟動都要用的環境變數，可以寫在專案根目錄的 `local.env`（不進版控），`start.ps1` 啟動時會讀：一行一個「名稱=值」，`#` 開頭是註解，已經設定的環境變數不會被蓋掉。例如：
 
 ```
-SAGENT_JAVA=D:\java\jdk-21.0.13+9-jrein\java.exe
+SAGENT_JAVA=D:\java\jdk-21.0.13+9-jre\bin\java.exe
 ```
 
 ## 安全
