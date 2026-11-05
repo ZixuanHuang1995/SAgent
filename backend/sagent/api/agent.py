@@ -21,7 +21,7 @@ from ..agents.planner import parse_terms
 from ..app_state import AppState
 from ..db import utcnow
 from ..models import AgentEvent, AgentRun, Spec
-from ..schemas import EventOut, ReviewCheckIn, RunContinue, RunCreate, RunDetail, RunOut
+from ..schemas import EventOut, ReviewCheckIn, RunContinue, RunCreate, RunDetail, RunOut, VerdictIn
 from ..services import reviews as review_service
 from ..services import specs as spec_service
 from ..services.diagram_snippets import SNIPPETS
@@ -175,7 +175,7 @@ def get_run(run_id: int, state: AppState = Depends(get_state)):
             {
                 **run_out(s, run, state).model_dump(),
                 "plan": run.plan,
-                "review": run.review,
+                "review": review_service.with_groups(run.review),
                 "review_checked": run.review_checked or [],
                 "review_labels": run.review_labels or {},
                 "events": [_event_out(e) for e in events],
@@ -189,6 +189,15 @@ def set_review_check(run_id: int, body: ReviewCheckIn, state: AppState = Depends
     with state.db() as s:
         checked, labels = review_service.set_checked(s, run_id, body.key, body.done, body.label)
         return {"checked": checked, "labels": labels}
+
+
+@router.put("/runs/{run_id}/verdict", response_model=RunOut)
+def set_verdict(run_id: int, body: VerdictIn, state: AppState = Depends(get_state)):
+    """使用者判斷這份 AI 版可不可以直接交付（C-10）：yes 可以、partial 要小改、no 不行，null 清掉。"""
+    with state.db() as s:
+        run = review_service.set_verdict(s, run_id, body.verdict, body.note)
+        s.flush()
+        return run_out(s, run, state)
 
 
 @router.post("/runs/{run_id}/continue", response_model=RunOut)

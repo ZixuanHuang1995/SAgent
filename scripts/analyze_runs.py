@@ -129,6 +129,8 @@ def _print_signals(db: sqlite3.Connection, ids: list[int]) -> None:
 
 
 LABEL_NAMES = {"fixed": "已處理", "false": "誤報", "skip": "略過"}
+# 需求追溯的缺口（reviewer.py 的 NUMBER_GAP_REASON、ITEM_GAP_REASON）
+GAP_REASON_PREFIXES = ("文件裡找不到這個數字", "文件裡幾乎找不到對應的內容")
 
 
 def _print_precision(db: sqlite3.Connection, ids: list[int]) -> None:
@@ -151,6 +153,8 @@ def _print_precision(db: sqlite3.Connection, ids: list[int]) -> None:
                 group = f"錯誤・{'程式檢查' if item.get('source') == 'check' else '模型'}"
                 if item.get("source") == "llm" and item.get("kind"):
                     group += f"・{item['kind']}"
+            elif str(item.get("reason", "")).startswith(GAP_REASON_PREFIXES):
+                group = "人工覆核・需求追溯"
             else:
                 group = f"人工覆核・{'文件標註' if item.get('source') == 'check' else '模型'}"
             counts[(group, labels.get(key, "fixed"))] += 1

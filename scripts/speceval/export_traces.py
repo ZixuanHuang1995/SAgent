@@ -85,6 +85,7 @@ def main() -> int:
         for c in (
             "id", "spec_id", "mode", "status", "model", "doc_type", "requirement", "options", "plan", "review",
             "review_checked", "review_labels", "stats", "result_version_no", "base_version_no",
+            "stop_reason", "wall_seconds", "human_verdict", "human_verdict_note",
         )
         if c in cols
     ]
@@ -140,6 +141,11 @@ def main() -> int:
                 "environment": opts.get("environment"),
                 "prompts": prompts,
                 "prompt_hashes": hashes,
+                "stop_reason": r.get("stop_reason"),
+                "wall_seconds": r.get("wall_seconds"),
+                # 使用者判斷這份 AI 版能不能直接交付（C-10）：yes、partial、no；None 還沒判斷
+                "human_verdict": r.get("human_verdict"),
+                "human_verdict_note": r.get("human_verdict_note"),
                 "ai_version": r.get("result_version_no"),
                 "ai_content": ai,
                 "human_version": human[0] if human else None,

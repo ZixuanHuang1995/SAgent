@@ -3,13 +3,14 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { api, type ReviewLabel, type RunDetail, type SpecDetail } from '../api'
+import { api, type ReviewLabel, type ReviewPointGroup, type RunDetail, type SpecDetail } from '../api'
 import { relativeTime } from '../format'
 import { usePersistent } from '../hooks/layout'
 import { keys } from '../queries'
 import { Icon } from './icons'
 import { RunDetailModal } from './RunDetail'
 import { SEVERITY } from './RunProgress'
+import { RunVerdict } from './RunVerdict'
 import { Badge, errorText, Menu, MenuItem, MenuSeparator, Skeleton, useToast } from './ui'
 
 const ORDER = { high: 0, medium: 1, low: 2 }
@@ -20,6 +21,13 @@ const LABELS: Record<ReviewLabel, { text: string; hint: string }> = {
   skip: { text: '略過', hint: '先不處理' },
 }
 
+/** 人工覆核項目的分組，照這個順序排（C-11）。文件自己標的通常最多、最不急，預設摺疊 */
+const GROUPS: { key: ReviewPointGroup; title: string; source: string; hint: string }[] = [
+  { key: 'trace', title: '需求追溯', source: '需求追溯', hint: '需求有、文件裡找不到的數字或句子' },
+  { key: 'model', title: '審查模型列的', source: '模型', hint: '需求沒提到、文件卻寫得很具體，或要業務單位決定的事' },
+  { key: 'marked', title: '文件自己標的', source: '文件標註', hint: '文件裡標了（假設）、（待確認）的地方' },
+]
+
 interface Item {
   key: string
   sectionId: string | null
@@ -27,6 +35,7 @@ interface Item {
   text: string
   note: string
   source: 'check' | 'llm'
+  group?: ReviewPointGroup
 }
 
 export function ReviewChecklist(props: {
@@ -42,6 +51,7 @@ export function ReviewChecklist(props: {
   const run = useQuery({ queryKey: keys.run(runId), queryFn: () => api.run(runId) })
   const [hideDone, setHideDone] = usePersistent<'0' | '1'>('sagent:review-hide-done', '0')
   const [showRun, setShowRun] = useState(false)
+  const [showMarked, setShowMarked] = useState(false)
 
   if (run.isLoading) return <Skeleton lines={6} />
   if (run.error || !run.data) return <div className="error-box">{errorText(run.error)}</div>
@@ -67,6 +77,7 @@ export function ReviewChecklist(props: {
     text: p.item,
     note: p.reason,
     source: p.source,
+    group: p.group ?? (p.source === 'llm' ? 'model' : 'marked'),
   }))
   const total = issues.length + points.length
   const done = [...issues, ...points].filter((i) => checked.has(i.key)).length
@@ -74,6 +85,29 @@ export function ReviewChecklist(props: {
   const stale = summary.version_no !== null && spec.head_version_no > summary.version_no
 
   const marked = (kind: ReviewLabel) => [...issues, ...points].filter((i) => checked.has(i.key) && labelOf(i.key) === kind).length
+
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: keys.run(runId) })
+    qc.invalidateQueries({ queryKey: keys.spec(spec.id) })
+    qc.invalidateQueries({ queryKey: ['tree', spec.project_id] })
+  }
+
+  /** 一組全部標成已處理。一個一個送，後端每次都讀寫同一列，同時送會互相蓋掉 */
+  const markAll = async (itemKeys: string[]) => {
+    qc.setQueryData<RunDetail>(keys.run(runId), (old) => {
+      if (!old) return old
+      const nextLabels = { ...(old.review_labels ?? {}) }
+      for (const k of itemKeys) nextLabels[k] = 'fixed'
+      return { ...old, review_checked: [...new Set([...old.review_checked, ...itemKeys])], review_labels: nextLabels }
+    })
+    try {
+      for (const k of itemKeys) await api.setReviewCheck(runId, k, true, 'fixed')
+    } catch (e) {
+      toast(errorText(e), 'error')
+    } finally {
+      refresh()
+    }
+  }
 
   const toggle = async (key: string, value: boolean, label: ReviewLabel = 'fixed') => {
     // 先改畫面，失敗再改回來
@@ -90,9 +124,7 @@ export function ReviewChecklist(props: {
     } catch (e) {
       toast(errorText(e), 'error')
     } finally {
-      qc.invalidateQueries({ queryKey: keys.run(runId) })
-      qc.invalidateQueries({ queryKey: keys.spec(spec.id) })
-      qc.invalidateQueries({ queryKey: ['tree', spec.project_id] })
+      refresh()
     }
   }
 
@@ -126,7 +158,9 @@ export function ReviewChecklist(props: {
                   ) : (
                     <span className="muted small">整份文件</span>
                   )}
-                  {i.source === 'check' && <span className="muted small">・{i.severity ? '程式檢查' : '文件標註'}</span>}
+                  {i.severity
+                    ? i.source === 'check' && <span className="muted small">・程式檢查</span>
+                    : <span className="muted small">・{GROUPS.find((g) => g.key === i.group)?.source}</span>}
                 </div>
                 <div className="check-item-text">{i.text}</div>
                 {i.note && <div className="muted small">{i.note}</div>}
@@ -158,6 +192,7 @@ export function ReviewChecklist(props: {
 
   return (
     <div className="review-checklist">
+      <RunVerdict run={run.data} disabled={spec.archived} />
       <div className="review-progress">
         <div className="review-progress-text">
           <strong>
@@ -201,7 +236,36 @@ export function ReviewChecklist(props: {
       <div className="subhead">
         需要人工覆核 <span className="muted small">{points.filter((i) => !checked.has(i.key)).length} 項未處理</span>
       </div>
-      {renderList(points, '沒有需要特別確認的地方。')}
+      {points.length === 0 && <div className="muted small">沒有需要特別確認的地方。</div>}
+      {GROUPS.map((g) => {
+        const items = points.filter((p) => p.group === g.key)
+        if (items.length === 0) return null
+        const open = items.filter((i) => !checked.has(i.key))
+        const collapsed = g.key === 'marked' && !showMarked
+        return (
+          <div key={g.key} className="point-group">
+            <div className="point-group-head" title={g.hint}>
+              {g.key === 'marked' ? (
+                <button className="link-btn point-group-title" aria-expanded={!collapsed} onClick={() => setShowMarked(!showMarked)}>
+                  {collapsed ? '▸' : '▾'} 文件自己標的 {items.length} 項
+                </button>
+              ) : (
+                <span className="point-group-title">
+                  {g.title} {items.length} 項
+                </span>
+              )}
+              <span className="muted small">{open.length} 項未處理</span>
+              <span className="spacer" />
+              {!spec.archived && open.length > 1 && (
+                <button className="link-btn small" onClick={() => markAll(open.map((i) => i.key))}>
+                  全部標成已處理
+                </button>
+              )}
+            </div>
+            {!collapsed && renderList(items, '')}
+          </div>
+        )
+      })}
 
       {showRun && (
         <RunDetailModal

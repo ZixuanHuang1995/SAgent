@@ -103,6 +103,16 @@ def _add_run_stop_reason(engine: Engine) -> None:
             conn.execute(text("ALTER TABLE agent_runs ADD COLUMN wall_seconds FLOAT"))
 
 
+def _add_run_human_verdict(engine: Engine) -> None:
+    """agent_runs 加上 human_verdict（使用者判斷可不可以交付）、human_verdict_note（理由）。"""
+    with engine.begin() as conn:
+        columns = _columns(conn, "agent_runs")
+        if columns and "human_verdict" not in columns:
+            conn.execute(text("ALTER TABLE agent_runs ADD COLUMN human_verdict VARCHAR(20)"))
+        if columns and "human_verdict_note" not in columns:
+            conn.execute(text("ALTER TABLE agent_runs ADD COLUMN human_verdict_note TEXT NOT NULL DEFAULT ''"))
+
+
 def migrate(engine: Engine) -> None:
     _add_version_line_stats(engine)
     _add_spec_source(engine)
@@ -111,3 +121,4 @@ def migrate(engine: Engine) -> None:
     _add_run_checkpoint(engine)
     _add_run_review_labels(engine)
     _add_run_stop_reason(engine)
+    _add_run_human_verdict(engine)

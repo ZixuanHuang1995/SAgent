@@ -170,6 +170,9 @@ class AgentRun(Base):
     stop_reason: Mapped[str | None] = mapped_column(String(40), nullable=True)
     # 實際經過的秒數（牆上時鐘，電腦睡眠的時間也算）。續跑、確認大綱後繼續時接著加，等使用者確認大綱的時間不算
     wall_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # 使用者判斷這份 AI 版可不可以直接交付（研究計劃 C-10）：yes 可以、partial 要小改、no 不行；None 還沒判斷
+    human_verdict: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    human_verdict_note: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     started_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)

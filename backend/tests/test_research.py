@@ -179,3 +179,71 @@ def test_store_prompts_setting_reaches_events(client, project):
     assert run["options"]["store_prompts"] is True
     ends = [e["data"] for e in run["events"] if e["type"] == "step_end"]
     assert all(d.get("messages") for d in ends if d.get("ok"))
+
+
+# --- C-10 文件層級的人工判斷 ---
+
+
+def test_set_and_clear_verdict(client, project):
+    run_id = wait_run(client, _run(client, _spec(client, project)["id"]))["id"]
+    resp = client.put(f"/api/agent/runs/{run_id}/verdict", json={"verdict": "partial", "note": " 狀態漏了退回 "})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["human_verdict"] == "partial"
+    assert resp.json()["human_verdict_note"] == "狀態漏了退回"
+    assert client.get(f"/api/agent/runs/{run_id}").json()["human_verdict"] == "partial"
+    cleared = client.put(f"/api/agent/runs/{run_id}/verdict", json={"verdict": None, "note": "x"}).json()
+    assert cleared["human_verdict"] is None and cleared["human_verdict_note"] == ""
+    bad = client.put(f"/api/agent/runs/{run_id}/verdict", json={"verdict": "maybe"})
+    assert bad.status_code == 422 and "能不能交付" in bad.json()["detail"]
+    assert client.put("/api/agent/runs/9999/verdict", json={"verdict": "yes"}).status_code == 404
+
+
+def test_verdict_only_for_succeeded_runs(client, project):
+    from conftest import wait_status
+
+    run_id = _run(client, _spec(client, project)["id"], plan_first=True)
+    wait_status(client, run_id, ("planned",))
+    resp = client.put(f"/api/agent/runs/{run_id}/verdict", json={"verdict": "yes"})
+    assert resp.status_code == 409
+
+
+def test_migration_adds_verdict_columns(cfg, client, project):
+    from sqlalchemy import create_engine, text
+
+    from sagent.migrations import migrate
+
+    wait_run(client, _run(client, _spec(client, project)["id"]))
+    engine = create_engine(f"sqlite:///{cfg.db_path.as_posix()}")
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE agent_runs DROP COLUMN human_verdict"))
+        conn.execute(text("ALTER TABLE agent_runs DROP COLUMN human_verdict_note"))
+    migrate(engine)
+    migrate(engine)
+    with engine.begin() as conn:
+        row = conn.execute(text("SELECT human_verdict, human_verdict_note FROM agent_runs")).one()
+    engine.dispose()
+    assert tuple(row) == (None, "")
+
+
+# --- C-11 人工覆核項目分組 ---
+
+
+def test_point_groups():
+    from sagent.agents.reviewer import ITEM_GAP_REASON, NUMBER_GAP_REASON
+    from sagent.services.reviews import point_group, with_groups
+
+    assert point_group({"reason": NUMBER_GAP_REASON, "source": "check"}) == "trace"
+    assert point_group({"reason": ITEM_GAP_REASON, "source": "check"}) == "trace"
+    assert point_group({"reason": "需求沒提到", "source": "llm"}) == "model"
+    assert point_group({"reason": "文件標註（待確認）", "source": "check"}) == "marked"
+    stored = {"final": {"review_points": [{"reason": "x", "source": "llm"}]}, "rounds": []}
+    shown = with_groups(stored)
+    assert shown["final"]["review_points"][0]["group"] == "model"
+    assert "group" not in stored["final"]["review_points"][0]  # 不改存的內容
+    assert with_groups(None) is None
+
+
+def test_run_detail_review_points_have_groups(client, project):
+    run = wait_run(client, _run(client, _spec(client, project)["id"], requirement="客戶可以下單，訂單 30 天內可以退貨。"))
+    points = run["review"]["final"]["review_points"]
+    assert points and all(p["group"] in ("trace", "model", "marked") for p in points)

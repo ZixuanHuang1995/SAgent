@@ -16,12 +16,47 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from ..agents.reviewer import ITEM_GAP_REASON, NUMBER_GAP_REASON
 from ..models import AgentRun
-from .errors import BadRequest, NotFound
+from .errors import BadRequest, Conflict, NotFound
+
+# 人工覆核項目的分組和排序（C-11）：需求追溯的缺口 → 模型列的 → 文件自己標的（假設）（待確認）
+POINT_GROUPS = ("trace", "model", "marked")
+VERDICTS = ("yes", "partial", "no")
 
 
 def final_review(run: AgentRun) -> dict[str, Any] | None:
     return (run.review or {}).get("final") or None
+
+
+def point_group(point: dict[str, Any]) -> str:
+    """trace：需求有、文件裡找不到（requirement_gaps）；model：審查模型列的；marked：文件自己標的。"""
+    if point.get("reason") in (NUMBER_GAP_REASON, ITEM_GAP_REASON):
+        return "trace"
+    return "model" if point.get("source") == "llm" else "marked"
+
+
+def with_groups(review: dict[str, Any] | None) -> dict[str, Any] | None:
+    """給畫面用：最後一次審查的人工覆核項目加上 group。不改資料庫裡存的內容，項目的位置也不變。"""
+    if not review or not isinstance(review.get("final"), dict):
+        return review
+    final = dict(review["final"])
+    final["review_points"] = [{**p, "group": point_group(p)} for p in final.get("review_points") or []]
+    return {**review, "final": final}
+
+
+def set_verdict(s: Session, run_id: int, verdict: str | None, note: str) -> AgentRun:
+    """使用者判斷這份 AI 版可不可以直接交付（C-10）。只有成功的工作有 AI 版可以判斷。"""
+    run = s.get(AgentRun, run_id)
+    if run is None:
+        raise NotFound("找不到這個 AI 工作")
+    if run.status != "succeeded":
+        raise Conflict("只有完成的 AI 工作可以判斷能不能交付")
+    if verdict is not None and verdict not in VERDICTS:
+        raise BadRequest("能不能交付只能選可以、要小改或不行")
+    run.human_verdict = verdict
+    run.human_verdict_note = note.strip() if verdict is not None else ""
+    return run
 
 
 def review_keys(review: dict[str, Any]) -> list[str]:

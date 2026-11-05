@@ -17,6 +17,11 @@
     uv run --project backend python scripts/speceval/judge.py --run-dir speceval-out/run-A --label-template labels.csv
     # 跟人工標註比對（CSV 欄位：task,trial,section,human；human 是 1 可交付、0 不可交付）
     uv run --project backend python scripts/speceval/judge.py --run-dir speceval-out/run-A --calibrate labels.csv
+    # 跟使用者在「審查」分頁標的「這份 AI 版可以直接交付嗎」比對（文件層級，C-10；資料庫只讀）
+    uv run --project backend python scripts/speceval/judge.py --calibrate --from-db data/sagent.db --model gemma3:12b
+
+--from-db：每份有人工判斷的 AI 版逐節評審，全部章節都判可交付才算 yes。人工的「要小改」算不可交付
+（不能直接交付），另外列出只看 yes、no 的結果。評審結果存在 --cache，下次不重跑。標了 30 份以上 κ 才有參考價值。
 """
 
 from __future__ import annotations
@@ -26,6 +31,7 @@ import asyncio
 import csv
 import json
 import re
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -38,6 +44,7 @@ sys.path.insert(0, str(HERE))
 from l1 import hollow_sections, split_sections  # noqa: E402
 
 from sagent.agents.llm import LLMResult, OllamaClient  # noqa: E402
+from sagent.agents.runner import requirement_with_answers  # noqa: E402
 
 CRITERIA = {
     "goal_met": "這一節寫到了這一節該寫的內容（看章節標題），不是空話或套話",
@@ -171,25 +178,127 @@ def calibrate(run_dir: Path, labels: Path) -> dict:
     }
 
 
+def runs_with_verdicts(db_path: Path) -> list[dict]:
+    """資料庫裡有人工判斷（human_verdict）的成功工作：需求（接上確認大綱的回答）、AI 版內容、判斷。資料庫只讀。"""
+    db = sqlite3.connect(f"file:{db_path.as_posix()}?mode=ro", uri=True)
+    try:
+        cols = {r[1] for r in db.execute("pragma table_info(agent_runs)")}
+        if "human_verdict" not in cols:
+            return []
+        rows = db.execute(
+            "select r.id, r.requirement, r.options, r.human_verdict, v.content from agent_runs r "
+            "join spec_versions v on v.spec_id = r.spec_id and v.version_no = r.result_version_no "
+            "where r.status = 'succeeded' and r.human_verdict is not null order by r.id"
+        ).fetchall()
+    finally:
+        db.close()
+    out = []
+    for run_id, requirement, options, verdict, content in rows:
+        opts = json.loads(options or "{}") if isinstance(options, str) else (options or {})
+        out.append(
+            {
+                "run_id": run_id,
+                "requirement": requirement_with_answers(requirement or "", opts),
+                "verdict": verdict,
+                "markdown": content or "",
+            }
+        )
+    return out
+
+
+def doc_verdict(sections: list[dict]) -> str:
+    """文件層級：全部章節可交付 = yes；有一節不行 = no；其他（有 unknown）= unknown。"""
+    vals = [s.get("verdict") for s in sections]
+    if vals and all(v == "yes" for v in vals):
+        return "yes"
+    return "no" if "no" in vals else "unknown"
+
+
+def _agreement(pairs: list[tuple[int, int]]) -> dict:
+    pos = [p for p in pairs if p[0] == 1]
+    neg = [p for p in pairs if p[0] == 0]
+    return {
+        "n": len(pairs),
+        "agreement": round(sum(a == b for a, b in pairs) / len(pairs), 3) if pairs else None,
+        "kappa": round(kappa(pairs), 3) if pairs else None,
+        "true_positive_rate": round(sum(b for _, b in pos) / len(pos), 3) if pos else None,
+        "true_negative_rate": round(sum(1 - b for _, b in neg) / len(neg), 3) if neg else None,
+    }
+
+
+async def calibrate_db(llm, model: str, db_path: Path, cache_path: Path) -> dict:
+    """人工的「能不能直接交付」跟 L2 評審比對（C-10）。評審結果存在 cache，模型一樣就不重跑。"""
+    cache = json.loads(cache_path.read_text(encoding="utf-8")) if cache_path.exists() else {}
+    runs = runs_with_verdicts(db_path)
+    for r in runs:
+        key = str(r["run_id"])
+        if cache.get(key, {}).get("model") == model:
+            continue
+        sections = await judge_doc(llm, r["requirement"], r["markdown"], adversarial=False)
+        cache[key] = {"model": model, "sections": sections, "verdict": doc_verdict(sections)}
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(json.dumps(cache, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"工作 {r['run_id']}：人工 {r['verdict']}，評審 {cache[key]['verdict']}", flush=True)
+    pairs, strict, unknown = [], [], 0
+    for r in runs:
+        judged = cache[str(r["run_id"])]["verdict"]
+        if judged == "unknown":
+            unknown += 1
+            continue
+        human = 1 if r["verdict"] == "yes" else 0  # 要小改也不能直接交付
+        pair = (human, 1 if judged == "yes" else 0)
+        pairs.append(pair)
+        if r["verdict"] != "partial":
+            strict.append(pair)
+    return {
+        "runs": len(runs),
+        "unknown": unknown,
+        "partial_as_no": sum(1 for r in runs if r["verdict"] == "partial"),
+        **_agreement(pairs),
+        "without_partial": _agreement(strict),
+    }
+
+
 async def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser()
-    ap.add_argument("--run-dir", type=Path, required=True)
+    ap.add_argument("--run-dir", type=Path, help="run_suite.py 的結果目錄（--from-db 時不用）")
     ap.add_argument("--tasks", type=Path, default=Path("speceval/tasks"))
     ap.add_argument("--model", default="gemma3:12b", help="評審模型，要跟寫文件的模型不同")
     ap.add_argument("--ollama", default="http://127.0.0.1:11434")
     ap.add_argument("--adversarial", action="store_true")
     ap.add_argument("--fake", action="store_true")
-    ap.add_argument("--calibrate", type=Path)
+    ap.add_argument(
+        "--calibrate",
+        nargs="?",
+        const="",
+        help="跟人工標註比對：給 CSV 檔；配合 --from-db 時不用給檔案",
+    )
+    ap.add_argument("--from-db", type=Path, help="SAgent 的資料庫（只讀），比對使用者標的「能不能直接交付」（C-10）")
+    ap.add_argument("--cache", type=Path, default=Path("speceval-out/judge-db.json"), help="--from-db 的評審結果暫存")
     ap.add_argument("--label-template", type=Path, help="抽章節產生人工標註用的 CSV")
     ap.add_argument("--share", type=float, default=0.2)
     args = ap.parse_args()
+    if args.calibrate is not None and args.from_db:
+        llm = FakeJudge() if args.fake else OllamaClient(args.ollama, args.model, think=False)
+        try:
+            result = await calibrate_db(llm, "fake" if args.fake else args.model, args.from_db, args.cache)
+        finally:
+            await llm.close()
+        print(json.dumps(result, ensure_ascii=False, indent=1))
+        if result["runs"] < 30:
+            print(f"只有 {result['runs']} 份有人工判斷，標到 30 份以上 κ 才有參考價值")
+        return 0
+    if args.run_dir is None:
+        ap.error("要給 --run-dir（或 --calibrate --from-db）")
     if args.label_template:
         n = label_template(args.run_dir, args.label_template, args.share)
         print(f"抽了 {n} 節：{args.label_template}（human 欄填 1 可交付、0 不可交付，用 Excel 開要選 UTF-8）")
         return 0
-    if args.calibrate:
-        print(json.dumps(calibrate(args.run_dir, args.calibrate), ensure_ascii=False, indent=1))
+    if args.calibrate is not None:
+        if not args.calibrate:
+            ap.error("--calibrate 要給人工標註的 CSV 檔，或加 --from-db")
+        print(json.dumps(calibrate(args.run_dir, Path(args.calibrate)), ensure_ascii=False, indent=1))
         return 0
     llm = FakeJudge() if args.fake else OllamaClient(args.ollama, args.model, think=False)
     field = "l2_adversarial" if args.adversarial else "l2"

@@ -270,6 +270,9 @@ class RunOut(ORMModel):
     # 為什麼停下來、實際經過的秒數（C-06）。舊紀錄是 None
     stop_reason: str | None = None
     wall_seconds: float | None = None
+    # 使用者判斷這份 AI 版可不可以直接交付（C-10）：yes、partial、no；None 還沒判斷
+    human_verdict: str | None = None
+    human_verdict_note: str = ""
     spec_title: str = ""
     queue_position: int | None = None
 
@@ -290,6 +293,13 @@ class RunDetail(RunOut):
     # 處理過的項目怎麼處理的：fixed 已處理、false 誤報、skip 略過（舊資料沒有記錄的當成 fixed）
     review_labels: dict[str, str] = {}
     events: list[EventOut]
+
+
+class VerdictIn(BaseModel):
+    """這份 AI 版可以直接交付嗎（C-10）。verdict 送 null 表示清掉判斷。"""
+
+    verdict: Literal["yes", "partial", "no"] | None
+    note: str = Field("", max_length=500)
 
 
 class ReviewCheckIn(BaseModel):

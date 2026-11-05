@@ -6,6 +6,7 @@ import { formatDuration, formatTime, STOP_REASON, UML_SYNTAX } from '../format'
 import { useRunStream } from '../hooks/useRunStream'
 import { keys, useTemplates } from '../queries'
 import { RunProgress } from './RunProgress'
+import { RunVerdict } from './RunVerdict'
 import { Modal, Spinner } from './ui'
 
 export function RunDetailModal(props: {
@@ -77,6 +78,12 @@ export function RunDetailModal(props: {
                 <dd>{formatTime(run.created_at)}</dd>
               </dl>
             </div>
+            {run.status === 'succeeded' && (
+              <div className="card">
+                <div className="card-title">人工判斷</div>
+                <RunVerdict run={run} />
+              </div>
+            )}
             {run.error && <div className="error-box">{run.error}</div>}
           </aside>
           <div className="run-detail-main">

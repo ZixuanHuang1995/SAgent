@@ -249,6 +249,9 @@ export interface Run {
   // 為什麼停下來、實際經過的秒數（含電腦睡眠）。舊的工作是 null
   stop_reason: string | null
   wall_seconds: number | null
+  // 使用者判斷這份 AI 版可不可以直接交付；null 還沒判斷
+  human_verdict: Verdict | null
+  human_verdict_note: string
   spec_title: string
   queue_position: number | null
 }
@@ -312,7 +315,14 @@ export interface ReviewPoint {
   item: string
   reason: string
   source: 'check' | 'llm'
+  // 分組（後端加的，只有最後一次審查有）：trace 需求追溯、model 審查模型列的、marked 文件自己標的
+  group?: ReviewPointGroup
 }
+
+export type ReviewPointGroup = 'trace' | 'model' | 'marked'
+
+/** 這份 AI 版可以直接交付嗎：可以、要小改、不行 */
+export type Verdict = 'yes' | 'partial' | 'no'
 
 /** 審查結果。issues 是格式、邏輯錯誤，會交給 Writer 修正 */
 export interface ReviewOut {
@@ -528,6 +538,8 @@ export const api = {
       done,
       label,
     }),
+  setVerdict: (id: number, verdict: Verdict | null, note: string) =>
+    request<Run>('PUT', `/api/agent/runs/${id}/verdict`, { verdict, note }),
   runEventsUrl: (id: number) => `/api/agent/runs/${id}/events`,
 
   // 系統

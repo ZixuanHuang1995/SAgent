@@ -318,8 +318,8 @@ _FACT_RE = re.compile(
     r"(?<![\d/.-])(\d+(?:\.\d+)?)\s*(個工作天|工作天|個月|小時|分鐘|天|週|年|次|張|件|筆|MB|GB|KB|%|秒|字元)?(?![\d/])"
 )
 MAX_GAP_POINTS = 5
-_NUMBER_GAP_REASON = "文件裡找不到這個數字，要確認有沒有漏寫或寫錯"
-_ITEM_GAP_REASON = "文件裡幾乎找不到對應的內容，要確認有沒有漏寫"
+NUMBER_GAP_REASON = "文件裡找不到這個數字，要確認有沒有漏寫或寫錯"
+ITEM_GAP_REASON = "文件裡幾乎找不到對應的內容，要確認有沒有漏寫"
 
 
 def requirement_items(requirement: str) -> list[str]:
@@ -361,11 +361,11 @@ def requirement_gaps(requirement: str, draft: Draft) -> list[ReviewPoint]:
         if re.search(rf"(?<![\d.]){re.escape(number)}(?![\d.])[^\d]{{0,4}}{re.escape(unit[-1:])}", flat):
             continue
         seen.add(key)
-        points.append(ReviewPoint(None, f"需求提到「{m.group(0).strip()}」", _NUMBER_GAP_REASON, "check"))
+        points.append(ReviewPoint(None, f"需求提到「{m.group(0).strip()}」", NUMBER_GAP_REASON, "check"))
     for item in requirement_items(requirement):
         grams = _grams(item)
         if grams and len(grams & doc_grams) / len(grams) < 0.3:
-            points.append(ReviewPoint(None, f"需求：{item[:80]}", _ITEM_GAP_REASON, "check"))
+            points.append(ReviewPoint(None, f"需求：{item[:80]}", ITEM_GAP_REASON, "check"))
     return points[:MAX_GAP_POINTS]
 
 

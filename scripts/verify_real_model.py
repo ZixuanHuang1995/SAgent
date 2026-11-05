@@ -29,7 +29,7 @@ import httpx
 from fastapi.testclient import TestClient
 
 from sagent.agents.prompts import ISSUE_KINDS
-from sagent.agents.reviewer import _NUMBER_GAP_REASON, requirement_gaps
+from sagent.agents.reviewer import NUMBER_GAP_REASON, requirement_gaps
 from sagent.agents.types import OPEN_QUESTIONS_HEADING, Draft, SectionDraft
 from sagent.config import load_config
 from sagent.main import create_app
@@ -273,7 +273,7 @@ class Verifier:
         review = (run.get("review") or {}).get("final") or {}
         point_items = [p.get("item", "") for p in review.get("review_points") or []]
         draft = Draft([SectionDraft(f"S{i}", s.heading, s.body) for i, s in enumerate(body_secs, start=1)])
-        gaps = [p.item for p in requirement_gaps(REQUIREMENT, draft) if p.reason == _NUMBER_GAP_REASON]
+        gaps = [p.item for p in requirement_gaps(REQUIREMENT, draft) if p.reason == NUMBER_GAP_REASON]
         not_listed = [g for g in gaps if g not in point_items]
         self.must(
             "D4 文件漏掉的數字列進人工覆核",

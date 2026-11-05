@@ -50,7 +50,7 @@ erDiagram
 | specs | Spec 文件，記錄目前最新版本號 `head_version_no`、狀態、是否封存，以及從哪一份 Spec 轉過來的 `source_spec_id`（例如構想 → 功能規格） |
 | spec_versions | 每個版本的完整內容，以及跟前一版比較新增、刪除幾行。建立後不再修改，只有「標籤」可以改 |
 | baselines / baseline_items | 基準版本：某個時間點每份 Spec 用的是哪一版 |
-| agent_runs | AI 工作：需求、選項、大綱、審查結果、用量、結果版本；`review_checked` 記使用者標成已處理的審查項目，`review_labels` 記怎麼處理的（`fixed` 已處理、`false` 誤報、`skip` 略過）；`checkpoint` 是執行中的檢查點（見 4.5 節），工作結束就清掉（超過時間上限時保留）。`stop_reason` 是為什麼停下來、`wall_seconds` 是實際經過的秒數（見 4.5 節）。選項裡的 `prompt_version` 記這次用的提示詞、範本、程式版本，`environment` 記 Ollama 版本和模型 digest |
+| agent_runs | AI 工作：需求、選項、大綱、審查結果、用量、結果版本；`review_checked` 記使用者標成已處理的審查項目，`review_labels` 記怎麼處理的（`fixed` 已處理、`false` 誤報、`skip` 略過）；`checkpoint` 是執行中的檢查點（見 4.5 節），工作結束就清掉（超過時間上限時保留）。`stop_reason` 是為什麼停下來、`wall_seconds` 是實際經過的秒數（見 4.5 節）；`human_verdict`、`human_verdict_note` 是使用者判斷這份 AI 版能不能直接交付（見 4.8 節）。選項裡的 `prompt_version` 記這次用的提示詞、範本、程式版本，`environment` 記 Ollama 版本和模型 digest |
 | agent_events | AI 工作的步驟紀錄（開始、結束、警告），可重播 |
 | settings | 畫面上可調整的設定 |
 
@@ -281,6 +281,8 @@ Reviewer 只做兩件事，不評論寫得好不好、完不完整，也不打�
 - 修訂後的再審查如果模型沒給出可用的結果，修改過的章節上一輪的錯誤改列 `review_points`（註明沒有重新審查），不會因為少了模型意見就看起來像通過。
 - 各種文件（規格、建議、構想、技術決策、演算法、實驗）共用 `reviewer_system()`，差別只在 `_REVIEW_STYLE_NOTE` 的一行說明。
 - 處理進度（`services/reviews.py`）：每份 Spec 看最近一次成功的 AI 工作的最後一次審查。使用者在 Spec 頁的「審查」分頁逐項標成已處理，存在 `agent_runs.review_checked`，項目代號是在 `issues`、`review_points` 裡的位置（`issue:0`、`point:3`），審查結果存好後不會再改，所以位置固定。處理過的項目另外記處理結果（`agent_runs.review_labels`，`PUT …/review-checks` 帶 `label`）：`fixed` 已處理（確實有問題）、`false` 誤報（審查說錯了）、`skip` 略過；三種都算處理過，待處理數量的算法不變。沒有 `label` 的請求和舊資料都當成 `fixed`。`scripts/analyze_runs.py` 用這些標記算 Reviewer 的準確度（已處理 ÷（已處理＋誤報），依程式檢查、模型和錯誤類型分開），這是之後改提示詞、優化時唯一不靠模型的標註。專案清單（`GET /api/projects/{id}`）和單一 Spec 的 `review` 欄位帶項目總數和沒處理的數量，畫面上的「待處理 N」用這個（不叫「待確認」，免得跟文件裡標「待確認」的地方搞混）。
+- 人工覆核項目的分組（研究計劃 C-11）：`GET /api/agent/runs/{id}` 回傳時，最後一次審查的每個 `review_points` 項目加上 `group`（`services/reviews.py` 的 `with_groups()`，不改資料庫裡存的內容，位置也不變）：`trace` 需求追溯（`requirement_gaps()` 產生的，看 `reason`）、`model` 審查模型列的（`source` 是 `llm`）、`marked` 文件自己標的。畫面照這個順序排，文件自己標的預設摺疊，每一組可以全部標成已處理（前端一個一個送，避免同時寫同一列互相蓋掉）。`analyze_runs.py` 的審查準確度也把需求追溯分開算。
+- 文件層級的人工判斷（研究計劃 C-10）：`agent_runs.human_verdict`（`yes` 可以直接交付、`partial` 要小改、`no` 不行，NULL 還沒判斷）和 `human_verdict_note`（一句理由）。`PUT /api/agent/runs/{id}/verdict` 設定，只有成功的工作可以標（其他回 409），`verdict` 送 null 是清掉。畫面在「審查」分頁最上面和 AI 工作詳細內容。`scripts/speceval/export_traces.py` 匯出這兩欄；`judge.py --calibrate --from-db` 拿它們跟 L2 評審比對：評審逐節判斷，全部章節可交付才算 yes，人工的「要小改」算不能直接交付，算一致率和 Cohen's κ。
 
 ### 4.9 技術決策、演算法設計和實驗設計文件
 
@@ -380,6 +382,7 @@ Reviewer 只做兩件事，不評論寫得好不好、完不完整，也不打�
 | GET | `/api/agent/runs/{id}/events` | 即時進度（SSE） |
 | POST | `/api/agent/runs/{id}/continue` | 先確認大綱的工作：送出回答、名詞表、要點後繼續撰寫 |
 | PUT | `/api/agent/runs/{id}/review-checks` | 把審查的一個項目標成已處理或取消（`{key, done, label}`，`label` 是 `fixed`、`false`、`skip`） |
+| PUT | `/api/agent/runs/{id}/verdict` | 這份 AI 版可以直接交付嗎（`{verdict, note}`，`verdict` 是 `yes`、`partial`、`no` 或 null） |
 | POST | `/api/agent/runs/{id}/cancel` | 取消（排隊中、執行中、等待確認大綱） |
 | GET/PUT | `/api/settings` | 設定。Ollama 網址要是 http:// 或 https:// 開頭 |
 | POST | `/api/ollama/check` | 設定頁的「測試連線」：用還沒存檔的網址查 Ollama 版本和模型清單，不改設定 |

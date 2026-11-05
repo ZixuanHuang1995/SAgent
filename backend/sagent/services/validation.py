@@ -19,6 +19,8 @@ FIELD_LABELS = {
     "max_run_minutes": "整個工作的時間上限",
     "seed": "亂數種子",
     "store_prompts": "儲存提示詞",
+    "verdict": "能不能交付",
+    "note": "理由",
     "uml_syntax": "UML 圖語法",
     "diagrams": "畫圖",
     "title": "標題",
