@@ -177,6 +177,7 @@ sequenceDiagram
   - 伺服器正常關閉時，執行中的工作維持 `running`（原本會被當成使用者取消），下次啟動續跑。
 - AI 工作執行期間讓電腦保持喚醒（`services/power.py`）：Windows 的 power request（`PowerCreateRequest`），同時要求系統保持執行和螢幕保持亮著，工作結束（完成、失敗、取消、停在確認大綱、伺服器關閉）就放開。這台筆電是新式待命（S0 低電源閒置），螢幕因為閒置關掉時就進入待命、程式整個暫停，只要求系統保持執行擋不住；2026-11-04 晚上的可靠度評估有兩份因此從 16 分鐘拖到 280 分鐘以上。闔上螢幕、按電源鍵還是會待命。要求附上原因「SAgent：AI 工作執行中」，系統管理員用 `powercfg /requests` 看得到。不是 Windows 或呼叫失敗時什麼都不做，不影響 AI 工作；`SAGENT_KEEP_AWAKE=0` 關掉。`eval_reliability.py`、`run_pipeline.py`、`review_consistency.py` 直接呼叫 AI 流程，也一樣保持喚醒。
 - 每個工作開始時在選項記下 `prompt_version`（`agents/versioning.py`）：`prompts.py` 加 `diagram_kinds.py` 的雜湊、這次用的範本內容的雜湊、git commit（`backend/sagent` 有沒 commit 的修改時加「+」）。改了提示詞之後，用 `analyze_runs.py --group-by prompt` 比較前後的時間和錯誤數。續跑時程式如果改過，另外記在 `prompt_version_resumed`。
+- 同時記下執行環境 `environment`（研究計劃 C-05，`llm.py` 的 `ollama_environment()`）：Ollama 版本、模型 digest、量化格式、參數量、模型家族。同一個模型名稱，`ollama pull` 之後 digest 會變，結果也可能不一樣，所以 `analyze_runs.py --group-by prompt` 依提示詞版本加上模型和 digest 分組。審查用另一個模型時，那個模型的環境放在 `environment.reviewer`。續跑時環境變了，另外記在 `environment_resumed`。連不到 Ollama 或是假模型時存 `{}`，不讓工作失敗。SpecEval 的 `run_suite.py` 用同一個函式記 manifest。
 
 ### 先確認大綱（撰寫模式）
 

@@ -71,6 +71,18 @@ def requirement_with_answers(requirement: str, options: dict[str, Any]) -> str:
     )
 
 
+async def _environment(llm: LLMClient) -> dict[str, Any]:
+    """模型的執行環境（Ollama 版本、digest、量化）。沒有這個方法的模型（測試用的）回 {}。"""
+    get = getattr(llm, "environment", None)
+    if get is None:
+        return {}
+    try:
+        return dict(await get())
+    except Exception:  # noqa: BLE001  記錄環境失敗不能讓工作失敗
+        log.warning("讀取模型環境失敗", exc_info=True)
+        return {}
+
+
 def _optional_int(value: Any) -> int | None:
     """沒有值表示不限制（例如圖的張數）。舊的 AI 工作存的是數字，照樣用。"""
     return None if value is None else int(value)
@@ -448,6 +460,10 @@ class RunManager:
             review_model = str(opts.get("reviewer_model") or "").strip()
             if review_model and review_model != model:
                 reviewer_llm = self.llm_factory(review_model, opts)
+            env = await _environment(llm)
+            if reviewer_llm is not None and (reviewer_env := await _environment(reviewer_llm)):
+                env["reviewer"] = reviewer_env
+            await self._in_thread(self._save_environment, run_id, env, checkpoint is not None)
             pipeline = SpecPipeline(
                 llm,
                 emitter,
@@ -540,6 +556,19 @@ class RunManager:
                 await llm.close()
             if reviewer_llm is not None:
                 await reviewer_llm.close()
+
+    def _save_environment(self, run_id: int, env: dict[str, Any], resumed: bool) -> None:
+        """記下 Ollama 版本、模型 digest 和量化（C-05）。跟 prompt_version 一樣：續跑時變了另外記一份。"""
+        with session_scope(self.session_factory) as s:
+            run = s.get(AgentRun, run_id)
+            if run is None:
+                return
+            opts = dict(run.options or {})
+            if not resumed or "environment" not in opts:
+                opts["environment"] = env
+            elif opts["environment"] != env:
+                opts["environment_resumed"] = env
+            run.options = opts
 
     def _save_planned(self, run_id: int, plan: Plan, pipeline: SpecPipeline) -> None:
         with session_scope(self.session_factory) as s:

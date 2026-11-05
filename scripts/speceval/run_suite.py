@@ -41,7 +41,7 @@ from l1 import _MARK_RE, score  # noqa: E402
 from sagent.agents.base import ListEmitter  # noqa: E402
 from sagent.agents.doc_templates import load_templates  # noqa: E402
 from sagent.agents.fake_llm import FakeLLM  # noqa: E402
-from sagent.agents.llm import OllamaClient  # noqa: E402
+from sagent.agents.llm import OllamaClient, ollama_environment  # noqa: E402
 from sagent.agents.pipeline import SpecPipeline  # noqa: E402
 from sagent.agents.types import PipelineOptions, RunInput  # noqa: E402
 from sagent.agents.versioning import prompt_version  # noqa: E402
@@ -60,18 +60,11 @@ async def manifest(args) -> dict:
     }
     if args.fake:
         return info
-    async with httpx.AsyncClient(base_url=args.ollama, timeout=10) as c:
+    # 跟 SAgent 的 AI 工作記在 options.environment 的是同一份（C-05）
+    async with httpx.AsyncClient(base_url=args.ollama.rstrip("/"), timeout=10) as c:
         try:
-            info["ollama_version"] = (await c.get("/api/version")).json().get("version")
-            tags = (await c.get("/api/tags")).json().get("models", [])
-            tag = next((m for m in tags if m.get("name") == args.model or m.get("model") == args.model), {})
-            info["model_digest"] = tag.get("digest")
-            show = (await c.post("/api/show", json={"model": args.model})).json()
-            details = show.get("details", {})
-            info["quantization"] = details.get("quantization_level")
-            info["parameter_size"] = details.get("parameter_size")
-            info["family"] = details.get("family")
-        except httpx.HTTPError as exc:
+            info |= await ollama_environment(c, args.model)
+        except (httpx.HTTPError, ValueError) as exc:
             info["ollama_error"] = str(exc)
     return info
 

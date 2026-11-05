@@ -160,3 +160,48 @@ def test_missing_model():
 
     with pytest.raises(LLMError, match="ollama pull nope"):
         asyncio.run(go())
+
+
+def test_environment_records_version_digest_and_quantization():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/version":
+            return httpx.Response(200, json={"version": "0.12.6"})
+        if request.url.path == "/api/tags":
+            models = [
+                {"name": "other:1b", "model": "other:1b", "digest": "zzz"},
+                {"name": "qwen3:8b", "model": "qwen3:8b", "digest": "sha256abc"},
+            ]
+            return httpx.Response(200, json={"models": models})
+        if request.url.path == "/api/show":
+            assert json.loads(request.content) == {"model": "qwen3:8b"}
+            details = {"quantization_level": "Q4_K_M", "parameter_size": "8.2B", "family": "qwen3"}
+            return httpx.Response(200, json={"details": details, "capabilities": []})
+        return httpx.Response(404)
+
+    client = OllamaClient("http://x", "qwen3:8b", transport=httpx.MockTransport(handler))
+
+    async def go():
+        try:
+            return await client.environment()
+        finally:
+            await client.close()
+
+    assert asyncio.run(go()) == {
+        "ollama_version": "0.12.6",
+        "digest": "sha256abc",
+        "quantization_level": "Q4_K_M",
+        "parameter_size": "8.2B",
+        "family": "qwen3",
+    }
+
+
+def test_environment_is_empty_when_ollama_fails():
+    client = OllamaClient("http://x", "m", transport=httpx.MockTransport(lambda r: httpx.Response(500)))
+
+    async def go():
+        try:
+            return await client.environment()
+        finally:
+            await client.close()
+
+    assert asyncio.run(go()) == {}

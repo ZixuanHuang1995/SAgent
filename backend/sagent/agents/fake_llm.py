@@ -42,6 +42,10 @@ class FakeLLM:
     async def close(self) -> None:
         return None
 
+    async def environment(self) -> dict[str, Any]:
+        """假模型沒有 Ollama 版本和 digest（研究計劃 C-05）。"""
+        return {}
+
     async def chat(
         self,
         messages: list[dict[str, str]],

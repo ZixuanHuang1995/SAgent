@@ -317,21 +317,27 @@ def main() -> int:
     return 0
 
 
-def _version_label(options_json: str | None) -> str:
-    v = (json.loads(options_json or "{}") or {}).get("prompt_version") or {}
-    if not v:
-        return "（沒有記錄，舊的工作）"
-    return f"提示詞 {v.get('prompts', '')[:7]}、範本 {v.get('template', '')[:7]}、程式 {v.get('code') or '?'}"
+def _version_label(options_json: str | None, model: str = "") -> str:
+    opts = json.loads(options_json or "{}") or {}
+    v = opts.get("prompt_version") or {}
+    label = (
+        f"提示詞 {v.get('prompts', '')[:7]}、範本 {v.get('template', '')[:7]}、程式 {v.get('code') or '?'}"
+        if v
+        else "（沒有記錄，舊的工作）"
+    )
+    # 同一個模型名稱，ollama pull 之後 digest 會變，結果也可能不一樣，要分開算（C-05）
+    digest = (opts.get("environment") or {}).get("digest", "")
+    return f"{label}｜{model or '?'} {digest[:12] if digest else '（沒有 digest）'}"
 
 
 def _print_by_prompt(runs: list, run_minutes: Counter, rounds: dict[int, list[dict]]) -> None:
-    """改提示詞前後的比較。同一個版本的工作放在一起，只算成功的。"""
+    """改提示詞前後的比較。同一個版本、同一個模型 digest 的工作放在一起，只算成功的。"""
     groups: dict[str, list[int]] = defaultdict(list)
-    for run_id, status, *_rest, options in runs:
+    for run_id, status, model, *_rest, options in runs:
         if status == "succeeded":
-            groups[_version_label(options)].append(run_id)
-    print("\n依提示詞版本：")
-    print("  份數  平均分鐘  第 1 輪錯誤  最後錯誤  版本")
+            groups[_version_label(options, model)].append(run_id)
+    print("\n依提示詞版本和模型（digest 不同分開算）：")
+    print("  份數  平均分鐘  第 1 輪錯誤  最後錯誤  版本｜模型 digest")
     for label, ids in groups.items():
         rs = [rounds[i] for i in ids if rounds.get(i)]
         first = sum(len(_errors(r[0])) for r in rs) / max(len(rs), 1)
