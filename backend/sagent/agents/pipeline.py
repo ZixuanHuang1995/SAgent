@@ -52,13 +52,23 @@ def assemble(inp: RunInput, plan: Plan, draft: Draft) -> str:
 
 
 class SpecPipeline:
-    def __init__(self, llm: LLMClient, emitter: Emitter, stats: dict[str, AgentStats] | None = None):
-        """stats：先確認大綱的工作繼續撰寫時，帶入規劃階段的用量，最後的統計才完整。"""
+    def __init__(
+        self,
+        llm: LLMClient,
+        emitter: Emitter,
+        stats: dict[str, AgentStats] | None = None,
+        reviewer_llm: LLMClient | None = None,
+    ):
+        """stats：先確認大綱的工作繼續撰寫時，帶入規劃階段的用量，最後的統計才完整。
+
+        reviewer_llm：審查用的模型（C-03）。沒給就跟 Planner、Writer 用同一個。
+        同一個模型審查自己寫的文件，容易偏好自己的輸出（第 15 堂：self-enhancement bias）。
+        """
         self.emitter = emitter
         self.stats: dict[str, AgentStats] = stats if stats is not None else {}
         self.planner = Planner(llm, emitter, self.stats)
         self.writer = Writer(llm, emitter, self.stats)
-        self.reviewer = Reviewer(llm, emitter, self.stats)
+        self.reviewer = Reviewer(reviewer_llm or llm, emitter, self.stats)
 
     @staticmethod
     def _apply_template_limits(inp: RunInput) -> None:

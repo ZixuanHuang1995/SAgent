@@ -398,6 +398,7 @@ class RunManager:
     async def _execute(self, run_id: int) -> None:
         emitter = RunEmitter(self, run_id)
         llm: LLMClient | None = None
+        reviewer_llm: LLMClient | None = None
         pipeline: SpecPipeline | None = None
         awake = False
         try:
@@ -443,7 +444,16 @@ class RunManager:
                 await emitter.emit("log", "system", "文件目前沒有內容，改用撰寫模式", {"level": "info"})
 
             llm = self.llm_factory(model, opts)
-            pipeline = SpecPipeline(llm, emitter, {k: AgentStats(**v) for k, v in loaded.saved_stats.items()})
+            # C-03：設定了不同的審查模型時，Reviewer 用另一個模型（工作建立時記在 options）
+            review_model = str(opts.get("reviewer_model") or "").strip()
+            if review_model and review_model != model:
+                reviewer_llm = self.llm_factory(review_model, opts)
+            pipeline = SpecPipeline(
+                llm,
+                emitter,
+                {k: AgentStats(**v) for k, v in loaded.saved_stats.items()},
+                reviewer_llm=reviewer_llm,
+            )
             if plan is None and opts.get("plan_first") and inp.mode == "draft":
                 plan = await pipeline.plan_only(inp)
                 await self._in_thread(self._save_planned, run_id, plan, pipeline)
@@ -528,6 +538,8 @@ class RunManager:
                 self.keep_awake.release()
             if llm is not None:
                 await llm.close()
+            if reviewer_llm is not None:
+                await reviewer_llm.close()
 
     def _save_planned(self, run_id: int, plan: Plan, pipeline: SpecPipeline) -> None:
         with session_scope(self.session_factory) as s:

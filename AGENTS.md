@@ -30,6 +30,7 @@
 | AI 版被人改了多少（逐節修改幅度、最常被大改的章節） | `uv run --project backend python scripts/analyze_edits.py --db data/sagent.db`（不跑模型，資料庫只讀；可加 `--doc-type`、`--top`） |
 | 真模型可靠度（跨次一致、換句話說、資訊不夠） | `uv run --project backend python scripts/eval_reliability.py --requirement-file 需求.txt --times 3 --rephrased-file 換句話說.txt --sparse-file 資訊不夠.txt --out-dir 輸出資料夾`（每次約 20 分鐘，先問使用者；加 `--fake` 只檢查流程；一份失敗會接著跑下一份，每跑完一份就更新 `summary.json`） |
 | 審查一致性（同一份文件審查好幾次，比較錯誤重疊多少） | `uv run --project backend python scripts/review_consistency.py --db data/sagent.db --run-id 6 --times 3`（資料庫只讀；需求會接上當時確認大綱的回答，名詞表照當時的大綱；功能規格書一次審查約 10 分鐘；自訂範本的文件加 `--templates-dir`） |
+| SpecEval 對照組（oracle 和 trivial 代理在程式檢查上的通過率，不跑模型，約 1 分鐘） | `uv run --project backend python scripts/speceval/controls.py --out speceval-out/controls.json`。改了 `static_checks()` 或審查提示詞之後要跑：6 種 trivial 代理都不能通過，22 份 oracle 都要通過。其他 SpecEval 腳本（`run_suite.py`、`judge.py` 等）的用法寫在各檔案開頭，真模型的先問使用者 |
 | 真模型驗證筆記的建議（D2、D4、D8、D11、D13、D14、D17 等） | `uv run --project backend python scripts/verify_real_model.py`（暫存資料夾、三節小範本，約 15 分鐘，先問使用者；加 `--fake` 幾秒鐘只檢查流程）。計畫和結果見 `docs/real-model-test-plan.md` |
 
 ## 改完程式要做的檢查
@@ -101,7 +102,7 @@
 - 不要用 LangChain 之類的框架，代理是自己實作的。
 - 文件的寫作規則有六種，由範本的 `style` 決定：`spec` 規格文件（只寫需求有的內容）、`advice` 建議類文件（可以提出需求沒寫的做法）、`idea` 構想文件（不寫細節規格，有使用者故事和粗略的驗收條件，只有「可能的做法」一節可以提建議）、`decision` 技術決策文件（限制和評估標準照需求，方案可以由 AI 提出，不能編造數字）、`algorithm` 演算法設計文件（問題的事實照需求，解法、虛擬碼由 AI 設計）、`experiment` 實驗設計文件（評估對象和判斷標準照需求，實驗方法由 AI 設計，不能寫實驗結果）。每種的寫作規則不同，見 `docs/architecture.md` 第 4.6、4.7、4.9 節。改其中一種的寫作規則時，不要動到其他種。內建範本已經沒有 `experiment`，但自訂範本還能用，程式和測試都要保留。
 - 內建範本有 9 個，`order` 1～9 就是寫 Spec 的順序：構想提案、UI/UX 設計建議（類型 Concept）、功能規格書、測試計畫、技術決策、系統架構設計、資料庫設計、演算法設計、變更需求說明。移除的 5 個（使用案例規格、SDD 五節、API 規格、實驗設計、變更紀錄）備份在 `backup/doc_templates/`，測試用 `conftest.py` 的 `BACKUP_TEMPLATES`、`install_backup_template()` 讀它們，不要刪。
-- Reviewer 只找格式、邏輯錯誤（交給 Writer 修）和需要人工覆核的地方（只列給使用者），不評論完整度、不打分數。格式問題盡量用程式檢查。各種文件共用審查提示詞 `reviewer_system()`，見 `docs/architecture.md` 第 4.8 節。
+- Reviewer 只找格式、邏輯錯誤（交給 Writer 修）和需要人工覆核的地方（只列給使用者），不評論完整度、不打分數。格式問題盡量用程式檢查；空洞和照抄由程式檢查（`static_checks()`），不要改成叫模型判斷。審查可以用另一個模型（`reviewer_model`）。各種文件共用審查提示詞 `reviewer_system()`，見 `docs/architecture.md` 第 4.8 節。
 - 新增 Spec 時先選類型（範本的 `category`：idea、feature、design、algorithm、change），類型清單在 `doc_templates.py` 的 `CATEGORIES`。新增內建範本要寫 `category` 和 `order`。同一類型裡範本照 `order` 排，第一個是新增時的預設。
 - 範本章節要編號時寫 `ids: FR`，不要把「編號 FR-01」寫在 `goal` 裡（舊寫法還認得，但內建範本不要用）。內建範本都設 `fixed_sections: true`，章節名稱、順序、目標由程式照範本套回去（Planner 不用寫 goal）；不固定的寫法留給自訂範本，測試用 `test_pipeline.py` 的 `free_input()`。見 `docs/architecture.md` 第 4.10 節。
 - 改了範本的章節，`scripts/demo_content/` 對應的內容檔也要跟著改，再跑 `check_demo_content.py`；章節固定的範本，內容檔少一節就會失敗。

@@ -308,6 +308,21 @@ export function SettingsPage() {
               ))}
             </select>
           </Field>
+          <Field
+            label="審查模型"
+            error={form.reviewer_model && modelList && !fake && !modelList.some((m) => m.name === form.reviewer_model) ? '這個 Ollama 沒有這個模型，請換一個，或先用 ollama pull 下載' : undefined}
+            hint="Reviewer 用的模型。選「跟預設模型相同」就跟撰寫用同一個；用不同的模型審查，比較不會偏好自己寫的內容，但兩個模型都要載入，記憶體要夠。"
+          >
+            <select className="input" value={form.reviewer_model} onChange={(e) => set('reviewer_model', e.target.value)}>
+              <option value="">跟預設模型相同</option>
+              {form.reviewer_model && !modelList?.some((m) => m.name === form.reviewer_model) && <option value={form.reviewer_model}>{form.reviewer_model}</option>}
+              {modelList?.map((m) => (
+                <option key={m.name} value={m.name}>
+                  {modelLabel(m)}
+                </option>
+              ))}
+            </select>
+          </Field>
           <div className="form-row">
             <Field label="溫度（0～1.5）" error={errors.temperature} hint="越低越穩定，越高越有變化">
               <input

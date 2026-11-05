@@ -18,6 +18,8 @@ _KEY = "app"
 class AppSettings(BaseModel):
     ollama_url: str = "http://127.0.0.1:11434"
     default_model: str = "qwen3.6:35b-a3b"
+    # 審查用的模型。空白 = 跟撰寫用同一個。用不同的模型審查，比較不會偏好自己寫的內容
+    reviewer_model: str = ""
     temperature: float = Field(0.4, ge=0, le=1.5)
     # 審查後最多修訂幾輪。0 = 只審查不修訂
     max_revisions: int = Field(2, ge=0, le=3)
@@ -32,6 +34,7 @@ class AppSettings(BaseModel):
 class SettingsPatch(BaseModel):
     ollama_url: str | None = None
     default_model: str | None = None
+    reviewer_model: str | None = None
     temperature: float | None = Field(None, ge=0, le=1.5)
     max_revisions: int | None = Field(None, ge=0, le=3)
     uml_syntax: Literal["auto", "mermaid", "plantuml"] | None = None

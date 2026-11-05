@@ -15,6 +15,7 @@ FIELD_LABELS = {
     "max_revisions": "修訂輪數",
     "ollama_url": "Ollama 網址",
     "default_model": "預設模型",
+    "reviewer_model": "審查模型",
     "uml_syntax": "UML 圖語法",
     "diagrams": "畫圖",
     "title": "標題",

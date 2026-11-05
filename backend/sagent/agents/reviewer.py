@@ -12,7 +12,7 @@ from typing import Any
 from ..services.diagrams import extract_diagrams, lint_mermaid, lint_plantuml
 from .base import AgentBase
 from .prompts import ISSUE_KINDS, review_schema, reviewer_messages
-from .textutil import normalize_sid, text_length
+from .textutil import copied_ratio, normalize_sid, substantive_chars, text_length
 from .types import Draft, Issue, Plan, Review, ReviewPoint, RunInput
 
 _PLACEHOLDER_RE = re.compile(r"\b(TODO|TBD|FIXME|Lorem ipsum)\b|（待補充）", re.I)
@@ -25,6 +25,12 @@ _ID_CELL_RE = re.compile(r"(?:\*\*|`)?([A-Z]{1,4}-\d{2,3})(?:\*\*|`)?")
 _MARK_RE = re.compile(r"[（(](假設|待確認)[）)]")
 _QUOTED_RE = re.compile(r"「([^」]{2,30})」")
 MAX_CHECK_POINTS = 20
+# 空洞、照抄的門檻（C-01）。用 scripts/speceval/controls.py 校正：22 份示範文件都不會被擋，
+# 「每節只寫待確認加編號」「需求原文加編號」兩種假文件都會被擋
+MIN_ITEMS_FOR_HOLLOW = 3  # 需求至少有幾句完整的句子，才檢查空洞
+MIN_SUBSTANTIVE_CHARS = 30
+MIN_COPY_CHARS = 80  # 太短的章節（例如一句目的）照抄需求是正常的
+MAX_COPIED_RATIO = 0.8  # 示範文件最高 0.66（變更原因本來就會重述需求），照抄的假文件約 0.9
 _UNSTATED_REASON = "需求沒提到，可能是撰寫者自己補的，要確認是否正確"
 _STALE_REASON = "上一輪審查指出的問題，修改後沒有重新審查成功，要確認是否已經修正"
 _KEEP_REASON = "這一節設定為保留原內容，不會自動修改，要確認是否需要調整"
@@ -201,16 +207,41 @@ def has_item_ids(body: str, prefix: str) -> bool:
     return any(d.split("-")[0] == prefix for d in defined_ids(_without_code(body)))
 
 
-def static_checks(plan: Plan, draft: Draft) -> list[Issue]:
+def static_checks(plan: Plan, draft: Draft, requirement: str = "") -> list[Issue]:
+    """requirement：撰寫模式才傳（修訂模式的需求是「要改什麼」，不拿來比對照抄和空洞）。"""
     issues: list[Issue] = []
     undefined = undefined_ids(draft)
     mismatched = mismatched_ids(draft)
+    # 需求只有一兩句時，大部分章節本來就只能標待確認，不算空洞（構想文件常這樣）
+    rich_requirement = len(requirement_items(requirement)) >= MIN_ITEMS_FOR_HOLLOW if requirement else False
     for sec in draft.sections:
         sec_plan = plan.section(sec.id)
         if sec_plan is not None and sec_plan.action == "keep":
             continue
         if text_length(sec.body) < 30:
             issues.append(Issue(sec.id, "high", "這一節內容太少", "依大綱的目標補上具體內容", source="check"))
+        elif rich_requirement and substantive_chars(sec.body) < MIN_SUBSTANTIVE_CHARS:
+            issues.append(
+                Issue(
+                    sec.id,
+                    "high",
+                    "這一節幾乎都是待確認或編號，沒有實質內容",
+                    "依需求寫出這一節能確定的內容；只有需求真的沒寫的事項才標（待確認）",
+                    source="check",
+                )
+            )
+        if requirement and text_length(sec.body) >= MIN_COPY_CHARS:
+            ratio = copied_ratio(sec.body, requirement)
+            if ratio >= MAX_COPIED_RATIO:
+                issues.append(
+                    Issue(
+                        sec.id,
+                        "medium",
+                        f"這一節約 {ratio:.0%} 是照抄需求原文",
+                        "依這一節的目標整理需求：拆成編號項目、表格或規則，不要整段貼上需求",
+                        source="check",
+                    )
+                )
         for idx, block in enumerate(extract_diagrams(sec.body)):
             errors = lint_plantuml(block.code) if block.lang == "plantuml" else lint_mermaid(block.code)
             if errors:
@@ -501,7 +532,7 @@ class Reviewer(AgentBase):
             else f"第 {round_no} 次審查"
         )
         async with self.step(step, label) as info:
-            checks = static_checks(plan, draft)
+            checks = static_checks(plan, draft, inp.requirement if inp.mode == "draft" else "")
             marked = marked_points(draft)
             if inp.mode == "draft":  # 修訂模式的需求是要改什麼，不用每一點都在文件裡找得到
                 marked += requirement_gaps(inp.requirement, draft)

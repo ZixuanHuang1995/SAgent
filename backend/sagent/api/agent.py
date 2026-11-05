@@ -118,6 +118,8 @@ async def create_run(body: RunCreate, state: AppState = Depends(get_state)):
                 "plan_first": bool(o.plan_first) and body.mode == "draft",
                 "ollama_url": current.ollama_url,
                 "num_ctx": current.num_ctx,
+                # 空白 = 審查跟撰寫用同一個模型
+                "reviewer_model": current.reviewer_model.strip(),
             }
             if doc_type != spec.doc_type:
                 spec.doc_type = doc_type

@@ -349,6 +349,8 @@ export interface RunDetail extends Run {
 export interface Settings {
   ollama_url: string
   default_model: string
+  // 審查用的模型；空字串 = 跟撰寫用同一個
+  reviewer_model: string
   temperature: number
   max_revisions: number
   uml_syntax: UmlSyntax

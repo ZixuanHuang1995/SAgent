@@ -240,6 +240,44 @@ def text_length(body: str) -> int:
     return len("".join(ln.strip() for i, ln in enumerate(lines) if i not in drop))
 
 
+_CJK_RE = re.compile(r"[一-鿿]")
+_ITEM_ID_RE = re.compile(r"\b[A-Z]{1,4}-\d{2,3}\b")
+_MARKED_RE = re.compile(r"[（(](假設|待確認)[）)]|待確認")
+
+
+def _without_diagrams(body: str) -> list[str]:
+    blocks = extract_diagrams(body)
+    drop = set()
+    for b in blocks:
+        drop.update(range(b.start, b.end + 1))
+    return [ln for i, ln in enumerate(body.splitlines()) if i not in drop]
+
+
+def substantive_chars(body: str) -> int:
+    """實質內容的中文字數：不算圖、不算標了（待確認）（假設）的行、不算編號（FR-01）。
+
+    用來找「每一節都只寫待確認」或「只有編號沒有內容」的空洞章節（SpecEval 實驗：
+    這類文件 22 份全部通過原本的程式檢查）。誠實標出不確定的地方是對的，只要其他行有寫到東西就不算空洞。
+    """
+    lines = [ln for ln in _without_diagrams(body) if not _MARKED_RE.search(ln)]
+    return len(_CJK_RE.findall(_ITEM_ID_RE.sub("", "\n".join(lines))))
+
+
+def copied_ratio(body: str, source: str, k: int = 12) -> float:
+    """body（不含圖、不含空白）有幾成落在「跟 source 連續 k 個字一樣」的片段裡。"""
+    d = re.sub(r"\s+", "", "\n".join(_without_diagrams(body)))
+    s = re.sub(r"\s+", "", source)
+    if len(d) < k or len(s) < k:
+        return 0.0
+    shingles = {s[i : i + k] for i in range(len(s) - k + 1)}
+    hit = [False] * len(d)
+    for i in range(len(d) - k + 1):
+        if d[i : i + k] in shingles:
+            for j in range(i, i + k):
+                hit[j] = True
+    return sum(hit) / len(d)
+
+
 def is_bullet(line: str) -> bool:
     """是不是條列項目（- / * / + / 1. 開頭）。"""
     return bool(re.match(r"^\s*([-*+]|\d+[.)])\s+", line))
