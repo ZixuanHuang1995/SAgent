@@ -58,9 +58,11 @@
 | `config.py`、`cli.py` | 環境變數和命令列參數 |
 | `models.py`、`migrations.py` | 資料表、舊資料庫升級 |
 | `api/` | API 路由，保持精簡，邏輯放 `services/` |
-| `services/` | 版本控制、基準版本、匯出、差異、圖表檢查、插入圖表的骨架、PlantUML |
-| `agents/` | `planner.py`、`writer.py`、`reviewer.py`、`pipeline.py`、`runner.py`、`prompts.py`、`diagram_kinds.py`、`fake_llm.py`、`zh.py` |
+| `services/` | 版本控制、基準版本、匯出、差異、圖表檢查、插入圖表的骨架、PlantUML、審查進度和人工判斷（`reviews.py`）、詞彙表抽取（`glossary.py`）、參考文件（`references.py`）、電腦保持喚醒（`power.py`） |
+| `agents/` | `planner.py`、`writer.py`、`reviewer.py`、`pipeline.py`、`runner.py`、`prompts.py`、`diagram_kinds.py`、`fake_llm.py`、`zh.py`、`examples.py`（few-shot 範例，實驗） |
 | `doc_templates/` | 內建文件範本（YAML） |
+
+`scripts/speceval/`：SpecEval 評估工具（對照組 `controls.py`、任務卡 `build_tasks.py`、執行器 `run_suite.py`、L1 `l1.py`、L2 評審 `judge.py`、trace 匯出 `export_traces.py`、記憶稽核 `memory_audit.py`、挑任務 `mine_tasks.py`、排程 `nightly.ps1`）。輸出放 `speceval-out/`，不進 git。研究計劃的修改清單和真模型要確認的事見 `docs/real-model-test-plan.md` 第 4 節和各檔案開頭。
 
 前端 `frontend/src/`：
 
