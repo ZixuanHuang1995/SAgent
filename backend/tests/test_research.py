@@ -118,3 +118,64 @@ def test_migration_adds_stop_reason_columns(cfg, client, project):
         row = conn.execute(text("SELECT stop_reason, wall_seconds FROM agent_runs")).one()
     engine.dispose()
     assert tuple(row) == (None, None)  # 舊紀錄是 NULL
+
+
+# --- C-08 可選的 seed ---
+
+
+def test_seed_setting_goes_to_run_and_can_be_cleared(client, project):
+    assert client.get("/api/settings").json()["seed"] is None
+    assert client.put("/api/settings", json={"seed": 42}).json()["seed"] == 42
+    run = wait_run(client, _run(client, _spec(client, project)["id"]))
+    assert run["options"]["seed"] == 42
+    # 其他欄位送 null 是不改，seed 送 null 是清掉
+    resp = client.put("/api/settings", json={"seed": None, "temperature": None})
+    assert resp.json()["seed"] is None and resp.json()["temperature"] == 0.4
+    bad = client.put("/api/settings", json={"seed": -1})
+    assert bad.status_code == 422 and "亂數種子" in bad.json()["detail"]
+
+
+def test_default_llm_factory_passes_seed(cfg):
+    from sagent.app_state import AppState
+
+    state = AppState.__new__(AppState)
+    state.cfg = cfg
+    cfg.llm_provider = "ollama"
+    llm = state.default_llm_factory("qwen3:8b", {"seed": 7, "ollama_url": "http://127.0.0.1:1"})
+    assert llm.seed == 7
+    assert state.default_llm_factory("qwen3:8b", {}).seed is None
+
+
+# --- C-09 可選擇存提示詞 ---
+
+
+def _step_ends(emitter):
+    return [e["data"] for e in emitter.events if e["type"] == "step_end"]
+
+
+def test_prompt_hash_always_and_messages_only_when_enabled():
+    from test_pipeline import make_input, run
+
+    from sagent.agents.fake_llm import FakeLLM
+
+    _, plain = run(FakeLLM(), make_input(max_revisions=0))
+    ends = _step_ends(plain)
+    assert ends and all(len(d["prompt_hash"]) == 64 for d in ends)
+    assert not any("messages" in d for d in ends)
+    # 同樣的輸入，提示詞的雜湊一樣
+    _, again = run(FakeLLM(), make_input(max_revisions=0))
+    assert [d["prompt_hash"] for d in _step_ends(again)] == [d["prompt_hash"] for d in ends]
+
+    llm = FakeLLM()
+    _, stored = run(llm, make_input(max_revisions=0, store_prompts=True))
+    plan_end = next(d for d in _step_ends(stored) if d["step"] == "plan")
+    first_call = next(c for c in llm.calls if c["purpose"] == "planner:plan")
+    assert plan_end["messages"] == first_call["messages"]
+
+
+def test_store_prompts_setting_reaches_events(client, project):
+    client.put("/api/settings", json={"store_prompts": True})
+    run = wait_run(client, _run(client, _spec(client, project)["id"]))
+    assert run["options"]["store_prompts"] is True
+    ends = [e["data"] for e in run["events"] if e["type"] == "step_end"]
+    assert all(d.get("messages") for d in ends if d.get("ok"))

@@ -205,3 +205,18 @@ def test_environment_is_empty_when_ollama_fails():
             await client.close()
 
     assert asyncio.run(go()) == {}
+
+
+def test_seed_goes_to_options():
+    seen = []
+    chunks = [{"message": {"content": "ok"}, "done": True}]
+    client = OllamaClient("http://x", "m", seed=42, transport=make_transport([], chunks, seen))
+
+    async def go():
+        try:
+            await client.chat([{"role": "user", "content": "hi"}], temperature=0.4)
+        finally:
+            await client.close()
+
+    asyncio.run(go())
+    assert seen[0]["options"] == {"temperature": 0.4, "seed": 42}

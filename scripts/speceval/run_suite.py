@@ -53,6 +53,7 @@ async def manifest(args) -> dict:
     info: dict = {
         "model": "fake" if args.fake else args.model,
         "temperature": args.temperature,
+        "seed": args.seed,
         "host": platform.node(),
         "platform": platform.platform(),
         "python": platform.python_version(),
@@ -200,6 +201,7 @@ async def main() -> int:
     ap.add_argument("--model", default="qwen3.6:35b-a3b")
     ap.add_argument("--ollama", default="http://127.0.0.1:11434")
     ap.add_argument("--temperature", type=float, default=0.4)
+    ap.add_argument("--seed", type=int, help="固定亂數種子（C-08），回歸測試用；同一個 seed 的結果應該一樣")
     ap.add_argument("--no-diagrams", action="store_true", help="不畫圖，省時間（tiny 集合用）")
     ap.add_argument("--out-dir", type=Path, default=Path("speceval-out/run"))
     ap.add_argument("--fake", action="store_true", help="用假模型，只檢查流程")
@@ -230,7 +232,7 @@ async def main() -> int:
             path = tdir / f"trial-{n}.json"
             if path.exists():
                 continue  # 中斷後重跑：跑過的不重跑
-            llm = FakeLLM() if args.fake else OllamaClient(args.ollama, args.model)
+            llm = FakeLLM() if args.fake else OllamaClient(args.ollama, args.model, seed=args.seed)
             try:
                 rec = await run_trial(card, req, tpl, llm, args)
             finally:

@@ -80,9 +80,14 @@ class SpecPipeline:
             current = inp.options.max_diagrams
             inp.options.max_diagrams = limit if current is None else min(current, limit)
 
+    def _prepare(self, inp: RunInput) -> None:
+        self._apply_template_limits(inp)
+        for agent in (self.planner, self.writer, self.reviewer):
+            agent.store_prompts = inp.options.store_prompts
+
     async def plan_only(self, inp: RunInput) -> Plan:
         """先確認大綱：只跑 Planner，大綱和待確認問題交給使用者確認後，再用 run(plan=…) 繼續。"""
-        self._apply_template_limits(inp)
+        self._prepare(inp)
         await self.emitter.emit("phase", "planner", "Planner：規劃文件", {"phase": "plan"})
         return await self.planner.plan(inp)
 
@@ -98,7 +103,7 @@ class SpecPipeline:
         progress：續跑時上次寫到哪裡。on_checkpoint：規劃完、每寫完一節或一張圖時呼叫，讓執行器存檢查點。
         審查和修訂不存檢查點：中斷後從第一次審查重來（大部分的時間花在撰寫）。
         """
-        self._apply_template_limits(inp)
+        self._prepare(inp)
         emit = self.emitter.emit
         if plan is None:
             await emit("phase", "planner", "Planner：規劃文件", {"phase": "plan"})

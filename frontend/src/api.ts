@@ -362,6 +362,10 @@ export interface Settings {
   plantuml_server: string
   // 整個 AI 工作的時間上限（分鐘），0 = 不限制
   max_run_minutes: number
+  // 固定的亂數種子，回歸測試用；null = 不固定
+  seed: number | null
+  // 每一步的提示詞全文存進工作紀錄
+  store_prompts: boolean
 }
 
 export interface Health {

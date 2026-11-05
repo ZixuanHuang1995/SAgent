@@ -16,15 +16,18 @@ const MAX_CTX = 262144
 
 /** 數字欄位用字串存，清空時才看得出來，不會悄悄變成 0 */
 type NumberField = 'temperature' | 'num_ctx' | 'max_run_minutes'
-type Form = Omit<Settings, NumberField> & Record<NumberField, string>
-type Errors = Partial<Record<'ollama_url' | NumberField, string>>
+/** seed 可以留空（不固定），空字串存成 null */
+type Form = Omit<Settings, NumberField | 'seed'> & Record<NumberField, string> & { seed: string }
+type Errors = Partial<Record<'ollama_url' | NumberField | 'seed', string>>
 const MAX_RUN_MINUTES = 1440
+const MAX_SEED = 2147483647
 
 const toForm = (s: Settings): Form => ({
   ...s,
   temperature: String(s.temperature),
   num_ctx: String(s.num_ctx),
   max_run_minutes: String(s.max_run_minutes),
+  seed: s.seed == null ? '' : String(s.seed),
 })
 const normalizeUrl = (url: string) => url.trim().replace(/\/+$/, '')
 
@@ -40,6 +43,10 @@ function validate(f: Form): Errors {
   const m = f.max_run_minutes.trim() === '' ? NaN : Number(f.max_run_minutes)
   if (!Number.isInteger(m)) errors.max_run_minutes = '請填整數'
   else if (m < 0 || m > MAX_RUN_MINUTES) errors.max_run_minutes = `要在 0～${MAX_RUN_MINUTES} 之間`
+  if (f.seed.trim() !== '') {
+    const seed = Number(f.seed)
+    if (!Number.isInteger(seed) || seed < 0 || seed > MAX_SEED) errors.seed = `要是 0～${MAX_SEED} 的整數，或留空`
+  }
   return errors
 }
 
@@ -50,6 +57,7 @@ function toSettings(f: Form): Settings {
     temperature: Number(f.temperature),
     num_ctx: Number(f.num_ctx),
     max_run_minutes: Number(f.max_run_minutes),
+    seed: f.seed.trim() === '' ? null : Number(f.seed),
   }
 }
 
@@ -475,6 +483,36 @@ export function SettingsPage() {
               onChange={(e) => set('max_run_minutes', e.target.value)}
             />
           </Field>
+        </section>
+
+        <section className="card">
+          <div className="card-title">進階（回歸測試、研究用）</div>
+          <p className="muted small mt-0">平常不用改。用來比較改提示詞前後的結果、重現某一次 AI 工作。</p>
+          <Field
+            label="亂數種子"
+            error={errors.seed}
+            hint="只在回歸測試用，正式撰寫留空。固定之後，同一份需求、同樣設定的結果會盡量一樣（CPU 上的浮點運算仍可能有細微差異）。"
+          >
+            <input
+              className={`input${errors.seed ? ' invalid' : ''}`}
+              type="number"
+              step={1}
+              min={0}
+              max={MAX_SEED}
+              placeholder="留空 = 不固定"
+              value={form.seed}
+              onChange={(e) => set('seed', e.target.value)}
+            />
+          </Field>
+          <label className="check-row">
+            <input type="checkbox" checked={form.store_prompts} onChange={(e) => set('store_prompts', e.target.checked)} />
+            <span>
+              儲存每一步的提示詞
+              <span className="muted small check-row-hint">
+                AI 工作紀錄會存下送給模型的完整提示詞，之後可以用 scripts/speceval/export_traces.py 匯出、重放。會讓資料庫變大，內容含需求原文；不開時只存提示詞的雜湊，看得出兩次的提示詞一不一樣。
+              </span>
+            </span>
+          </label>
         </section>
 
         <section className="card">

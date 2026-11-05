@@ -67,10 +67,13 @@ class OllamaClient:
         keep_alive: str = "30m",
         timeout_s: float = 900,
         transport: httpx.AsyncBaseTransport | None = None,
+        seed: int | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.num_ctx = num_ctx
+        # 固定亂數種子（C-08），回歸測試時讓同一份輸入的結果盡量一樣。None = 不固定
+        self.seed = seed
         self.think = think
         self.keep_alive = keep_alive
         self._client = httpx.AsyncClient(
@@ -138,6 +141,8 @@ class OllamaClient:
             options["num_predict"] = max_tokens
         if self.num_ctx:
             options["num_ctx"] = self.num_ctx
+        if self.seed is not None:
+            options["seed"] = self.seed
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,

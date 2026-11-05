@@ -21,6 +21,8 @@ class PipelineOptions:
     diagrams: bool = True
     max_diagrams: int | None = None  # None：不限制張數（範本有設 max_diagrams 時照範本）
     max_sections: int = 10
+    # 每一步的提示詞全文存進 step_end（C-09）；關閉時只存雜湊 prompt_hash
+    store_prompts: bool = False
 
 
 @dataclass

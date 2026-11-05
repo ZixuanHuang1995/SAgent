@@ -162,7 +162,8 @@ sequenceDiagram
 3. 前端斷線重連時帶 `Last-Event-ID`，後端從那裡補送。
 4. 已結束的工作打開時會重播全部事件，所以可以回頭看每一步的大綱、圖、審查結果。
    - 狀態標籤：專案清單（`GET /api/projects/{id}`）和單一 Spec 的 `ai_status` 是進行中的 AI 工作狀態（`queued`、`running`、`planned`），側邊欄、Spec 標題旁、專案總覽用它顯示「AI 排隊中」「AI 撰寫中」「待確認大綱」，這時候不顯示上一次審查的待確認數量。AI 面板收到狀態改變的事件（`run_status`、`run_paused`、`run_end`）就重新抓這些清單；有工作在跑或排隊時，Spec 清單和 AI 工作清單每 5 秒更新一次，在別的分頁開始的工作也跟得上。
-5. 步驟結束（`step_end`）記下用量：輸入、輸出 token，Ollama 回報的讀提示詞（`prompt_eval_ms`，prefill）、生成（`eval_ms`，decode）、載入模型（`load_ms`）時間，和模型實際的上下文長度（`context_length`）。工作的統計（`agent_runs.stats`）也有各 agent 的時間拆解。用來判斷時間花在 prefill 還是 decode、快取有沒有命中、模型有沒有被重新載入。
+5. 步驟結束（`step_end`）記下用量：輸入、輸出 token，Ollama 回報的讀提示詞（`prompt_eval_ms`，prefill）、生成（`eval_ms`，decode）、載入模型（`load_ms`）時間，和模型實際的上下文長度（`context_length`）。工作的統計（`agent_runs.stats`）也有各 agent 的時間拆解。用來判斷時間花在 prefill 還是 decode、快取有沒有命中、模型有沒有被重新載入。另外一律記這一步最後一次呼叫的提示詞雜湊（`prompt_hash`，messages 的 SHA-256），看得出兩次工作同一步的提示詞一不一樣；設定開了「儲存提示詞」（`store_prompts`，研究計劃 C-09）時再記 `messages` 全文，`scripts/speceval/export_traces.py` 會匯出成 `prompts`，可以直接重送給 Ollama 重放一步。全文會讓資料庫變大，內容含需求原文，所以預設不存。
+6. 設定的「亂數種子」（`seed`，研究計劃 C-08）有值時，建立工作時記進選項，`OllamaClient` 每次呼叫都放進 `options.seed`。只在回歸測試用，正式撰寫留空；CPU 上的浮點運算仍可能讓同 seed 的結果有細微差異，要用真模型確認。
 
 ### 4.5 執行規則
 

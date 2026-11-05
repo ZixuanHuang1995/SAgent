@@ -6,7 +6,9 @@
 - 回饋：使用者在「審查」分頁的標記（fixed 已處理／false 誤報／skip 略過）
 - 結果：AI 版本，以及人改過的最後版本（下一個 AI 版本之前的最後一個人工版本），逐節修改幅度
 
-SAgent 只存輸出、不存提示詞，所以這份資料集不能直接重放；要重放得用同一個 prompt_version 的程式重跑。
+提示詞：設定頁開了「儲存提示詞」（C-09）之後的工作，每一步的 messages 都有存，匯出在 prompts，
+可以直接重送給 Ollama 重放一步；沒開的只有 prompt_hashes（看得出兩次工作的提示詞一不一樣），
+要重放得用同一個 prompt_version 的程式重跑。
 資料庫只讀。人改過的文件可能有客戶資料，輸出檔不要放進 git、不要傳到外部服務。
 
 用法（在專案根目錄）：
@@ -37,6 +39,23 @@ def _json(value):
         return value
 
 
+def step_prompts(db: sqlite3.Connection, run_id: int) -> tuple[list[dict], dict[str, str]]:
+    """每一步存下的提示詞（C-09）：有全文的回傳 [{step, messages, output}]，另外回傳 {step: prompt_hash}。"""
+    prompts: list[dict] = []
+    hashes: dict[str, str] = {}
+    for (data,) in db.execute(
+        "select data from agent_events where run_id = ? and type = 'step_end' order by seq", (run_id,)
+    ):
+        d = _json(data) or {}
+        if not isinstance(d, dict):
+            continue
+        if d.get("prompt_hash"):
+            hashes[d.get("step", "")] = d["prompt_hash"]
+        if d.get("messages"):
+            prompts.append({"step": d.get("step"), "messages": d["messages"], "output": d.get("output")})
+    return prompts, hashes
+
+
 def human_version(db: sqlite3.Connection, spec_id: int, ai_no: int) -> tuple[int, str] | None:
     """AI 版本之後、下一個 AI 版本之前的最後一個人工版本。"""
     rows = db.execute(
@@ -54,6 +73,7 @@ def human_version(db: sqlite3.Connection, spec_id: int, ai_no: int) -> tuple[int
 
 
 def main() -> int:
+    sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", type=Path, required=True)
     ap.add_argument("--out", type=Path, default=Path("speceval-out/traces.jsonl"))
@@ -98,6 +118,7 @@ def main() -> int:
                     label = labels.get(tag) or ("fixed" if tag in checked else None)
                     items.append({**it, "item_key": tag, "label": label})
             opts = r.get("options") or {}
+            prompts, hashes = step_prompts(db, r["id"])
             rec = {
                 "run_id": r["id"],
                 "spec_id": r["spec_id"],
@@ -115,6 +136,10 @@ def main() -> int:
                     for rd in rounds
                 ],
                 "stats": r.get("stats"),
+                "seed": opts.get("seed"),
+                "environment": opts.get("environment"),
+                "prompts": prompts,
+                "prompt_hashes": hashes,
                 "ai_version": r.get("result_version_no"),
                 "ai_content": ai,
                 "human_version": human[0] if human else None,

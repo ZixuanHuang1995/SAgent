@@ -17,6 +17,8 @@ FIELD_LABELS = {
     "default_model": "預設模型",
     "reviewer_model": "審查模型",
     "max_run_minutes": "整個工作的時間上限",
+    "seed": "亂數種子",
+    "store_prompts": "儲存提示詞",
     "uml_syntax": "UML 圖語法",
     "diagrams": "畫圖",
     "title": "標題",

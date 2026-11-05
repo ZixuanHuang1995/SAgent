@@ -13,6 +13,8 @@ from ..models import Setting
 from .errors import BadRequest
 
 _KEY = "app"
+# 可以設成 null 的欄位：PUT 送 null 表示清掉（其他欄位送 null 表示不改）
+_NULLABLE = {"seed"}
 
 
 class AppSettings(BaseModel):
@@ -31,6 +33,10 @@ class AppSettings(BaseModel):
     plantuml_server: str = ""
     # 整個 AI 工作的時間上限（分鐘），超過就標失敗。0 = 不限制（研究計劃 C-06）
     max_run_minutes: float = Field(0, ge=0, le=1440)
+    # 固定的亂數種子（研究計劃 C-08）。只在回歸測試用，正式撰寫留空（None）
+    seed: int | None = Field(None, ge=0, le=2**31 - 1)
+    # 每一步的提示詞全文存進工作紀錄（C-09）。資料庫會變大、內容含需求原文；關閉時只存雜湊
+    store_prompts: bool = False
 
 
 class SettingsPatch(BaseModel):
@@ -44,6 +50,8 @@ class SettingsPatch(BaseModel):
     num_ctx: int | None = Field(None, ge=0, le=262144)
     plantuml_server: str | None = None
     max_run_minutes: float | None = Field(None, ge=0, le=1440)
+    seed: int | None = Field(None, ge=0, le=2**31 - 1)
+    store_prompts: bool | None = None
 
 
 def check_http_url(url: str, label: str) -> None:
@@ -71,7 +79,9 @@ def get_settings(s: Session, cfg: Config) -> AppSettings:
 
 def update_settings(s: Session, cfg: Config, patch: SettingsPatch) -> AppSettings:
     current = get_settings(s, cfg).model_dump()
-    changes = patch.model_dump(exclude_none=True)
+    changes = {
+        k: v for k, v in patch.model_dump(exclude_unset=True).items() if v is not None or k in _NULLABLE
+    }
     for key in ("ollama_url", "plantuml_server"):
         if key in changes:
             changes[key] = changes[key].strip().rstrip("/")

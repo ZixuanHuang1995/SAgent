@@ -370,6 +370,7 @@ class RunManager:
                     temperature=float(opts.get("temperature", 0.4)),
                     diagrams=bool(opts.get("diagrams", True)),
                     max_diagrams=_optional_int(opts.get("max_diagrams")),
+                    store_prompts=bool(opts.get("store_prompts")),
                 ),
             )
             saved_plan = run.plan if opts.get("plan_confirmed") and run.plan else None
