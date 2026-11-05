@@ -103,3 +103,39 @@ def test_glossary_suggestions_api(client, project):
     # 只是建議，不會寫進專案詞彙表
     tree = client.get(f"/api/projects/{pid}").json()
     assert [t["name"] for t in tree["project"]["glossary"]] == ["報修人"]
+
+
+def test_states_from_lists_columns_and_transitions():
+    """C-12：內文列舉、其他表格的狀態欄、狀態轉換也要抽到。"""
+    doc = """## 1. 流程
+
+工單狀態依序為：新建、已分派、處理中（工程師處理）、待客戶回覆、已解決、已結案。
+
+依「草稿、待簽核」的順序管理狀態。
+
+狀態轉換：已提交 → 處理中 → 待確認。客服可以把工單從「已解決」改為「處理中」，也可以從暫停改為作廢。
+
+登入後首頁 → 我的工單（沒有提到那個詞，不算）
+
+## 2. 轉換規則
+
+| 目前狀態 | 動作 | 新狀態 |
+|---|---|---|
+| 待簽核 | 主管退回 | 已退回 |
+| 任何狀態 | 管理員取消 | 已取消 |
+"""
+    states = {t["name"] for t in extract_terms(doc) if t["kind"] == "狀態"}
+    expected = {"新建", "已分派", "處理中", "待客戶回覆", "已解決", "已結案", "草稿", "待簽核", "已提交", "待確認"}
+    assert expected | {"已退回", "已取消", "暫停", "作廢"} <= states
+    assert not {"任何狀態", "我的工單", "登入後首頁", "工程師處理"} & states
+
+
+def test_states_in_demo_functional_spec():
+    """客服工單的功能規格書：狀態寫在內文的列舉裡，沒有狀態表（之前只抽到 3 個）。"""
+    import json
+    from pathlib import Path
+
+    data = json.loads((Path(__file__).parents[2] / "scripts/demo_content/CS/feature.json").read_text(encoding="utf-8"))
+    doc = "\n\n".join(f"## {s['heading']}\n{body}" for s, body in zip(data["plan"]["sections"], data["sections"], strict=True))
+    states = {t["name"] for t in extract_terms(doc) if t["kind"] == "狀態"}
+    assert {"新建", "已分派", "處理中", "待客戶回覆", "已解決", "已結案"} <= states

@@ -9,6 +9,8 @@
 - 角色表（「角色」）、狀態表（「狀態」）、實體表（「實體」，英文代號改用說明開頭的中文名稱）
 - Mermaid 狀態圖裡的狀態名稱
 - 內文寫「狀態為「已提交」」「狀態改為處理中」的狀態名稱（規格文件常這樣寫，沒有另外列狀態表）
+- 研究計劃 C-12：任何表格裡「狀態」「目前狀態」「新狀態」欄的值；「狀態依序為：A、B、C」這種列舉；
+  提到「狀態」的行裡的轉換「A → B」「從 A 改為 B」
 
 不會自動寫入：跟專案詞彙表比對後分成「新的」和「說明不一樣」，由使用者勾選後才更新。
 從文件自動寫進記憶，等於讓一份寫錯的文件影響之後的所有文件，所以一定要人確認。
@@ -46,6 +48,26 @@ _NOTE_HEAD_RE = re.compile(r"^([^，,；;。（(\s]{1,12})[，,；;。]\s*(.*)$"
 # 內文裡的狀態：引號裡的都算；沒有引號的只收 2～4 個字，避免把一整句當成狀態
 _STATE_QUOTED_RE = re.compile(r"狀態(?:為|是|改為|改成|變成|變為)「([^」\s]{2,10})」")
 _STATE_BARE_RE = re.compile(r"狀態(?:改為|改成|變成|變為)([^\s，。；、「」：:（(]{2,4})(?=[，。；、\s]|$)")
+# 研究計劃 C-12：只抽狀態表和「狀態為「…」」時，內文列舉的狀態（「狀態依序為：新建、處理中、已結案」）
+# 抽不到，後面的文件寫「已結案」就被當成新名詞
+_CJK = "一-鿿"
+# 表格裡標題是這些的欄位，值都是狀態（不限第一欄，例如狀態轉換表的「目前狀態」「新狀態」）
+_STATE_COLUMNS = {"狀態", "狀態名稱", "目前狀態", "原狀態", "新狀態", "下一個狀態", "變更前狀態", "變更後狀態"}
+# 「狀態依序為：A、B、C」「狀態：A、B」
+_STATE_LIST_RE = re.compile(r"狀態[^：:。\n|]{0,6}[：:]\s*([^。；;\n|]+)")
+# 「依「A、B、C」的順序管理狀態」
+_STATE_QUOTED_LIST_RE = re.compile(r"「([^」]{2,80}、[^」]{2,80})」[^。\n]{0,10}狀態")
+# 狀態轉換「A → B → C」「從 A 改為 B」只看提到「狀態」的行。左邊的名稱前面要是標點、空白或「由／從」，免得連前面的字一起抓
+_STATE_ARROW_RE = re.compile(
+    rf"(?:^|(?<=[^{_CJK}])|(?<=[由從]))「?([{_CJK}]{{2,6}})」?\s*(?:→|->|⇒)\s*「?([{_CJK}]{{2,6}})」?(?=[^{_CJK}]|$)"
+)
+# 「從 A 改為 B」：有引號的 2～10 個字；沒有引號的 2～4 個字，後面要接標點
+_STATE_FROM_TO_RE = re.compile(
+    rf"從\s*(?:「([^」\s]{{2,10}})」|([{_CJK}]{{2,4}}))\s*(?:改為|改成|變成|變為|轉為)\s*"
+    rf"(?:「([^」\s]{{2,10}})」|([{_CJK}]{{2,4}})(?=[^{_CJK}]|$))"
+)
+_STATE_NAME_RE = re.compile(rf"^[{_CJK}]{{2,6}}$")
+_NOT_STATES = {"任何狀態", "所有狀態", "其他狀態", "不變", "同上", "原狀態", "新狀態"}
 
 
 @dataclass
@@ -69,8 +91,8 @@ def _clean_name(cell: str) -> str:
     return name if name else cell.strip()
 
 
-def _tables(markdown: str) -> list[tuple[str, list[list[str]]]]:
-    """文件裡的表格（程式碼區塊裡的不算）：[(第一欄標題, 每一列的格子)]。"""
+def _tables(markdown: str) -> list[tuple[list[str], list[list[str]]]]:
+    """文件裡的表格（程式碼區塊裡的不算）：[(每一欄的標題, 每一列的格子)]。"""
     lines = [(ln, in_fence) for ln, in_fence in iter_lines_with_fence_state(markdown)]
     tables = []
     i = 0
@@ -83,7 +105,7 @@ def _tables(markdown: str) -> list[tuple[str, list[list[str]]]]:
             while i < len(lines) and not lines[i][1] and lines[i][0].strip().startswith("|"):
                 rows.append(_cells(lines[i][0]))
                 i += 1
-            tables.append((header[0] if header else "", rows))
+            tables.append((header, rows))
             continue
         i += 1
     return tables
@@ -108,11 +130,46 @@ def _states_from_diagrams(markdown: str) -> list[str]:
     return names
 
 
+def _state_names(text: str) -> list[str]:
+    """一格或一串列舉（「新建、處理中 / 已結案」）裡的狀態名稱：2～6 個中文字，去掉引號和括號說明。"""
+    names = []
+    for part in re.split(r"[、，,/／;；]|→|->|⇒|\s或\s|或", text):
+        name = _clean_name(part.strip().strip("「」『』\"'*`").strip())
+        if _STATE_NAME_RE.match(name) and name not in _NOT_STATES:
+            names.append(name)
+    return names
+
+
 def _states_from_text(markdown: str) -> list[str]:
     names: list[str] = []
     for line, fenced in iter_lines_with_fence_state(markdown):
-        if not fenced:
-            names += _STATE_QUOTED_RE.findall(line) + _STATE_BARE_RE.findall(line)
+        if fenced:
+            continue
+        names += _STATE_QUOTED_RE.findall(line) + _STATE_BARE_RE.findall(line)
+        for m in _STATE_LIST_RE.finditer(line):
+            names += _state_names(m.group(1))
+        for m in _STATE_QUOTED_LIST_RE.finditer(line):
+            names += _state_names(m.group(1))
+        if "狀態" in line:
+            # 「從一對一改成一對多」這種不是狀態，所以轉換的寫法只看提到「狀態」的行
+            for m in _STATE_FROM_TO_RE.finditer(line):
+                names += [n for n in m.groups() if n and n not in _NOT_STATES]
+            # 重疊比對，才抓得到「A → B → C」中間的 B
+            for i in range(len(line)):
+                if m := _STATE_ARROW_RE.match(line, i):
+                    names += [n for n in m.groups() if n not in _NOT_STATES]
+    return names
+
+
+def _states_from_columns(tables: list[tuple[list[str], list[list[str]]]]) -> list[str]:
+    """表格裡標題是「狀態」「目前狀態」「新狀態」的欄位（不限第一欄）的值。"""
+    names: list[str] = []
+    for header, rows in tables:
+        cols = [i for i, h in enumerate(header) if re.sub(r"\s", "", h) in _STATE_COLUMNS]
+        for row in rows:
+            for i in cols:
+                if i < len(row):
+                    names += _state_names(row[i])
     return names
 
 
@@ -138,8 +195,9 @@ def extract_terms(markdown: str) -> list[dict[str, str]]:
         if kind:
             kinds.setdefault(name, kind)
 
-    for header, rows in _tables(markdown):
-        key = re.sub(r"\s", "", header)
+    tables = _tables(markdown)
+    for header, rows in tables:
+        key = re.sub(r"\s", "", header[0] if header else "")
         if key not in _HEADER_KINDS:
             continue
         for row in rows:
@@ -151,7 +209,7 @@ def extract_terms(markdown: str) -> list[dict[str, str]]:
             if _CODE_NAME_RE.match(name) and _HEADER_KINDS[key] == "資料":
                 continue  # 只有英文代號、說明也沒有中文名稱
             add(name, _HEADER_KINDS[key], note)
-    for state in _states_from_diagrams(markdown) + _states_from_text(markdown):
+    for state in _states_from_diagrams(markdown) + _states_from_text(markdown) + _states_from_columns(tables):
         add(state, "狀態", "")
     terms = [{**t, "kind": kinds.get(t["name"], "其他")} for t in found.values()]
     return sorted(terms, key=lambda t: _KIND_ORDER.get(t["kind"], 9))
