@@ -371,6 +371,18 @@ export interface Health {
     loaded?: { name: string; context_length: number }[]
   }
   plantuml: { mode: 'server' | 'jar' | 'off'; available: boolean }
+  /** 資料資料夾的完整路徑（data/ 或 data-demo/） */
+  data_dir: string
+}
+
+/** 設定頁的「測試連線」：用還沒存檔的網址查 Ollama */
+export interface OllamaCheck {
+  url: string
+  reachable: boolean
+  version: string
+  /** 連不到時給使用者看的原因 */
+  error: string
+  models: ModelInfo[]
 }
 
 export class ApiError extends Error {
@@ -511,6 +523,7 @@ export const api = {
   health: () => request<Health>('GET', '/api/health'),
   settings: () => request<Settings>('GET', '/api/settings'),
   updateSettings: (body: Partial<Settings>) => request<Settings>('PUT', '/api/settings', body),
+  checkOllama: (url: string) => request<OllamaCheck>('POST', '/api/ollama/check', { url }),
   renderPlantUml: async (source: string): Promise<string> => {
     const res = await fetch('/api/render/plantuml', {
       method: 'POST',

@@ -235,6 +235,8 @@ flowchart LR
 
 AI 工作在 CPU 上很慢，一次只會執行一個，其他排隊。
 
+AI 工作跑的時候（Windows），電腦不會因為閒置進入待命，螢幕也會保持亮著，工作結束就恢復；不然新式待命的筆電螢幕一關，工作就會整個暫停到有人喚醒。闔上螢幕或按電源鍵還是會待命。不想要的話，啟動前設 `SAGENT_KEEP_AWAKE=0`。
+
 寫到一半時伺服器關掉或重開，下次啟動會從中斷的地方繼續：已經寫好的章節和圖不會重寫，審查從第一次重來。規劃還沒完成就中斷的工作會標成失敗，要重新開始。
 
 實測環境：Intel i7-1260P、32GB RAM、沒有獨立 GPU。需求內容是一段 8 點的請假系統需求。
@@ -272,7 +274,7 @@ AI 工作在 CPU 上很慢，一次只會執行一個，其他排隊。
 PlantUML 是選用功能。要啟用，二選一：
 
 1. 自架 PlantUML 伺服器（例如 `docker run -d -p 8080:8080 plantuml/plantuml-server:jetty`），啟動時用環境變數 `SAGENT_PLANTUML_SERVER=http://localhost:8080` 指定
-2. 安裝 Java，把 `plantuml.jar` 放在 `tools/plantuml.jar`
+2. 安裝 Java，把 `plantuml.jar` 放在 `tools/plantuml.jar`。Java 沒有加進 PATH 時，用環境變數 `SAGENT_JAVA` 指定 `java.exe` 的位置（可以寫在 `local.env`，見「設定」）。jar 內建 Windows 用的 Graphviz，不用另外安裝
 
 啟用後，「自動」模式下使用案例圖、元件圖、部署圖會改用 PlantUML。也可以在設定選「全部用 PlantUML」。沒有啟用時，PlantUML 圖只顯示原始碼。
 
@@ -280,9 +282,15 @@ PlantUML 是選用功能。要啟用，二選一：
 
 ## 設定
 
-畫面上的「設定」頁可以改：Ollama 網址、預設模型、溫度、Context 長度、修訂輪數、畫圖、UML 語法。AI 撰寫一律用這裡的值，面板上不另外選。修訂輪數預設 2 輪（審查最多 3 次）。圖的張數不限制，Planner 規劃幾張就畫幾張；自訂範本設了 `max_diagrams` 時照範本。PlantUML 伺服器用環境變數設定。
+畫面上的「設定」頁可以改：Ollama 網址、預設模型、溫度、Context 長度、修訂輪數、畫圖、UML 語法。AI 撰寫一律用這裡的值，面板上不另外選；Spec 頁的 AI 撰寫面板會列出這次會用的模型、修訂輪數、畫不畫圖，旁邊有「改設定」的連結。修訂輪數預設 2 輪（審查最多 3 次）。圖的張數不限制，Planner 規劃幾張就畫幾張；自訂範本設了 `max_diagrams` 時照範本。PlantUML 伺服器用環境變數設定。
 
-Context 長度設 0 時由 Ollama 決定：有設環境變數 `OLLAMA_CONTEXT_LENGTH` 就用它，沒有的話依顯示卡記憶體，沒有 GPU 只有 4096，審查時很容易不夠。設定頁會顯示模型目前實際的值；AI 工作中輸入加上輸出上限超過這個值時，工作紀錄會出現警告。建議設成 16384 以上。
+- 改了 Ollama 網址，按「測試連線」確認連得到，預設模型的清單也會換成新網址的模型（還沒存檔也可以測）。
+- 溫度、Context 長度填錯（空白、超出範圍）時欄位下方會說明，改好才能儲存。沒有修改時「儲存設定」不能按；有修改時可以按「還原」回到存檔的值，也可以按 Ctrl+S 儲存。
+- 系統狀態列出已載入的模型和實際的上下文長度、PlantUML 怎麼啟用，以及目前用的資料資料夾（`data/` 或 `data-demo/`）。
+- PlantUML 沒有啟用時，「全部用 PlantUML」不能選；不畫圖時 UML 語法用不到，不能改。
+- 文件範本照類型分組，點開可以看每種範本的章節。
+
+Context 長度設 0（「由 Ollama 決定」）時由 Ollama 決定：有設環境變數 `OLLAMA_CONTEXT_LENGTH` 就用它，沒有的話依顯示卡記憶體，沒有 GPU 只有 4096，審查時很容易不夠。設定頁可以選 8192、16384（建議）、32768 或自訂；實際值低於 16384 時會提醒。AI 工作中輸入加上輸出上限超過這個值時，工作紀錄會出現警告。
 
 啟動時也可以用環境變數：
 
@@ -295,7 +303,15 @@ Context 長度設 0 時由 Ollama 決定：有設環境變數 `OLLAMA_CONTEXT_LE
 | `SAGENT_LLM_PROVIDER` | `ollama` | 設成 `fake` 就是示範模式 |
 | `SAGENT_PLANTUML_SERVER` | 空白 | PlantUML 伺服器網址 |
 | `SAGENT_PLANTUML_JAR` | `tools/plantuml.jar` | plantuml.jar 位置 |
+| `SAGENT_JAVA` | `java` | 執行 plantuml.jar 用的 Java，沒有加進 PATH 時寫完整路徑 |
 | `SAGENT_ALLOWED_HOSTS` | 本機時只允許 `127.0.0.1`、`localhost` | 允許的主機名稱，用逗號分隔 |
+| `SAGENT_KEEP_AWAKE` | `1` | AI 工作跑的時候讓電腦保持喚醒（Windows），設 `0` 關掉 |
+
+每次啟動都要用的環境變數，可以寫在專案根目錄的 `local.env`（不進版控），`start.ps1` 啟動時會讀：一行一個「名稱=值」，`#` 開頭是註解，已經設定的環境變數不會被蓋掉。例如：
+
+```
+SAGENT_JAVA=D:\java\jdk-21.0.13+9-jrein\java.exe
+```
 
 ## 安全
 

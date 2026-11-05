@@ -18,6 +18,7 @@ from sagent.agents.doc_templates import load_templates
 from sagent.agents.llm import OllamaClient
 from sagent.agents.pipeline import SpecPipeline
 from sagent.agents.types import PipelineOptions, RunInput
+from sagent.services.power import KeepAwake
 
 
 class PrintEmitter:
@@ -86,10 +87,12 @@ async def main() -> int:
     )
     llm = OllamaClient(args.ollama, args.model)
     emitter = PrintEmitter(args.log)
-    try:
-        result = await SpecPipeline(llm, emitter).run(inp)
-    finally:
-        await llm.close()
+    # CPU 上一份要 30～70 分鐘，執行期間不讓電腦待命（services/power.py）
+    with KeepAwake():
+        try:
+            result = await SpecPipeline(llm, emitter).run(inp)
+        finally:
+            await llm.close()
     args.out.write_text(result.markdown, encoding="utf-8")
     emitter._out(f"完成，輸出：{args.out}")
     for name, st in result.stats.items():

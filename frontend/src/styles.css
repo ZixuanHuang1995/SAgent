@@ -726,7 +726,8 @@ details.card[open] > summary::before {
 
 .kv {
   display: grid;
-  grid-template-columns: max-content 1fr;
+  /* 右欄可以縮：長的標籤、路徑在窄螢幕換行，不會撐出卡片 */
+  grid-template-columns: max-content minmax(0, 1fr);
   gap: 6px 16px;
   margin: 0;
 }
@@ -735,6 +736,9 @@ details.card[open] > summary::before {
 }
 .kv dd {
   margin: 0;
+}
+.kv dd .badge {
+  white-space: normal;
 }
 
 .plain-list {
@@ -2080,6 +2084,32 @@ body.is-resizing .cm-editor {
 }
 .template-item summary {
   cursor: pointer;
+}
+/* 設定頁的文件範本：照類型分組 */
+.template-group {
+  margin-top: 14px;
+}
+/* 輸入框旁邊接一個按鈕（設定頁的 Ollama 網址 + 測試連線） */
+.input-with-btn {
+  display: flex;
+  gap: 6px;
+}
+.input-with-btn .btn {
+  flex: none;
+}
+/* 欄位裡的分段按鈕照內容寬度，不要被 .field 拉成整行 */
+.field > .seg {
+  align-self: flex-start;
+}
+/* 很長的路徑：任何地方都可以換行，窄螢幕不會撐出橫向捲軸 */
+.path {
+  word-break: break-all;
+}
+.mt-xs {
+  margin-top: 4px;
+}
+.mb {
+  margin-bottom: 12px;
 }
 
 /* ---------- Markdown 預覽 ---------- */

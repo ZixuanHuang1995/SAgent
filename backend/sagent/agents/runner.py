@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..db import session_scope, utcnow
 from ..models import AgentEvent, AgentRun, Phase, Project, Spec
 from ..services import specs as spec_service
+from ..services.power import KeepAwake
 from .doc_templates import DocTemplate, get_template
 from .llm import LLMClient
 from .pipeline import SpecPipeline
@@ -114,8 +115,11 @@ class RunManager:
         llm_factory: LLMFactory,
         templates_provider: Callable[[], dict[str, DocTemplate]],
         plantuml_available: Callable[[], bool],
+        keep_awake: KeepAwake | None = None,
     ):
         self.session_factory = session_factory
+        # AI 工作跑的時候電腦不能進入待命，不然程式會被暫停到有人喚醒（services/power.py）
+        self.keep_awake = keep_awake or KeepAwake(enabled=False)
         self.llm_factory = llm_factory
         self.templates_provider = templates_provider
         self.plantuml_available = plantuml_available
@@ -395,6 +399,7 @@ class RunManager:
         emitter = RunEmitter(self, run_id)
         llm: LLMClient | None = None
         pipeline: SpecPipeline | None = None
+        awake = False
         try:
             loaded = await self._in_thread(self._load_input, run_id)
             if loaded is None:
@@ -404,6 +409,8 @@ class RunManager:
                     "run_end", "system", f"失敗：{loaded}", {"status": "failed", "error": loaded}
                 )
                 return
+            self.keep_awake.hold()
+            awake = True
             inp, model, opts, saved_plan = loaded.inp, loaded.model, loaded.opts, loaded.saved_plan
             checkpoint = loaded.checkpoint
             progress: WriteProgress | None = None
@@ -424,6 +431,13 @@ class RunManager:
             else:
                 message = f"{'繼續執行' if saved_plan else '開始執行'}（模型：{model}）"
             await emitter.emit("run_status", "system", message, {"status": "running"})
+            if self.keep_awake.active:
+                await emitter.emit(
+                    "log",
+                    "system",
+                    "執行期間電腦不會自動待命，螢幕會保持亮著；闔上螢幕或按電源鍵還是會待命",
+                    {"level": "info"},
+                )
             if inp.mode == "revise" and not inp.existing_content.strip():
                 inp.mode = "draft"
                 await emitter.emit("log", "system", "文件目前沒有內容，改用撰寫模式", {"level": "info"})
@@ -510,6 +524,8 @@ class RunManager:
                 "run_end", "system", f"失敗：{message}", {"status": "failed", "error": message}
             )
         finally:
+            if awake:
+                self.keep_awake.release()
             if llm is not None:
                 await llm.close()
 

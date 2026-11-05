@@ -37,6 +37,7 @@ from sagent.agents.types import (
     SectionPlan,
 )
 from sagent.services.markdown_doc import normalize_heading, parse_markdown, strip_heading_number
+from sagent.services.power import KeepAwake
 
 _KEY_RE = re.compile(r"[A-Z]{1,4}-\d{2,3}|「([^」]{2,30})」")
 
@@ -122,6 +123,8 @@ async def main() -> int:
     llm = OllamaClient(args.ollama, args.model)
     results: list[list[Issue]] = []
     raw: list[dict] = []
+    awake = KeepAwake()  # 一次審查要好幾分鐘，執行期間不讓電腦待命
+    awake.hold()
     try:
         for n in range(1, args.times + 1):
             started = time.monotonic()
@@ -139,6 +142,7 @@ async def main() -> int:
                 flush=True,
             )
     finally:
+        awake.release()
         await llm.close()
 
     # 每個錯誤在幾次審查裡都出現

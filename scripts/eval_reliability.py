@@ -32,6 +32,7 @@ from sagent.agents.textutil import extract_item_ids
 from sagent.agents.types import PipelineOptions, PipelineResult, RunInput
 from sagent.agents.versioning import prompt_version
 from sagent.services.markdown_doc import normalize_heading
+from sagent.services.power import KeepAwake
 
 _NUMBER_RE = re.compile(r"\d+(?:\.\d+)?")
 # 前面接英文字母的（HTML5）、「2D」「3D」是名稱，不算；「16ms」「5MB」這種數字加單位要算
@@ -146,6 +147,9 @@ async def main() -> int:
         text = json.dumps(summary, ensure_ascii=False, indent=2)
         (args.out_dir / "summary.json").write_text(text, encoding="utf-8")
 
+    # 跑一兩個小時，電腦待命的話會整個暫停到有人喚醒（2026-11-04 晚上有兩份因此拖到 280 分鐘）
+    awake = KeepAwake(enabled=not args.fake)
+    awake.hold()
     try:
         for name, path in cases:
             requirement = path.read_text(encoding="utf-8")
@@ -169,6 +173,7 @@ async def main() -> int:
                 flush=True,
             )
     finally:
+        awake.release()
         await llm.close()
 
     save()

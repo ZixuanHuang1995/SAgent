@@ -30,6 +30,8 @@ class Config:
     fake_delay: float
     # 允許的 Host 標頭（防 DNS rebinding）。["*"] 表示不檢查
     allowed_hosts: list[str]
+    # AI 工作跑的時候讓電腦保持喚醒（Windows），見 services/power.py
+    keep_awake: bool = True
 
     @property
     def templates_dir(self) -> Path:
@@ -65,6 +67,7 @@ def load_config(**overrides) -> Config:
         frontend_dist=Path(env.get("SAGENT_FRONTEND_DIST", ROOT_DIR / "frontend" / "dist")),
         fake_delay=float(env.get("SAGENT_FAKE_DELAY", "0.01")),
         allowed_hosts=_allowed_hosts(host, env.get("SAGENT_ALLOWED_HOSTS", "")),
+        keep_awake=env.get("SAGENT_KEEP_AWAKE", "1").strip().lower() not in ("0", "false", "no", "off"),
     )
     for key, value in overrides.items():
         setattr(cfg, key, value)

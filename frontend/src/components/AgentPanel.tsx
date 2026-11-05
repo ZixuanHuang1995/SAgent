@@ -2,10 +2,11 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router'
 import { api, type RunMode, type SpecDetail } from '../api'
 import { formatDuration, relativeTime, requirementHelp, RUN_STATUS, RUN_TIME_TEXT, runDuration } from '../format'
 import { useRunStream } from '../hooks/useRunStream'
-import { keys, useHealth, useRuns, useTemplates } from '../queries'
+import { keys, useHealth, useRuns, useSettings, useTemplates } from '../queries'
 import { Icon } from './icons'
 import { RunProgress } from './RunProgress'
 import { RunDetailModal } from './RunDetail'
@@ -175,6 +176,7 @@ function RunForm({ spec }: { spec: SpecDetail }) {
   const toast = useToast()
   const templates = useTemplates()
   const health = useHealth()
+  const settings = useSettings()
   const fileInput = useRef<HTMLInputElement>(null)
 
   const hasRealContent = spec.head_version_no > 0 && spec.head?.source !== 'template'
@@ -299,6 +301,16 @@ function RunForm({ spec }: { spec: SpecDetail }) {
             <span className="muted small check-row-hint">Planner 規劃完（約 3～5 分鐘）先停下來，讓你回答待確認問題、調整名詞表和要點。</span>
           </span>
         </label>
+      )}
+
+      {/* 這次會用的設定：AI 面板不另外選，免得開始之後才發現修訂輪數、畫圖跟想的不一樣 */}
+      {settings.data && (
+        <div className="muted small mb-sm">
+          這次會用：{settings.data.default_model}・
+          {settings.data.max_revisions === 0 ? '不修訂' : `修訂最多 ${settings.data.max_revisions} 輪`}・
+          {settings.data.diagrams && template?.allow_diagrams !== false ? '畫圖' : '不畫圖'}{' '}
+          <Link to="/settings">改設定</Link>
+        </div>
       )}
 
       {/* 按鈕固定在側欄底部，表單很長時也不用捲動才找得到 */}

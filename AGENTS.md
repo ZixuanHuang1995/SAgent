@@ -80,6 +80,7 @@
 ### 後端
 
 - 服務層出錯時丟 `services/errors.py` 的例外：`NotFound`（404）、`Conflict`（409）、`BadRequest`（400）、`Unavailable`（503）。`main.py` 會轉成 `{"detail": "中文訊息"}`。訊息是給使用者看的。
+- 輸入驗證錯誤（422）由 `services/validation.py` 轉成中文。新的 API 欄位使用者會填到時，把中文名稱加進 `FIELD_LABELS`。
 - 修改資料的 API（POST、PUT、PATCH、DELETE）都要有 `X-SAgent-Client` 標頭，這是 CSRF 防護，不要拿掉。
 - 資料庫：新資料表啟動時自動建立。舊資料表加欄位寫在 `migrations.py`，每個步驟都要能重複執行。
 - 版本：`spec_versions` 建立後不能修改，只有標籤可以改。還原是把舊內容存成新版本。存檔要帶根據的版本號，衝突回 409。
@@ -123,7 +124,7 @@
 
 - Windows，PowerShell 5.1。`.ps1` 檔要存成 UTF-8 with BOM，不然中文會變亂碼，還會出現語法錯誤。
 - 這台沒有 GPU，Ollama 只能用 CPU。不要隨便跑真模型。
-- 這台沒有 Java，PlantUML 還沒設定。
+- Java（Temurin JRE 21）裝在 `D:\java\jdk-21.0.13+9-jre`，沒有加進 PATH；`start.ps1` 從 `local.env`（不進版控）讀 `SAGENT_JAVA` 指到它。`tools/plantuml.jar` 是 v1.2026.9，所以 PlantUML 是啟用的（jar 模式）。直接用 `sagent serve` 啟動、沒經過 `start.ps1` 時沒有 `SAGENT_JAVA`，PlantUML 會是未啟用。
 - 這是地端系統，資料不能送到外部服務（例如公開的 PlantUML 伺服器）。
 - `data/` 是使用者的正式資料，不要刪改。測試和示範用暫存目錄或 `data-demo/`。`data-demo/` 目前是 2026-11-02 從使用者提供的 5 個「匯出全部（zip）」檔匯入的示範資料（設備報修、採購請購、會議室預約、客服工單、數獨，共 32 份 Spec）：只匯入內建 8 種文件類型（略過使用案例規格、UI/UX、SDD、API 規格 20 份），階段改成新名稱，5 份文件裡提到被略過文件的句子改掉了；另外加了使用者自己的「貪食蛇遊戲」（構想提案、功能規格書各 1 份，匯入前審查修正過編號、流程圖、前後矛盾和沒有根據的數字），共 6 個專案、34 份 Spec。每份只有一個版本，沒有 AI 工作紀錄和基準版本。zip 和匯入腳本都不在 repo 裡，用 repo 的東西重建不出這份資料，不要隨便覆蓋；`scripts/seed_demo.py --script` 產生的是另一套。畫面上測試新增的資料不影響。
 - `agents/zh.py` 會把「峰」「群」改成「峯」「羣」，示範內容檔要避開這兩個字，不然 `check_demo_content.py` 會當成簡體字。

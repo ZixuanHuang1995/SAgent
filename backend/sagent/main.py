@@ -17,6 +17,7 @@ from .api import agent, projects, specs, system
 from .app_state import AppState
 from .config import Config, load_config
 from .services.errors import ServiceError
+from .services.validation import readable_errors
 
 log = logging.getLogger("sagent")
 
@@ -62,11 +63,7 @@ def create_app(cfg: Config | None = None, *, llm_factory: LLMFactory | None = No
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error(_request: Request, exc: RequestValidationError):
-        problems = []
-        for err in exc.errors():
-            field = ".".join(str(p) for p in err.get("loc", []) if p != "body")
-            problems.append(f"{field}：{err.get('msg', '')}" if field else err.get("msg", ""))
-        return JSONResponse({"detail": "輸入資料不正確：" + "；".join(problems)}, status_code=422)
+        return JSONResponse({"detail": readable_errors(list(exc.errors()))}, status_code=422)
 
     for module in (projects, specs, agent, system):
         app.include_router(module.router)

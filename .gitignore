@@ -16,3 +16,6 @@ frontend/dist/
 # 選用工具（例如 plantuml.jar）
 tools/
 /data-demo-*/
+
+# 這台電腦自己的設定（start.ps1 啟動時讀）
+/local.env

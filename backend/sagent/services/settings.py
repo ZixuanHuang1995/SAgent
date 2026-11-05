@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..config import Config
 from ..models import Setting
+from .errors import BadRequest
 
 _KEY = "app"
 
@@ -38,6 +40,13 @@ class SettingsPatch(BaseModel):
     plantuml_server: str | None = None
 
 
+def check_http_url(url: str, label: str) -> None:
+    """網址要是 http:// 或 https:// 開頭、後面有主機名稱。"""
+    parsed = urlsplit(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise BadRequest(f"{label}要用 http:// 或 https:// 開頭，例如 http://127.0.0.1:11434")
+
+
 def _defaults(cfg: Config) -> AppSettings:
     return AppSettings(
         ollama_url=cfg.ollama_url,
@@ -60,6 +69,8 @@ def update_settings(s: Session, cfg: Config, patch: SettingsPatch) -> AppSetting
     for key in ("ollama_url", "plantuml_server"):
         if key in changes:
             changes[key] = changes[key].strip().rstrip("/")
+    if "ollama_url" in changes:
+        check_http_url(changes["ollama_url"], "Ollama 網址")
     current.update(changes)
     validated = AppSettings.model_validate(current)
     row = s.get(Setting, _KEY)

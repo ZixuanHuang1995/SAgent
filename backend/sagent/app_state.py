@@ -17,6 +17,7 @@ from .db import Base, make_engine, make_session_factory, session_scope
 from .migrations import migrate
 from .services import settings as settings_service
 from .services.plantuml import PlantUMLRenderer
+from .services.power import KeepAwake
 
 
 class AppState:
@@ -35,6 +36,7 @@ class AppState:
             llm_factory or self.default_llm_factory,
             self.templates,
             lambda: self.plantuml.available,
+            keep_awake=KeepAwake(cfg.keep_awake),
         )
 
     @contextmanager

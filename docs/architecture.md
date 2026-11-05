@@ -175,6 +175,7 @@ sequenceDiagram
   - 續跑時寫好的章節和圖不再送模型，大綱也不重新規劃。審查和修訂不存檢查點，中斷後從第一次審查重來：大部分的時間花在撰寫，修訂迴圈每一輪的狀態又多，不值得存。
   - 開始時間（`started_at`）和根據的版本（`base_version_no`）照第一次開始時的，才看得出執行期間有沒有人改過文件。中斷時沒有結束的步驟補一個 `step_end`（`ok: false`，訊息寫「伺服器重新啟動，中斷」），畫面上那一步才不會一直轉。
   - 伺服器正常關閉時，執行中的工作維持 `running`（原本會被當成使用者取消），下次啟動續跑。
+- AI 工作執行期間讓電腦保持喚醒（`services/power.py`）：Windows 的 power request（`PowerCreateRequest`），同時要求系統保持執行和螢幕保持亮著，工作結束（完成、失敗、取消、停在確認大綱、伺服器關閉）就放開。這台筆電是新式待命（S0 低電源閒置），螢幕因為閒置關掉時就進入待命、程式整個暫停，只要求系統保持執行擋不住；2026-11-04 晚上的可靠度評估有兩份因此從 16 分鐘拖到 280 分鐘以上。闔上螢幕、按電源鍵還是會待命。要求附上原因「SAgent：AI 工作執行中」，系統管理員用 `powercfg /requests` 看得到。不是 Windows 或呼叫失敗時什麼都不做，不影響 AI 工作；`SAGENT_KEEP_AWAKE=0` 關掉。`eval_reliability.py`、`run_pipeline.py`、`review_consistency.py` 直接呼叫 AI 流程，也一樣保持喚醒。
 - 每個工作開始時在選項記下 `prompt_version`（`agents/versioning.py`）：`prompts.py` 加 `diagram_kinds.py` 的雜湊、這次用的範本內容的雜湊、git commit（`backend/sagent` 有沒 commit 的修改時加「+」）。改了提示詞之後，用 `analyze_runs.py --group-by prompt` 比較前後的時間和錯誤數。續跑時程式如果改過，另外記在 `prompt_version_resumed`。
 
 ### 先確認大綱（撰寫模式）
@@ -363,15 +364,19 @@ Reviewer 只做兩件事，不評論寫得好不好、完不完整，也不打�
 | GET | `/api/projects/{id}/compare` | 比較基準版本 |
 | GET | `/api/projects/{id}/export` | 匯出 zip（最新版或某個基準版本） |
 | GET | `/api/agent/templates`、`/api/agent/template-categories`、`/api/agent/models` | 文件範本、類型、模型清單 |
+| GET | `/api/agent/diagram-kinds` | 編輯器「插入圖表」選單的骨架 |
 | POST/GET | `/api/agent/runs` | 建立、查詢 AI 工作 |
 | GET | `/api/agent/runs/{id}` | AI 工作詳細內容 |
 | GET | `/api/agent/runs/{id}/events` | 即時進度（SSE） |
 | POST | `/api/agent/runs/{id}/continue` | 先確認大綱的工作：送出回答、名詞表、要點後繼續撰寫 |
-| PUT | `/api/agent/runs/{id}/review-checks` | 把審查的一個項目標成已處理或取消（`{key, done}`） |
+| PUT | `/api/agent/runs/{id}/review-checks` | 把審查的一個項目標成已處理或取消（`{key, done, label}`，`label` 是 `fixed`、`false`、`skip`） |
 | POST | `/api/agent/runs/{id}/cancel` | 取消（排隊中、執行中、等待確認大綱） |
-| GET/PUT | `/api/settings` | 設定 |
-| GET | `/api/health` | 系統狀態 |
+| GET/PUT | `/api/settings` | 設定。Ollama 網址要是 http:// 或 https:// 開頭 |
+| POST | `/api/ollama/check` | 設定頁的「測試連線」：用還沒存檔的網址查 Ollama 版本和模型清單，不改設定 |
+| GET | `/api/health` | 系統狀態（含已載入的模型和上下文長度、PlantUML、資料資料夾 `data_dir`） |
 | POST | `/api/render/plantuml` | PlantUML 轉 SVG |
+
+輸入資料不正確（422）時，`services/validation.py` 把 pydantic 的錯誤轉成中文，例如「輸入資料不正確：溫度不能大於 1.5」。欄位的中文名稱在 `FIELD_LABELS`，沒列到的顯示原本的欄位名稱；認不得的錯誤種類照原本的英文訊息顯示。
 
 啟動後可以在 `http://127.0.0.1:8765/docs` 看到完整的 API 文件。
 
