@@ -37,6 +37,7 @@ from sagent.agents.llm import OllamaClient  # noqa: E402
 from sagent.agents.pipeline import SpecPipeline  # noqa: E402
 from sagent.agents.reviewer import requirement_items  # noqa: E402
 from sagent.agents.types import PipelineOptions, RunInput  # noqa: E402
+from sagent.services.power import KeepAwake  # noqa: E402
 
 GAP_REASONS = ("文件裡找不到這個數字", "文件裡幾乎找不到對應的內容")
 HOLLOW_TEXT = "需求沒有提供這一節需要的資訊，以下項目都待確認，請業務單位補充後再撰寫。（待確認）"
@@ -183,6 +184,7 @@ async def main() -> int:
     ap.add_argument("--ollama", default="http://127.0.0.1:11434")
     ap.add_argument("--only", help="只跑這些任務，例如 FIX/feature,PUR/idea")
     ap.add_argument("--variants", default=",".join(VARIANTS))
+    ap.add_argument("--resume", action="store_true", help="--out 已經有結果時，跑過的不重跑（真模型中斷後接著跑）")
     ap.add_argument(
         "--save-dir",
         type=Path,
@@ -198,6 +200,14 @@ async def main() -> int:
         wanted = set(args.only.split(","))
         jobs = [(sc, k) for sc, k in jobs if f"{sc.code}/{k}" in wanted]
     reviewer = OllamaClient(args.ollama, args.review_model) if args.review_model else None
+    # 真模型審查要好幾個小時：每跑完一份就存，中斷後加 --resume 從沒跑過的接著跑；執行期間電腦不待命
+    done: set[tuple[str, str]] = set()
+    if args.resume and args.out.exists():
+        rows = [r for r in json.loads(args.out.read_text(encoding="utf-8")) if "error" not in r]
+        done = {(r["task"], r["variant"]) for r in rows}
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    awake = KeepAwake(enabled=reviewer is not None)
+    awake.hold()
     with tempfile.TemporaryDirectory() as tmp:
         for sc, key in jobs:
             if not book.path(sc.code, key).exists():
@@ -206,6 +216,8 @@ async def main() -> int:
             tpl = tpls[doc_type_of(sc, key)]
             requirement = requirement_of(sc, key)
             for name in args.variants.split(","):
+                if (f"{sc.code}/{key}", name) in done:
+                    continue
                 variant = make_variant(name, oracle, requirement, tpl)
                 root = Path(tmp) / name
                 try:
@@ -217,6 +229,7 @@ async def main() -> int:
                 if args.save_dir and md:
                     save_for_judge(args.save_dir, f"{sc.code}-{key}-{name}", sc, key, requirement, md, row)
                 rows.append(row)
+                args.out.write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8")
                 print(
                     f"{sc.code}/{key:12} {name:14} L0錯誤={row.get('l0_errors')} "
                     f"產品通過={row.get('product_pass')} 需求缺口={row.get('req_gaps')} "
@@ -225,9 +238,9 @@ async def main() -> int:
                     f"hollow={len(row.get('l1', {}).get('hollow', []))}",
                     flush=True,
                 )
+    awake.release()
     if reviewer is not None:
         await reviewer.close()
-    args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"結果：{args.out}")
     return 0
