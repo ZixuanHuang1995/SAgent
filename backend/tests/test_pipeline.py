@@ -17,8 +17,10 @@ from sagent.agents.prompts import (
     related_answers,
 )
 from sagent.agents.reviewer import (
+    Reviewer,
     _apply_ledger,
     draft_for_review,
+    drop_check_duplicates,
     marked_points,
     mismatched_ids,
     parse_llm_issues,
@@ -991,6 +993,37 @@ def test_unresolved_issues_stay_and_revision_stops_without_progress():
     assert any("修訂後錯誤沒有變少（上一輪 1 個，這一輪 2 個）" in m for m in logs)
     phases = [e["data"]["phase"] for e in emitter.events if e["type"] == "phase"]
     assert phases.count("revise") == 1
+
+
+def test_model_issue_repeating_static_check_is_dropped():
+    check = Issue("S5", "medium", "引用了文件裡沒有定義的編號：AC-06", source="check")
+    issues = [
+        Issue("S5", "medium", "[S5] 引用了文件裡沒有定義的編號：AC-06", kind="format"),  # 照抄
+        Issue("S5", "medium", "AC-06 沒有在驗收條件裡定義", kind="format"),  # 換句話說，編號一樣
+        Issue("S5", "high", "S5 的 AC-06 跟 S4 的使用者故事寫得不一樣", kind="conflict"),  # 另一個問題
+        # 照抄但章節寫錯（真模型實測：程式檢查在 S8，模型寫 S5）：文字一樣就算重複
+        Issue("S3", "medium", "[S3] 引用了文件裡沒有定義的編號：AC-06", kind="format"),
+        Issue("S3", "medium", "AC-06 的編號格式不對", kind="format"),  # 不同章節、文字不一樣：保留
+        Issue("S5", "medium", "表格欄位數不一致", kind="format"),
+    ]
+    kept = drop_check_duplicates(issues, [check])
+    assert [(i.section_id, i.kind) for i in kept] == [("S5", "conflict"), ("S3", "format"), ("S5", "format")]
+    assert kept[1].problem == "AC-06 的編號格式不對" and kept[2].problem == "表格欄位數不一致"
+    # 沒有程式檢查的錯誤時原樣回傳；low 的程式檢查不算
+    assert drop_check_duplicates(issues, []) == issues
+    assert drop_check_duplicates(issues, [Issue("S5", "low", "引用了文件裡沒有定義的編號：AC-06")]) == issues
+
+    # 整個審查流程：模型照抄程式檢查找到的錯誤，只留程式檢查那一個
+    plan, draft = _draft("- AC-01：可以下單", "- 對應 AC-06")
+    review = {
+        "issues": [_issue("S2", "[S2] 引用了文件裡沒有定義的編號：AC-06", "format", "medium")],
+        "review_points": [],
+        "summary": "s",
+    }
+    llm = _ReviewLLM(review=review)
+    result = asyncio.run(Reviewer(llm, ListEmitter(), {}).review(make_input(), plan, draft, 1))
+    assert not [i for i in result.issues if i.source == "llm"]
+    assert any(i.source == "check" and "AC-06" in i.problem for i in result.issues)
 
 
 def test_resolved_but_repeated_issue_stays_open():

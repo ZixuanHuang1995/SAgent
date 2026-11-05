@@ -269,6 +269,20 @@ def test_plan_first_answers_reach_writer(client, project, fake_llms):
     assert "## 名詞表" in prompt and "角色：\n- 客戶：在網站下單的人" in prompt
     assert "客戶（角色）" not in prompt
 
+    # 重新審查這次工作（scripts/review_consistency.py）時，需求和名詞表要跟當時一樣
+    import importlib.util
+
+    from sagent.config import ROOT_DIR
+
+    path = ROOT_DIR / "scripts" / "review_consistency.py"
+    module_spec = importlib.util.spec_from_file_location("review_consistency", path)
+    review_consistency = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(review_consistency)
+    inp, plan, draft = review_consistency.load_run(client.app.state.sagent.cfg.db_path, run_id)
+    assert "## 待確認問題的回答" in inp.requirement and "答：約 200 人" in inp.requirement
+    assert [t.name for t in plan.terms] == ["客戶", "已送出"]
+    assert len(draft.sections) == len(plan.sections) > 0
+
 
 def test_cancel_planned_run(client, project):
     spec = _spec(client, project)

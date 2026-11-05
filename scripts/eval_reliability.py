@@ -3,6 +3,10 @@
 參考 HAL 可靠度的三個面向：跨次一致、對擾動穩健、失敗可預期。每次跑完整的 AI 流程（Planner → Writer → Reviewer），
 不寫資料庫，輸出存在 --out-dir。CPU 上一份構想提案（不畫圖、不修訂）約 20 分鐘，建議排在晚上跑。
 
+- 一致性比較名詞表、編號項目和大綱的要點。章節固定的範本章節名稱一定一樣，不拿來比（比了一定是 1，沒有意義）。
+- 一份出錯（例如模型逾時）只記下錯誤、接著跑下一份；每跑完一份就更新 summary.json，中途停掉也留得住前面的結果。
+- summary.json 記下模型和提示詞版本（agents/versioning.py），改提示詞前後的結果才比得起來。
+
 用法（在專案根目錄）：
     uv run --project backend python scripts/eval_reliability.py --requirement-file 需求.txt --times 3 \\
         --rephrased-file 換句話說的需求.txt --sparse-file 只有兩三句的需求.txt --out-dir eval-out
@@ -26,9 +30,12 @@ from sagent.agents.llm import LLMClient, OllamaClient
 from sagent.agents.pipeline import SpecPipeline
 from sagent.agents.textutil import extract_item_ids
 from sagent.agents.types import PipelineOptions, PipelineResult, RunInput
+from sagent.agents.versioning import prompt_version
 from sagent.services.markdown_doc import normalize_heading
 
 _NUMBER_RE = re.compile(r"\d+(?:\.\d+)?")
+# 前面接英文字母的（HTML5）、「2D」「3D」是名稱，不算；「16ms」「5MB」這種數字加單位要算
+_PLAIN_NUMBER_RE = re.compile(r"(?<![A-Za-z\d.])\d+(?:\.\d+)?(?![\dD])")
 _MARK_RE = re.compile(r"[（(](假設|待確認)[）)]")
 _FENCE_RE = re.compile(r"```.*?```", re.S)
 
@@ -40,22 +47,32 @@ def _jaccard(a: set[str], b: set[str]) -> float:
 def measure(requirement: str, result: PipelineResult) -> dict:
     """一次結果的指標。編號、章節編號裡的數字不算；需求沒出現過的數字算「可能是編的」。"""
     text = _FENCE_RE.sub("", result.markdown)
-    plain = re.sub(r"\b[A-Z]{1,4}-\d{2,3}\b|^#+ \d+\.|^\s*\d+[.)] ", "", text, flags=re.M)
+    # 條列的編號不算：行首、表格格子開頭的「1. 」，以及格子裡換行後的「<br>2. 」（真模型常這樣寫）
+    plain = re.sub(r"\b[A-Z]{1,4}-\d{2,3}\b|^#+ \d+\.|(?:^\s*|\|\s*|<br>\s*)\d+[.)、]\s*", "", text, flags=re.M)
     known = set(_NUMBER_RE.findall(requirement))
-    invented = sorted({n for n in _NUMBER_RE.findall(plain) if n not in known and n not in ("0", "1")})
+    # 「HTML5」「Canvas 2D」這類名稱裡的數字也不算
+    invented = sorted({n for n in _PLAIN_NUMBER_RE.findall(plain) if n not in known and n not in ("0", "1")})
     review = result.review
     errors = [i for i in review.issues if i.severity in ("high", "medium")] if review else []
     return {
         "headings": [normalize_heading(s.heading) for s in result.plan.sections],
         "terms": [t.name for t in result.plan.terms],
         "items": [i.split(" ")[0] for i in extract_item_ids(text)],
+        # 大綱要點的雙字詞，比較每次規劃的內容像不像（文字不會一模一樣，所以用雙字詞）
+        "points": sorted(_bigrams("".join(k for s in result.plan.sections for k in s.key_points))),
         "open_questions": len(result.plan.open_questions),
         "marks": len(_MARK_RE.findall(text)),
         "invented_numbers": invented,
         "review_errors": len(errors),
         "review_points": len(review.review_points) if review else 0,
         "chars": len(text),
+        "output_tokens": sum(s.completion_tokens for s in result.stats.values()),
     }
+
+
+def _bigrams(text: str) -> set[str]:
+    text = re.sub(r"\s+", "", text)
+    return {text[i : i + 2] for i in range(len(text) - 1)}
 
 
 async def run_once(llm: LLMClient, args: argparse.Namespace, requirement: str) -> PipelineResult:
@@ -74,14 +91,14 @@ async def run_once(llm: LLMClient, args: argparse.Namespace, requirement: str) -
     return await SpecPipeline(llm, NullEmitter()).run(inp)
 
 
-def consistency(results: list[dict]) -> dict:
-    """兩兩比較章節名稱、名詞表、編號項目的重疊程度（1 是完全一樣）。"""
+def consistency(results: list[dict], fixed_sections: bool) -> dict:
+    """兩兩比較名詞表、編號項目、大綱要點（和不固定時的章節名稱）的重疊程度，1 是完全一樣。"""
     pairs = list(combinations(results, 2))
     if not pairs:
         return {}
+    keys = ("terms", "items", "points") if fixed_sections else ("headings", "terms", "items", "points")
     return {
-        key: round(sum(_jaccard(set(a[key]), set(b[key])) for a, b in pairs) / len(pairs), 2)
-        for key in ("headings", "terms", "items")
+        key: round(sum(_jaccard(set(a[key]), set(b[key])) for a, b in pairs) / len(pairs), 2) for key in keys
     }
 
 
@@ -109,30 +126,56 @@ async def main() -> int:
     if args.sparse_file:
         cases.append(("sparse", args.sparse_file))
 
+    template = load_templates()[args.template]
     llm: LLMClient = FakeLLM() if args.fake else OllamaClient(args.ollama, args.model)
     metrics: dict[str, dict] = {}
+    errors: dict[str, str] = {}
+    summary: dict = {
+        "model": "fake" if args.fake else args.model,
+        "template": args.template,
+        "prompt_version": prompt_version(template),
+        "metrics": metrics,
+        "errors": errors,
+    }
+
+    def save() -> None:
+        same = [metrics[n] for n, _ in cases if n.startswith("same-") and n in metrics]
+        summary["consistency"] = consistency(same, template.fixed_sections)
+        if "rephrased" in metrics and same:
+            summary["robustness"] = consistency([same[0], metrics["rephrased"]], template.fixed_sections)
+        text = json.dumps(summary, ensure_ascii=False, indent=2)
+        (args.out_dir / "summary.json").write_text(text, encoding="utf-8")
+
     try:
         for name, path in cases:
             requirement = path.read_text(encoding="utf-8")
             started = time.monotonic()
-            result = await run_once(llm, args, requirement)
+            try:
+                result = await run_once(llm, args, requirement)
+            except Exception as exc:  # 一份失敗（例如逾時）不影響其他份
+                errors[name] = str(exc) or exc.__class__.__name__
+                print(f"{name}：失敗（{errors[name]}），接著跑下一份", flush=True)
+                save()
+                continue
             (args.out_dir / f"{name}.md").write_text(result.markdown, encoding="utf-8")
             m = measure(requirement, result)
             m["minutes"] = round((time.monotonic() - started) / 60, 1)
             metrics[name] = m
+            save()
             print(
                 f"{name}：{m['minutes']} 分鐘，{len(m['headings'])} 節，標註假設或待確認 {m['marks']} 處，"
-                f"需求沒有的數字 {len(m['invented_numbers'])} 個，審查錯誤 {m['review_errors']} 個",
+                f"需求沒有的數字 {len(m['invented_numbers'])} 個，審查錯誤 {m['review_errors']} 個，"
+                f"輸出 {m['output_tokens']} tokens",
                 flush=True,
             )
     finally:
         await llm.close()
 
-    same = [metrics[n] for n, _ in cases if n.startswith("same-")]
-    summary = {"consistency": consistency(same), "metrics": metrics}
-    if "rephrased" in metrics and same:
-        summary["robustness"] = consistency([same[0], metrics["rephrased"]])
-    print("\n一致性（同一份需求，兩兩比較，1 是完全一樣）：", summary["consistency"])
+    save()
+    if errors:
+        print(f"\n失敗 {len(errors)} 份：{errors}")
+    note = "；章節固定，不比較章節名稱" if template.fixed_sections else ""
+    print(f"\n一致性（同一份需求，兩兩比較，1 是完全一樣{note}）：", summary["consistency"])
     if "robustness" in summary:
         print("穩健性（原需求對換句話說）：", summary["robustness"])
     if "sparse" in metrics:
@@ -141,9 +184,8 @@ async def main() -> int:
             f"資訊不夠時：待確認問題 {s['open_questions']} 個、標註 {s['marks']} 處、"
             f"需求沒有的數字 {s['invented_numbers'][:10]}"
         )
-    (args.out_dir / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"結果：{args.out_dir}")
-    return 0
+    return 1 if errors else 0
 
 
 if __name__ == "__main__":

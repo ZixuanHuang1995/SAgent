@@ -557,7 +557,7 @@ class Reviewer(AgentBase):
                     llm_ok=False,
                 )
             else:
-                new_issues = parse_llm_issues(data, plan)
+                new_issues = drop_check_duplicates(parse_llm_issues(data, plan), checks)
                 new_points = parse_llm_points(data, plan)
                 still_open: list[Issue] = []
                 resolved: list[str] = []
@@ -586,6 +586,46 @@ class Reviewer(AgentBase):
             fixed = f"，上一輪的意見已修正 {len(review.resolved)} 個" if ledger and review.llm_ok else ""
             info.message = f"審查結果：{verdict}{fixed}，需要人工覆核 {len(review.review_points)} 項"
         return review
+
+
+_SID_PREFIX_RE = re.compile(r"^\s*\[S\d+\]\s*")
+
+
+def drop_check_duplicates(issues: list[Issue], checks: list[Issue]) -> list[Issue]:
+    """模型又寫一次程式檢查已經找到的錯誤，不重複算。
+
+    程式檢查的結果放在提示詞裡給模型看（寫明「已經列入，不用重複」），真模型還是常照抄成自己的錯誤，
+    例如「[S5] 引用了文件裡沒有定義的編號：AC-06」（2026-11-05 審查一致性實驗）。
+    同一個錯誤算兩次，錯誤數變多，「錯誤沒變少就停止修訂」也會判斷錯。
+
+    文字包含程式檢查的說明就當成重複，不管寫在哪一節：模型照抄時常把章節寫錯（程式檢查在 S8，模型寫 S5）。
+    文字不一樣時，同一節、格式錯誤、提到的編號跟程式檢查一樣，也當成重複。
+    提到同一個編號的「前後矛盾」是另一個問題，保留。
+    """
+    found = [c for c in checks if c.severity != "low"]
+    if not found:
+        return issues
+    kept = []
+    for issue in issues:
+        text = _SID_PREFIX_RE.sub("", issue.problem)
+        ids = {m.group(0) for m in _ID_RE.finditer(text)}
+        duplicate = False
+        for check in found:
+            check_ids = {m.group(0) for m in _ID_RE.finditer(check.problem)}
+            if check.problem in text or text in check.problem:
+                duplicate = True
+            elif (
+                check.section_id == issue.section_id
+                and issue.kind in ("format", "")
+                and check_ids
+                and check_ids <= ids
+            ):
+                duplicate = True
+            if duplicate:
+                break
+        if not duplicate:
+            kept.append(issue)
+    return kept
 
 
 def resolved_numbers(data: dict[str, Any], count: int) -> set[int]:

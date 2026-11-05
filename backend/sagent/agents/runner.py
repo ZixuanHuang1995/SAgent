@@ -55,6 +55,21 @@ def can_resume(checkpoint: dict[str, Any] | None) -> bool:
     return bool(checkpoint) and isinstance(checkpoint.get("plan"), dict)
 
 
+def requirement_with_answers(requirement: str, options: dict[str, Any]) -> str:
+    """先確認大綱時使用者的回答接在需求後面，Writer 和 Reviewer 看到的需求就是這個。
+
+    重新審查舊工作（scripts/review_consistency.py）也要用一樣的需求，不然回答過的內容會被當成「需求沒提到」。
+    """
+    answers = [a for a in options.get("answers") or [] if str(a.get("answer", "")).strip()]
+    if not answers:
+        return requirement
+    return (
+        requirement
+        + "\n\n## 待確認問題的回答\n"
+        + "\n".join(f"- 問：{a['question']}\n  答：{a['answer'].strip()}" for a in answers)
+    )
+
+
 def _optional_int(value: Any) -> int | None:
     """沒有值表示不限制（例如圖的張數）。舊的 AI 工作存的是數字，照樣用。"""
     return None if value is None else int(value)
@@ -320,7 +335,7 @@ class RunManager:
                 phase_name=phase.name if phase else "",
                 spec_title=spec.title,
                 template=template,
-                requirement=run.requirement,
+                requirement=requirement_with_answers(run.requirement, opts),
                 existing_content=head.content if head else "",
                 options=PipelineOptions(
                     uml_syntax=opts.get("uml_syntax", "auto"),
@@ -331,11 +346,6 @@ class RunManager:
                     max_diagrams=_optional_int(opts.get("max_diagrams")),
                 ),
             )
-            answers = [a for a in opts.get("answers") or [] if str(a.get("answer", "")).strip()]
-            if answers:
-                inp.requirement += "\n\n## 待確認問題的回答\n" + "\n".join(
-                    f"- 問：{a['question']}\n  答：{a['answer'].strip()}" for a in answers
-                )
             saved_plan = run.plan if opts.get("plan_confirmed") and run.plan else None
             keep_stats = saved_plan is not None or checkpoint is not None
             return _Loaded(

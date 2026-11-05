@@ -298,6 +298,15 @@ class Verifier:
         # D17：工作用的是預設模型
         self.must("D17 AI 工作用預設模型", run["model"] == EXPECTED_MODEL or self.fake, f"模型：{run['model']}")
 
+        # D41：記下提示詞、範本的版本，改提示詞前後的結果才分得出來
+        version = (run.get("options") or {}).get("prompt_version") or {}
+        code = version.get("code") or "（沒有 git）"
+        self.must(
+            "D41 AI 工作記下提示詞版本",
+            len(version.get("prompts", "")) == 12 and len(version.get("template", "")) == 12,
+            f"提示詞 {version.get('prompts', '?')}、範本 {version.get('template', '?')}、程式 {code}",
+        )
+
     def check_usage(self, label: str, events: list[dict], stats: dict) -> None:
         """D3、D13、D14：每一步記下 token、prefill、decode 時間和上下文長度。"""
         steps = [e["data"] for e in events if e["type"] == "step_end" and e["data"].get("completion_tokens")]

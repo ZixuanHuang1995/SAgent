@@ -2,9 +2,10 @@
 
 用來判斷修訂後的再審查找到的「新錯誤」，是修訂改壞的，還是審查模型每次挑的不一樣。
 文件、需求、範本、大綱從某一次 AI 工作讀出來（資料庫只讀，不會修改）。
+審查時給的東西要跟當時一樣：需求後面接上先確認大綱時的回答，名詞表用當時大綱的，專案詞彙表用專案現在的。
 
 用法（在專案根目錄）：
-    uv run --project backend python scripts/review_consistency.py --db data-demo/sagent.db --run-id 6 --times 3 --out 結果.json
+    uv run --project backend python scripts/review_consistency.py --db data/sagent.db --run-id 6 --times 3 --out 結果.json
     自訂範本的文件加 --templates-dir（例如 verify_real_model.py 的資料夾裡的 templates）
 """
 
@@ -22,7 +23,9 @@ from pathlib import Path
 from sagent.agents.base import NullEmitter
 from sagent.agents.doc_templates import get_template, load_templates
 from sagent.agents.llm import OllamaClient
+from sagent.agents.planner import GLOSSARY_LIMIT, parse_terms
 from sagent.agents.reviewer import Reviewer
+from sagent.agents.runner import requirement_with_answers
 from sagent.agents.types import (
     OPEN_QUESTIONS_HEADING,
     Draft,
@@ -41,7 +44,8 @@ _KEY_RE = re.compile(r"[A-Z]{1,4}-\d{2,3}|「([^」]{2,30})」")
 def load_run(db_path: Path, run_id: int, templates_dir: Path | None = None) -> tuple[RunInput, Plan, Draft]:
     db = sqlite3.connect(f"file:{db_path.as_posix()}?mode=ro", uri=True)
     row = db.execute(
-        "select r.requirement, r.plan, s.doc_type, s.title, p.name, p.description, ph.name, v.content "
+        "select r.requirement, r.options, r.plan, s.doc_type, s.title, p.name, p.description, p.glossary, "
+        "ph.name, v.content "
         "from agent_runs r join specs s on s.id = r.spec_id join projects p on p.id = r.project_id "
         "left join phases ph on ph.id = s.phase_id "
         "join spec_versions v on v.spec_id = s.id and v.version_no = r.result_version_no where r.id = ?",
@@ -49,9 +53,10 @@ def load_run(db_path: Path, run_id: int, templates_dir: Path | None = None) -> t
     ).fetchone()
     if row is None:
         raise SystemExit(f"找不到 AI 工作 {run_id}，或它沒有產生版本")
-    requirement, plan_json, doc_type, title, project, description, phase, content = row
+    requirement, options, plan_json, doc_type, title, project, description, glossary, phase, content = row
     template = get_template(load_templates(templates_dir), doc_type)
-    planned = {normalize_heading(s["heading"]): s for s in (json.loads(plan_json or "{}").get("sections") or [])}
+    plan_data = json.loads(plan_json or "{}")
+    planned = {normalize_heading(s["heading"]): s for s in (plan_data.get("sections") or [])}
     sections, drafts = [], []
     for sec in parse_markdown(content).sections:
         heading = strip_heading_number(sec.heading)
@@ -68,10 +73,12 @@ def load_run(db_path: Path, run_id: int, templates_dir: Path | None = None) -> t
         phase_name=phase or "",
         spec_title=title,
         template=template,
-        requirement=requirement,
+        requirement=requirement_with_answers(requirement, json.loads(options or "{}")),
         options=PipelineOptions(),
+        project_terms=parse_terms(json.loads(glossary or "[]"), limit=GLOSSARY_LIMIT),
     )
-    return inp, Plan(title=title, summary="", sections=sections), Draft(drafts)
+    terms = parse_terms(plan_data.get("terms") or [], limit=GLOSSARY_LIMIT)
+    return inp, Plan(title=title, summary="", sections=sections, terms=terms), Draft(drafts)
 
 
 def _keys(issue: Issue) -> set[str]:
@@ -106,7 +113,12 @@ async def main() -> int:
     args = parser.parse_args()
 
     inp, plan, draft = load_run(args.db, args.run_id, args.templates_dir)
-    print(f"文件：{inp.spec_title}（{inp.template.name}），{len(plan.sections)} 節", flush=True)
+    answered = "有" if "## 待確認問題的回答" in inp.requirement else "沒有"
+    print(
+        f"文件：{inp.spec_title}（{inp.template.name}），{len(plan.sections)} 節；"
+        f"名詞表 {len(plan.terms)} 個、專案詞彙表 {len(inp.project_terms)} 個、{answered}待確認問題的回答",
+        flush=True,
+    )
     llm = OllamaClient(args.ollama, args.model)
     results: list[list[Issue]] = []
     raw: list[dict] = []
@@ -118,6 +130,8 @@ async def main() -> int:
             errors = [i for i in review.issues if i.source == "llm" and i.severity in ("high", "medium")]
             results.append(errors)
             raw.append(review.to_dict())
+            # 每審查一次就存，中途失敗也不會全部白跑
+            args.out.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
             print(
                 f"第 {n} 次：{time.monotonic() - started:.0f}s，模型找到錯誤 {len(errors)} 個，"
                 f"模型列的人工覆核 {sum(1 for p in review.review_points if p.source == 'llm')} 項"
