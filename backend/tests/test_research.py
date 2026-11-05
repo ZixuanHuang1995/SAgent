@@ -321,3 +321,89 @@ def test_no_reference_section_without_references(client, project, fake_llms):
     wait_run(client, _run(client, _spec(client, project)["id"]))
     calls = [c for llm in fake_llms for c in llm.calls]
     assert calls and not any("參考文件" in m["content"] for c in calls for m in c["messages"])
+
+
+# --- C-14 第一輪審查太長時分批 ---
+
+
+def test_token_estimate_uses_largest_observed_ratio():
+    from sagent.agents.base import TokenEstimate
+
+    est = TokenEstimate()
+    assert est.ratio("m") == TokenEstimate.DEFAULT
+    est.add("m", 1000, 800)
+    est.add("m", 1000, 300)  # 命中快取時回報的 token 變少，不拿來降低估計
+    est.add("m", 100, 100)  # 太短的不算
+    assert est.ratio("m") == 0.8
+    assert est.ratio("other") == 0.8  # 沒有這個模型的資料時用其他模型的
+    assert est.tokens("m", 1000) == 801
+
+
+def _review_prompt_tokens():
+    """撰寫模式的第一輪審查提示詞，用假模型的算法（字元數 ÷ 2）大約幾個 token。"""
+    from test_pipeline import make_input, run
+
+    from sagent.agents.fake_llm import FakeLLM
+
+    llm = FakeLLM()
+    run(llm, make_input(max_revisions=0))
+    call = next(c for c in llm.calls if c["purpose"] == "reviewer:review:1")
+    return len("\n".join(m["content"] for m in call["messages"])) // 2
+
+
+def _small_context_llm(limit, fail_batch=None):
+    from sagent.agents.fake_llm import FakeLLM
+
+    class SmallContext(FakeLLM):
+        async def context_length(self):
+            return limit
+
+        async def chat(self, messages, **kw):
+            result = await super().chat(messages, **kw)
+            if fail_batch and any(f"第 {fail_batch} 批" in m["content"] for m in messages):
+                result.text = "不是 JSON"
+            return result
+
+    return SmallContext()
+
+
+def test_first_review_is_split_when_too_long():
+    from test_pipeline import make_input, run
+
+    whole = _review_prompt_tokens()
+    limit = int((whole * 0.6 + 3000) / 0.85)  # 放得下大約六成
+    llm = _small_context_llm(limit)
+    result, emitter = run(llm, make_input(max_revisions=0))
+    first = [c for c in llm.calls if c["purpose"] == "reviewer:review:1"]
+    assert len(first) >= 2
+    assert all("批，共" in c["messages"][-1]["content"] for c in first)
+    logs = [e["message"] for e in emitter.events if e["type"] == "log"]
+    assert any("分成" in m and "批審查" in m for m in logs)
+    review = result.reviews[0]
+    assert review.llm_ok and review.summary.startswith("文件太長，分成")
+    # 假模型每一批都說 S2 有問題，只有包含 S2 的那一批算，不重複
+    llm_issues = [i for i in review.issues if i.source == "llm"]
+    assert len(llm_issues) == 1 and llm_issues[0].section_id == "S2"
+    # 每一節都只在一批裡
+    end = next(e for e in emitter.events if e["type"] == "step_end" and e["data"]["step"] == "review:1")
+    batches = end["data"]["output"]["batches"]
+    assert sorted(s for b in batches for s in b) == sorted({s.id for s in result.plan.sections})
+
+
+def test_failed_batch_is_listed_for_human_review():
+    from test_pipeline import make_input, run
+
+    whole = _review_prompt_tokens()
+    llm = _small_context_llm(int((whole * 0.6 + 3000) / 0.85), fail_batch=2)
+    result, _ = run(llm, make_input(max_revisions=0))
+    review = result.reviews[0]
+    assert not review.llm_ok
+    assert any("沒有審查到的章節" in p.item for p in review.review_points)
+
+
+def test_review_not_split_when_context_is_enough_or_unknown():
+    from test_pipeline import make_input, run
+
+    llm = _small_context_llm(262144)
+    run(llm, make_input(max_revisions=0))
+    assert len([c for c in llm.calls if c["purpose"] == "reviewer:review:1"]) == 1

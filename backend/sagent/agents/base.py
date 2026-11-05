@@ -89,6 +89,31 @@ class StepInfo:
         }
 
 
+class TokenEstimate:
+    """估計提示詞有多少 token（研究計劃 C-14）：用這個工作裡實際呼叫回報的 prompt_tokens ÷ 字元數。
+
+    Ollama 沒有算 token 的 API，換模型係數也不一樣，所以用同一個模型實際的數字。
+    取觀察到的最大比例：提示詞的前段命中快取時 Ollama 回報的 prompt_tokens 會變少，平均會低估。
+    還沒有資料時用 DEFAULT（中文為主的提示詞，qwen 系列大約 0.7～0.9）。
+    """
+
+    DEFAULT = 0.9
+    MIN_CHARS = 500  # 太短的提示詞，固定的格式 token 佔比太高，不拿來算
+
+    def __init__(self) -> None:
+        self._ratio: dict[str, float] = {}
+
+    def add(self, model: str, chars: int, tokens: int) -> None:
+        if chars >= self.MIN_CHARS and tokens > 0:
+            self._ratio[model] = max(self._ratio.get(model, 0.0), tokens / chars)
+
+    def ratio(self, model: str) -> float:
+        return self._ratio.get(model) or max(self._ratio.values(), default=self.DEFAULT)
+
+    def tokens(self, model: str, chars: int) -> int:
+        return int(chars * self.ratio(model)) + 1
+
+
 def prompt_hash(messages: list[dict[str, str]]) -> str:
     """提示詞的 SHA-256（C-09）：比較兩次工作同一步送給模型的內容一不一樣，不用存全文。"""
     text = json.dumps(messages, ensure_ascii=False, sort_keys=True)
@@ -105,6 +130,8 @@ class AgentBase:
         self._step: StepInfo | None = None
         # 每一步的提示詞全文存進 step_end（C-09，SpecPipeline 依選項設定）
         self.store_prompts = False
+        # 估計 token 數用（C-14），SpecPipeline 讓三個 agent 共用一個
+        self.token_estimate = TokenEstimate()
 
     async def log(self, message: str, level: str = "info", **data: Any) -> None:
         await self.emitter.emit("log", self.role, message, {"level": level, **data})
@@ -167,6 +194,9 @@ class AgentBase:
             max_tokens=max_tokens,
             on_token=on_token,
             purpose=f"{self.role}:{step_id}",
+        )
+        self.token_estimate.add(
+            self.llm.model, sum(len(m.get("content", "")) for m in messages), result.prompt_tokens
         )
         # 小模型偶爾會混入簡體字
         result.text = to_traditional(result.text)

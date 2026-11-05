@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 
 from ..services.markdown_doc import MdDoc, MdSection, render_markdown
-from .base import Emitter
+from .base import Emitter, TokenEstimate
 from .llm import LLMClient
 from .planner import Planner
 from .reviewer import Reviewer
@@ -69,6 +69,10 @@ class SpecPipeline:
         self.planner = Planner(llm, emitter, self.stats)
         self.writer = Writer(llm, emitter, self.stats)
         self.reviewer = Reviewer(reviewer_llm or llm, emitter, self.stats)
+        # Writer 實際用掉的 token 數拿來估計審查的輸入有多長（C-14）
+        estimate = TokenEstimate()
+        for agent in (self.planner, self.writer, self.reviewer):
+            agent.token_estimate = estimate
 
     @staticmethod
     def _apply_template_limits(inp: RunInput) -> None:

@@ -757,8 +757,12 @@ def reviewer_messages(
     check_notes: list[str],
     partial: bool = False,
     previous: list[str] | None = None,
+    batch: tuple[int, int] | None = None,
 ) -> list[dict[str, str]]:
-    """previous：修訂後的再審查，上一輪對修改過的章節的意見（「[S2] 問題」）。"""
+    """previous：修訂後的再審查，上一輪對修改過的章節的意見（「[S2] 問題」）。
+
+    batch：第一輪審查太長、分批時是（第幾批, 共幾批），草稿只有這一批的章節（C-14）。
+    """
     outline = "\n".join(
         f"[{s.id}] {s.heading}" + (f"（定義 {s.ids} 編號）" if s.ids else "") for s in plan.sections
     )
@@ -767,6 +771,11 @@ def reviewer_messages(
         "## 修改過的章節\n（其他章節上一輪已經審查過，這次只審查下面這些章節，section_id 只能用這些章節的編號。"
         f"這次 issues 最多 {PARTIAL_REVIEW_LIMITS[0]} 個，review_points 最多 {PARTIAL_REVIEW_LIMITS[1]} 個）"
         if partial
+        else (
+            f"## 文件草稿（第 {batch[0]} 批，共 {batch[1]} 批）\n（文件太長，分批審查。這次只有下面這些章節，"
+            "section_id 只能用這些章節的編號；其他章節的名稱看上面的「章節」）"
+        )
+        if batch
         else "## 文件草稿"
     )
     ledger = ""
