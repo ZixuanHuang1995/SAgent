@@ -22,3 +22,6 @@ tools/
 
 # SpecEval 的輸出（可能有客戶資料）
 speceval-out/
+
+# SpecEval 從使用紀錄挑的任務卡草稿（可能有客戶資料，人審過、去識別化後才搬進 speceval/tasks/）
+speceval/tasks-candidates/
