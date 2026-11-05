@@ -19,3 +19,6 @@ tools/
 
 # 這台電腦自己的設定（start.ps1 啟動時讀）
 /local.env
+
+# SpecEval 的輸出（可能有客戶資料）
+speceval-out/
