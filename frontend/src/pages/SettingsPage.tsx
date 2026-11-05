@@ -513,6 +513,15 @@ export function SettingsPage() {
               </span>
             </span>
           </label>
+          <label className="check-row">
+            <input type="checkbox" checked={form.fewshot_examples} onChange={(e) => set('fewshot_examples', e.target.checked)} />
+            <span>
+              實驗：用人改過的章節當範例
+              <span className="muted small check-row-hint">
+                Writer 寫每一節時，附上資料資料夾 examples/文件類型/章節名稱.md 裡的範例（人挑過、改過的同一節），只學格式和寫法。還在實驗，效果要用 SpecEval 比較過才改成預設。沒有範例檔的章節照原本的寫法。
+              </span>
+            </span>
+          </label>
         </section>
 
         <section className="card">

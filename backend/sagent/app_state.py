@@ -37,6 +37,7 @@ class AppState:
             self.templates,
             lambda: self.plantuml.available,
             keep_awake=KeepAwake(cfg.keep_awake),
+            examples_dir=cfg.data_dir / "examples",
         )
 
     @contextmanager

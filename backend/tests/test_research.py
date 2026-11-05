@@ -407,3 +407,57 @@ def test_review_not_split_when_context_is_enough_or_unknown():
     llm = _small_context_llm(262144)
     run(llm, make_input(max_revisions=0))
     assert len([c for c in llm.calls if c["purpose"] == "reviewer:review:1"]) == 1
+
+
+# --- C-19 人改過的章節當 few-shot 範例（實驗） ---
+
+
+def test_load_examples(tmp_path):
+    from sagent.agents.examples import SEPARATOR, example_file_name, load_examples
+
+    assert example_file_name("4. 功能需求") == "功能需求.md"
+    assert example_file_name("輸入/輸出") == "輸入_輸出.md"
+    folder = tmp_path / "functional_spec"
+    folder.mkdir()
+    (folder / "功能需求.md").write_text(
+        f"範例一\n{SEPARATOR}\n{'長' * 2000}\n{SEPARATOR}\n範例三", encoding="utf-8"
+    )
+    examples = load_examples(tmp_path, "functional_spec", ["4. 功能需求", "5. 業務流程"])
+    assert list(examples) == ["功能需求"]
+    assert examples["功能需求"][0] == "範例一"
+    assert len(examples["功能需求"]) == 2 and len(examples["功能需求"][1]) == 1500
+    assert load_examples(tmp_path, "architecture", ["功能需求"]) == {}
+    assert load_examples(None, "functional_spec", ["功能需求"]) == {}
+
+
+def test_examples_go_last_in_section_prompt():
+    from test_pipeline import make_input
+
+    from sagent.agents.prompts import section_messages
+    from sagent.agents.types import Plan, SectionPlan
+
+    inp = make_input()
+    plan = Plan(title="t", summary="s", sections=[SectionPlan("S4", "功能需求", key_points=["送出訂單"])])
+    plain = section_messages(inp, plan, plan.sections[0], 4, [])[-1]["content"]
+    assert "範例" not in plain
+    inp.examples = {"功能需求": ["| FR-01 | 範例內容 |"]}
+    user = section_messages(inp, plan, plan.sections[0], 4, [])[-1]["content"]
+    assert "（範例開始）\n| FR-01 | 範例內容 |\n（範例結束）" in user
+    assert user.index("（範例開始）") > user.index("## 現在要寫的章節") and user.rstrip().endswith("的內文。")
+    # 前段（跟其他章節共用的部分）不變，快取照樣有效
+    assert user.split("## 現在要寫的章節")[0] == plain.split("## 現在要寫的章節")[0]
+
+
+def test_fewshot_setting_loads_examples_from_data_dir(cfg, client, project, fake_llms):
+    folder = cfg.data_dir / "examples" / "functional_spec"
+    folder.mkdir(parents=True)
+    (folder / "功能需求.md").write_text("| FR-01 | 人改過的範例 |", encoding="utf-8")
+    spec_id = _spec(client, project)["id"]
+    wait_run(client, _run(client, spec_id))  # 預設關閉：沒有範例
+    assert not any("人改過的範例" in m["content"] for llm in fake_llms for c in llm.calls for m in c["messages"])
+    client.put("/api/settings", json={"fewshot_examples": True})
+    run = wait_run(client, _run(client, spec_id))
+    assert run["options"]["fewshot_examples"] is True
+    sections = [c for c in fake_llms[-1].calls if c["purpose"].startswith("writer:section:")]
+    with_example = [c for c in sections if "人改過的範例" in c["messages"][-1]["content"]]
+    assert len(with_example) == 1 and "第 4 節：功能需求" in with_example[0]["messages"][-1]["content"]

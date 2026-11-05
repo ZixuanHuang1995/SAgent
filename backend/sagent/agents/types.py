@@ -40,6 +40,8 @@ class RunInput:
     project_terms: list[Term] = field(default_factory=list)
     # 同專案其他 Spec 的編號項目和名詞（C-13，services/references.py 組的），空字串表示沒有參考文件
     references: str = ""
+    # 實驗（C-19）：每一節的 few-shot 範例 {章節名稱（去掉編號）: [範例]}，agents/examples.py 讀的
+    examples: dict[str, list[str]] = field(default_factory=dict)
 
 
 @dataclass

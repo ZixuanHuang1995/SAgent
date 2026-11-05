@@ -37,6 +37,8 @@ class AppSettings(BaseModel):
     seed: int | None = Field(None, ge=0, le=2**31 - 1)
     # 每一步的提示詞全文存進工作紀錄（C-09）。資料庫會變大、內容含需求原文；關閉時只存雜湊
     store_prompts: bool = False
+    # 實驗（C-19）：Writer 的章節提示詞加上人改過的同一節當範例（<資料資料夾>/examples/<文件類型>/<章節>.md）
+    fewshot_examples: bool = False
 
 
 class SettingsPatch(BaseModel):
@@ -52,6 +54,7 @@ class SettingsPatch(BaseModel):
     max_run_minutes: float | None = Field(None, ge=0, le=1440)
     seed: int | None = Field(None, ge=0, le=2**31 - 1)
     store_prompts: bool | None = None
+    fewshot_examples: bool | None = None
 
 
 def check_http_url(url: str, label: str) -> None:

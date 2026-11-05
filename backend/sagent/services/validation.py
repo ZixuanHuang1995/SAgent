@@ -19,6 +19,7 @@ FIELD_LABELS = {
     "max_run_minutes": "整個工作的時間上限",
     "seed": "亂數種子",
     "store_prompts": "儲存提示詞",
+    "fewshot_examples": "用人改過的章節當範例",
     "verdict": "能不能交付",
     "reference_spec_ids": "參考文件",
     "note": "理由",

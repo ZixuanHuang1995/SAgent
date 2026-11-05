@@ -56,6 +56,12 @@ export function RunDetailModal(props: {
                     <dd>{(run.options.reference_specs as { title: string }[]).map((r) => r.title).join('、')}</dd>
                   </>
                 )}
+                {!!run.options.fewshot_examples && (
+                  <>
+                    <dt>範例（實驗）</dt>
+                    <dd>用人改過的章節當範例</dd>
+                  </>
+                )}
                 <dt>修訂輪數上限</dt>
                 <dd>{String(run.options.max_revisions ?? '')}</dd>
                 {Number(run.options.max_run_minutes) > 0 && (

@@ -18,6 +18,7 @@ from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import func, select
@@ -29,6 +30,7 @@ from ..services import specs as spec_service
 from ..services.power import KeepAwake
 from ..services.references import build_references
 from .doc_templates import DocTemplate, get_template
+from .examples import load_examples
 from .llm import LLMClient
 from .pipeline import SpecPipeline
 from .planner import GLOSSARY_LIMIT, parse_terms
@@ -134,6 +136,7 @@ class RunManager:
         templates_provider: Callable[[], dict[str, DocTemplate]],
         plantuml_available: Callable[[], bool],
         keep_awake: KeepAwake | None = None,
+        examples_dir: Path | None = None,
     ):
         self.session_factory = session_factory
         # AI 工作跑的時候電腦不能進入待命，不然程式會被暫停到有人喚醒（services/power.py）
@@ -141,6 +144,8 @@ class RunManager:
         self.llm_factory = llm_factory
         self.templates_provider = templates_provider
         self.plantuml_available = plantuml_available
+        # 實驗（C-19）：人改過的章節範例放在這裡，<文件類型>/<章節名稱>.md
+        self.examples_dir = examples_dir
         self._queue: asyncio.Queue[int] = asyncio.Queue()
         self._worker: asyncio.Task | None = None
         self._tasks: dict[int, asyncio.Task] = {}
@@ -379,6 +384,10 @@ class RunManager:
                 templates = self.templates_provider()
                 inp.references = build_references(
                     s, project.id, refs, lambda key: templates[key].name if key in templates else key
+                )
+            if opts.get("fewshot_examples"):
+                inp.examples = load_examples(
+                    self.examples_dir, template.key, [sec.heading for sec in template.sections]
                 )
             saved_plan = run.plan if opts.get("plan_confirmed") and run.plan else None
             keep_stats = saved_plan is not None or checkpoint is not None

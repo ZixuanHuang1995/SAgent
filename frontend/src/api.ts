@@ -378,6 +378,8 @@ export interface Settings {
   seed: number | null
   // 每一步的提示詞全文存進工作紀錄
   store_prompts: boolean
+  // 實驗：Writer 用人改過的同一節當範例（資料資料夾的 examples/）
+  fewshot_examples: boolean
 }
 
 export interface Health {

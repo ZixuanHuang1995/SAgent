@@ -40,6 +40,7 @@ from l1 import _MARK_RE, score  # noqa: E402
 
 from sagent.agents.base import ListEmitter  # noqa: E402
 from sagent.agents.doc_templates import load_templates  # noqa: E402
+from sagent.agents.examples import load_examples  # noqa: E402
 from sagent.agents.fake_llm import FakeLLM  # noqa: E402
 from sagent.agents.llm import OllamaClient, ollama_environment  # noqa: E402
 from sagent.agents.pipeline import SpecPipeline  # noqa: E402
@@ -118,6 +119,9 @@ async def run_trial(card: dict, req: str, tpl, llm, args) -> dict:
             temperature=args.temperature,
         ),
     )
+    if args.examples_dir:
+        # 實驗（C-19）：人改過的章節當 few-shot 範例，跟沒有範例的結果配對比較（E11-b）
+        inp.examples = load_examples(args.examples_dir, tpl.key, [s.heading for s in tpl.sections])
     started = time.monotonic()
     stop_reason, result, error = "completed", None, ""
     try:
@@ -208,6 +212,11 @@ async def main() -> int:
     ap.add_argument("--fake", action="store_true", help="用假模型，只檢查流程")
     ap.add_argument("--summary-only", action="store_true", help="不跑，只重算 summary（judge.py 補完 L2 之後）")
     ap.add_argument("--holdout", action="store_true", help="也跑保留集（任務卡寫 holdout: true 的），只在大版本前跑")
+    ap.add_argument(
+        "--examples-dir",
+        type=Path,
+        help="實驗（C-19）：few-shot 範例的資料夾（<文件類型>/<章節名稱>.md），例如 data/examples",
+    )
     args = ap.parse_args()
     if args.times is None:
         args.times = 1 if args.suite == "tiny" else 3

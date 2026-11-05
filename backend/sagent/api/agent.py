@@ -129,6 +129,8 @@ async def create_run(body: RunCreate, state: AppState = Depends(get_state)):
                 "store_prompts": current.store_prompts,
                 # 參考同專案的其他 Spec（C-13）：[{id, title}]，執行時讀它們的最新版
                 "reference_specs": references,
+                # 實驗（C-19）：人改過的章節當 few-shot 範例
+                "fewshot_examples": current.fewshot_examples,
             }
             if doc_type != spec.doc_type:
                 spec.doc_type = doc_type
