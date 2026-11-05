@@ -8,15 +8,21 @@
 
 不用跑模型，只讀 agent_runs、agent_events 和 spec_versions（資料庫只讀，不會修改）。改提示詞或流程前後各跑一次，就能比較。
 
+這裡的錯誤數只用來診斷（哪一步出錯、修訂有沒有用），不能拿來判斷改好或改壞：SpecEval 的對照組裡，
+每節只寫待確認的空洞假文件錯誤數最少。決定要不要合併時看 SpecEval 的可交付率（--speceval，研究計劃 C-02）。
+
 用法（在專案根目錄）：
     uv run --project backend python scripts/analyze_runs.py --db data-demo/sagent.db
     uv run --project backend python scripts/analyze_runs.py --db data/sagent.db --model qwen3.6:35b-a3b --from-run 20
+    # SpecEval 的可交付率；給兩個目錄時印配對差（B − A）和 95% 信賴區間
+    uv run --project backend python scripts/analyze_runs.py --speceval speceval-out/run-A --speceval speceval-out/run-B
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import random
 import re
 import sqlite3
 import sys
@@ -113,10 +119,74 @@ def _print_precision(db: sqlite3.Connection, ids: list[int]) -> None:
         print(f"  {fixed:6} {false:5} {skip:5} {_pct(fixed, fixed + false):>7}  {group}")
 
 
+def _load_speceval(run_dir: Path) -> dict | None:
+    path = run_dir / "summary.json"
+    if not path.exists():
+        print(f"{run_dir}：找不到 summary.json（run_suite.py 跑完會產生；只有 trial 檔時用 --summary-only 重算）")
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _rates(summary: dict) -> dict[str, float]:
+    return {t: v["passed"] / v["trials"] for t, v in (summary.get("per_task") or {}).items() if v.get("trials")}
+
+
+def paired_diff(a: dict[str, float], b: dict[str, float], iters: int = 5000, seed: int = 0) -> dict:
+    """兩次 SpecEval 都有的題目，每題通過率的差（B − A）：平均和配對 bootstrap 95% 信賴區間。"""
+    common = sorted(set(a) & set(b))
+    diffs = [b[t] - a[t] for t in common]
+    if not diffs:
+        return {"tasks": 0, "mean": None, "ci95": None}
+    rng = random.Random(seed)
+    means = sorted(sum(rng.choice(diffs) for _ in diffs) / len(diffs) for _ in range(iters))
+    return {
+        "tasks": len(diffs),
+        "mean": round(sum(diffs) / len(diffs), 3),
+        "ci95": (round(means[int(0.025 * iters)], 3), round(means[int(0.975 * iters)], 3)),
+        "per_task": dict(zip(common, (round(d, 3) for d in diffs), strict=True)),
+    }
+
+
+def _print_speceval(dirs: list[Path]) -> int:
+    """SpecEval 的主要指標（C-02）：可交付率 pass@1、信賴區間、pass^k、每題通過次數。"""
+    summaries = []
+    for d in dirs:
+        s = _load_speceval(d)
+        if s is None:
+            return 1
+        summaries.append((d, s))
+        k = next((key for key in s if key.startswith("pass^")), "pass^k")
+        print(f"\nSpecEval：{d}")
+        print(f"  題目 {s.get('tasks')} 題，可交付率 pass@1 = {s.get('pass@1')}（95% 信賴區間 {s.get('pass@1_ci95')}），{k} = {s.get(k)}")
+        for task, v in sorted((s.get("per_task") or {}).items()):
+            print(f"  {v['passed']}/{v['trials']}  {task}")
+    if len(summaries) >= 2:
+        (da, a), (db_, b) = summaries[0], summaries[-1]
+        diff = paired_diff(_rates(a), _rates(b))
+        print(f"\n配對差（{db_.name} − {da.name}，兩邊都有的 {diff['tasks']} 題）：")
+        if diff["mean"] is None:
+            print("  沒有共同的題目")
+            return 1
+        lo, hi = diff["ci95"]
+        verdict = "變好" if lo > 0 else "變差" if hi < 0 else "看不出差別（信賴區間包含 0）"
+        print(f"  平均 {diff['mean']:+.3f}，95% 信賴區間 ({lo:+.3f}, {hi:+.3f})：{verdict}")
+        for task, d in diff["per_task"].items():
+            if d:
+                print(f"  {d:+.2f}  {task}")
+    return 0
+
+
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser()
-    parser.add_argument("--db", type=Path, required=True)
+    parser.add_argument("--db", type=Path)
+    parser.add_argument(
+        "--speceval",
+        type=Path,
+        action="append",
+        help="SpecEval 的結果目錄（run_suite.py 的 --out-dir）。給兩次時印配對差（第二個 − 第一個）",
+    )
     parser.add_argument("--model", help="只看這個模型")
     parser.add_argument("--doc-type", help="只看這種文件（範本 key）")
     parser.add_argument("--from-run", type=int, default=0, help="只看編號大於等於這個的 AI 工作")
@@ -126,6 +196,12 @@ def main() -> int:
         help="prompt：依提示詞、範本和程式的版本分組，比較改提示詞前後的時間和錯誤數",
     )
     args = parser.parse_args()
+    if not args.db and not args.speceval:
+        parser.error("要給 --db 或 --speceval")
+    if args.speceval:
+        code = _print_speceval(args.speceval)
+        if not args.db:
+            return code
 
     db = sqlite3.connect(f"file:{args.db.as_posix()}?mode=ro", uri=True)
     where, params = ["id >= ?"], [args.from_run]

@@ -9,7 +9,10 @@
 
 用法（在專案根目錄；真模型很慢，先問使用者，晚上或週末跑）：
     uv run --project backend python scripts/speceval/run_suite.py --tasks speceval/tasks --times 3 --out-dir speceval-out/run-A
+    uv run --project backend python scripts/speceval/run_suite.py --tasks speceval/tasks --suite tiny --out-dir speceval-out/tiny-A
     uv run --project backend python scripts/speceval/run_suite.py --tasks speceval/tasks --only FIX-idea-normal --times 1 --fake
+    # 比較兩次（可交付率的配對差和信賴區間）
+    uv run --project backend python scripts/analyze_runs.py --speceval speceval-out/run-A --speceval speceval-out/run-B
 """
 
 from __future__ import annotations
@@ -195,7 +198,12 @@ async def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--tasks", type=Path, default=Path("speceval/tasks"))
     ap.add_argument("--only", help="只跑這些任務，逗號分隔")
-    ap.add_argument("--times", type=int, default=3)
+    ap.add_argument("--times", type=int, help="每題跑幾次（預設 3；--suite tiny 時 1）")
+    ap.add_argument(
+        "--suite",
+        choices=["tiny", "full"],
+        help="tiny：4 張構想提案任務（4 種難度各一張）、不畫圖，每晚跑；full：全部任務卡，週末和合併前跑",
+    )
     ap.add_argument("--model", default="qwen3.6:35b-a3b")
     ap.add_argument("--ollama", default="http://127.0.0.1:11434")
     ap.add_argument("--temperature", type=float, default=0.4)
@@ -204,10 +212,15 @@ async def main() -> int:
     ap.add_argument("--fake", action="store_true", help="用假模型，只檢查流程")
     ap.add_argument("--summary-only", action="store_true", help="不跑，只重算 summary（judge.py 補完 L2 之後）")
     args = ap.parse_args()
+    if args.times is None:
+        args.times = 1 if args.suite == "tiny" else 3
     if args.summary_only:
         print(json.dumps(summarize(args.out_dir, args.times), ensure_ascii=False, indent=1))
         return 0
     cards = [yaml.safe_load(p.read_text(encoding="utf-8")) for p in sorted(args.tasks.glob("*.yaml"))]
+    if args.suite == "tiny":
+        cards = [c for c in cards if c["doc_type"] == "idea_proposal"]
+        args.no_diagrams = True
     if args.only:
         wanted = set(args.only.split(","))
         cards = [c for c in cards if c["id"] in wanted]

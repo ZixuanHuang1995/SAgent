@@ -31,6 +31,7 @@
 | 真模型可靠度（跨次一致、換句話說、資訊不夠） | `uv run --project backend python scripts/eval_reliability.py --requirement-file 需求.txt --times 3 --rephrased-file 換句話說.txt --sparse-file 資訊不夠.txt --out-dir 輸出資料夾`（每次約 20 分鐘，先問使用者；加 `--fake` 只檢查流程；一份失敗會接著跑下一份，每跑完一份就更新 `summary.json`） |
 | 審查一致性（同一份文件審查好幾次，比較錯誤重疊多少） | `uv run --project backend python scripts/review_consistency.py --db data/sagent.db --run-id 6 --times 3`（資料庫只讀；需求會接上當時確認大綱的回答，名詞表照當時的大綱；功能規格書一次審查約 10 分鐘；自訂範本的文件加 `--templates-dir`） |
 | SpecEval 對照組（oracle 和 trivial 代理在程式檢查上的通過率，不跑模型，約 1 分鐘） | `uv run --project backend python scripts/speceval/controls.py --out speceval-out/controls.json`。改了 `static_checks()` 或審查提示詞之後要跑：6 種 trivial 代理都不能通過，22 份 oracle 都要通過。其他 SpecEval 腳本（`run_suite.py`、`judge.py` 等）的用法寫在各檔案開頭，真模型的先問使用者 |
+| SpecEval 可交付率（主要指標） | 任務卡：`uv run --project backend python scripts/speceval/build_tasks.py --out-dir speceval/tasks`（要人審過才 commit）。跑：`uv run --project backend python scripts/speceval/run_suite.py --suite tiny --out-dir speceval-out/tiny-A`（tiny-4，真模型約 2～4 小時，先問使用者；加 `--fake` 只檢查流程；`--suite full` 是 12 題 × 3 次）。比較：`uv run --project backend python scripts/analyze_runs.py --speceval speceval-out/tiny-A --speceval speceval-out/tiny-B`（配對差和 95% 信賴區間） |
 | 真模型驗證筆記的建議（D2、D4、D8、D11、D13、D14、D17 等） | `uv run --project backend python scripts/verify_real_model.py`（暫存資料夾、三節小範本，約 15 分鐘，先問使用者；加 `--fake` 幾秒鐘只檢查流程）。計畫和結果見 `docs/real-model-test-plan.md` |
 
 ## 改完程式要做的檢查
@@ -40,7 +41,7 @@
 | 後端 | `uv run pytest` 和 `uv run ruff check`，都要通過 |
 | 前端 | `npm run build`。後端提供的是 `dist`，沒有重新打包，畫面不會更新 |
 | 畫面 | 用 `.claude/launch.json` 的 `sagent-demo` 開預覽（埠 8766、假模型、資料在 `data-demo/`）實際操作確認 |
-| 提示詞、agent 流程 | pytest 用假模型，只能測流程。要看真模型的結果用 `run_pipeline.py`，但 CPU 上一份文件要 30～70 分鐘，先問使用者再跑。改之前和之後用 `analyze_runs.py` 比較，改完跑 `verify_real_model.py` 確認沒有壞掉 |
+| 提示詞、agent 流程 | pytest 用假模型，只能測流程。要看真模型的結果用 `run_pipeline.py`，但 CPU 上一份文件要 30～70 分鐘，先問使用者再跑。改之前和之後用 `analyze_runs.py` 比較，改完跑 `verify_real_model.py` 確認沒有壞掉。判斷改好或改壞看 SpecEval 的可交付率，不看錯誤數：用 SpecEval tiny-4 確認沒變壞，合併前跑 full-12（`docs/real-model-test-plan.md` 第 4 節） |
 | 圖表語法規則（`diagram_kinds.py`、`services/diagrams.py`） | 跑 `tests/test_diagrams.py`。它用前端同版本 Mermaid 產生的標準答案比對 |
 | 插入圖表的骨架（`services/diagram_snippets.py`） | 用 `mermaid-validate.mjs` 檢查改過的骨架，更新 `mermaid_cases.json` 裡對應的 `snippet_*` 案例，再跑 `tests/test_diagrams.py`（會比對案例和骨架是否一致） |
 | 升級 Mermaid | 用 `frontend/scripts/mermaid-validate.mjs` 重新產生 `backend/tests/data/mermaid_cases.json`，再跑測試 |
