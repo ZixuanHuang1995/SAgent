@@ -222,6 +222,8 @@ class RunOptionsIn(BaseModel):
     max_diagrams: int | None = Field(None, ge=0, le=10)
     # 規劃完先停下來，讓使用者回答待確認問題、調整大綱再撰寫（只用在撰寫模式）
     plan_first: bool | None = None
+    # 撰寫時參考同專案的其他 Spec（研究計劃 C-13），最多 3 份
+    reference_spec_ids: list[int] = Field(default_factory=list, max_length=3)
 
 
 class RunCreate(BaseModel):

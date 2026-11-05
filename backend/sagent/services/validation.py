@@ -20,6 +20,7 @@ FIELD_LABELS = {
     "seed": "亂數種子",
     "store_prompts": "儲存提示詞",
     "verdict": "能不能交付",
+    "reference_spec_ids": "參考文件",
     "note": "理由",
     "uml_syntax": "UML 圖語法",
     "diagrams": "畫圖",

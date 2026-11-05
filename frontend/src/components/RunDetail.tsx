@@ -50,6 +50,12 @@ export function RunDetailModal(props: {
                 <dt>畫圖</dt>
                 <dd>{/* 舊的 AI 工作有記張數上限；新的工作不限制張數，沒有這個值 */}
                   {run.options.diagrams ? (run.options.max_diagrams != null ? `是（最多 ${run.options.max_diagrams} 張）` : '是') : '否'}</dd>
+                {Array.isArray(run.options.reference_specs) && run.options.reference_specs.length > 0 && (
+                  <>
+                    <dt>參考文件</dt>
+                    <dd>{(run.options.reference_specs as { title: string }[]).map((r) => r.title).join('、')}</dd>
+                  </>
+                )}
                 <dt>修訂輪數上限</dt>
                 <dd>{String(run.options.max_revisions ?? '')}</dd>
                 {Number(run.options.max_run_minutes) > 0 && (

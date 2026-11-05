@@ -2308,6 +2308,20 @@ body.is-resizing .cm-editor {
   max-width: 360px;
   padding: 12px 12px 2px;
 }
+/* AI 撰寫時參考的其他 Spec（C-13） */
+.ref-picker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ref-popover {
+  min-width: 260px;
+  max-width: 360px;
+  max-height: 360px;
+  padding: 10px 12px;
+  gap: 6px;
+}
 .meta-summary {
   font-weight: var(--fw-normal);
 }

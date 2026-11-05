@@ -38,6 +38,8 @@ class RunInput:
     options: PipelineOptions = field(default_factory=PipelineOptions)
     # 專案詞彙表：同一個專案的文件都用這些名稱
     project_terms: list[Term] = field(default_factory=list)
+    # 同專案其他 Spec 的編號項目和名詞（C-13，services/references.py 組的），空字串表示沒有參考文件
+    references: str = ""
 
 
 @dataclass

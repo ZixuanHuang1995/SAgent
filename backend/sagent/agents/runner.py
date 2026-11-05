@@ -27,6 +27,7 @@ from ..db import session_scope, utcnow
 from ..models import AgentEvent, AgentRun, Phase, Project, Spec
 from ..services import specs as spec_service
 from ..services.power import KeepAwake
+from ..services.references import build_references
 from .doc_templates import DocTemplate, get_template
 from .llm import LLMClient
 from .pipeline import SpecPipeline
@@ -373,6 +374,12 @@ class RunManager:
                     store_prompts=bool(opts.get("store_prompts")),
                 ),
             )
+            refs = [int(r["id"]) for r in opts.get("reference_specs") or [] if isinstance(r, dict) and "id" in r]
+            if refs:
+                templates = self.templates_provider()
+                inp.references = build_references(
+                    s, project.id, refs, lambda key: templates[key].name if key in templates else key
+                )
             saved_plan = run.plan if opts.get("plan_confirmed") and run.plan else None
             keep_stats = saved_plan is not None or checkpoint is not None
             return _Loaded(

@@ -247,3 +247,77 @@ def test_run_detail_review_points_have_groups(client, project):
     run = wait_run(client, _run(client, _spec(client, project)["id"], requirement="客戶可以下單，訂單 30 天內可以退貨。"))
     points = run["review"]["final"]["review_points"]
     assert points and all(p["group"] in ("trace", "model", "marked") for p in points)
+
+
+# --- C-13 撰寫時參考同專案的其他 Spec ---
+
+REFERENCE_DOC = """# 下單功能
+
+## 1. 功能需求
+
+| 編號 | 功能 | 說明 |
+|---|---|---|
+| FR-01 | 送出訂單 | 客戶選好商品後送出，狀態為「待付款」 |
+| FR-02 | 取消訂單 | 付款前可以取消 |
+
+## 2. 狀態
+
+訂單狀態依序為：待付款、已付款、已出貨。
+
+```mermaid
+flowchart TD
+  A[FR-99 不算] --> B
+```
+"""
+
+
+def _reference_spec(client, project, title="下單功能規格"):
+    spec = _spec(client, project, title=title)
+    resp = client.put(f"/api/specs/{spec['id']}/content", json={"content": REFERENCE_DOC, "base_version_no": spec["head_version_no"]})
+    assert resp.status_code in (200, 201), resp.text
+    return spec
+
+
+def test_reference_specs_are_validated(client, project):
+    target = _spec(client, project, title="架構設計")
+    ref = _reference_spec(client, project)
+    other = client.post("/api/projects", json={"name": "別的專案"}).json()
+    other_tree = client.get(f"/api/projects/{other['id']}").json()
+    foreign = _spec(client, other_tree, title="別的")
+
+    def create(ids):
+        return client.post(
+            "/api/agent/runs",
+            json={"spec_id": target["id"], "requirement": "x", "options": {"reference_spec_ids": ids}},
+        )
+
+    assert create([foreign["id"]]).status_code == 400
+    assert create([target["id"]]).status_code == 400
+    assert create([1, 2, 3, 4]).status_code == 422
+    resp = create([ref["id"], ref["id"]])
+    assert resp.status_code == 201
+    assert resp.json()["options"]["reference_specs"] == [{"id": ref["id"], "title": "下單功能規格"}]
+    wait_run(client, resp.json()["id"])
+
+
+def test_reference_text_goes_into_planner_writer_and_reviewer(client, project, fake_llms):
+    target = _spec(client, project, title="架構設計")
+    ref = _reference_spec(client, project)
+    run = wait_run(client, _run(client, target["id"], reference_spec_ids=[ref["id"]]))
+    assert run["status"] == "succeeded"
+    calls = [c for llm in fake_llms for c in llm.calls]
+    by_role = {role: [c for c in calls if c["purpose"].startswith(role)] for role in ("planner", "writer", "reviewer")}
+    for role, cs in by_role.items():
+        assert cs, role
+        user = cs[0]["messages"][-1]["content"]
+        assert "（參考文件開始）" in user and "（參考文件結束）" in user, role
+        assert "FR-01 送出訂單" in user and "已出貨" in user, role
+        assert "FR-99" not in user  # 程式碼區塊裡的不算
+    review_system = by_role["reviewer"][0]["messages"][0]["content"]
+    assert "不算「需求沒提到」" in review_system
+
+
+def test_no_reference_section_without_references(client, project, fake_llms):
+    wait_run(client, _run(client, _spec(client, project)["id"]))
+    calls = [c for llm in fake_llms for c in llm.calls]
+    assert calls and not any("參考文件" in m["content"] for c in calls for m in c["messages"])

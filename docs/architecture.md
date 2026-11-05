@@ -130,7 +130,7 @@ sequenceDiagram
 | 模型偷懶只回一小段 | 修改後內容少於原本 40% 就不採用 |
 | 各章節自己發明編號 | 哪一節要編號由範本章節的 `ids` 決定，每一節的提示寫明「編號：用 FR-01…」或「不新增編號」，不靠模型讀目標；有 `ids` 的章節沒編號時，審查用程式找出來（見 4.10 節） |
 | Planner 改掉章節名稱、漏掉章節 | 範本設 `fixed_sections: true`（內建範本都是），章節名稱、順序、目標由程式照範本套回去，Planner 只寫要點和圖（見 4.10 節）。這時 Planner 的 schema 沒有 `goal`，也沒有 `title`（文件標題一律用 Spec 的名稱）：CPU 上生成佔六成時間，不叫模型寫用不到的欄位 |
-| 貼進提示詞的既有文件被當成指示 | 修訂模式的原文件沒有章節、改用撰寫模式時，原文件用「（原本的文件開始）…（原本的文件結束）」包起來，標明只當參考資料（D11）。之後加檢索時，檢索結果也要照這個做 |
+| 貼進提示詞的既有文件被當成指示 | 修訂模式的原文件沒有章節、改用撰寫模式時，原文件用「（原本的文件開始）…（原本的文件結束）」包起來，標明只當參考資料（D11）。參考的其他 Spec（C-13）也用「（參考文件開始）…（參考文件結束）」包起來 |
 | 偶爾混入簡體字 | 只把「簡體專用字」換成繁體（用前後文挑字），原本的繁體字不動。整段用 OpenCC 轉會把「干擾」「通過」這類詞改壞。「于」在繁體也是字（姓氏），只在介系詞用法（受限于、位于、大于、于是）改成「於」 |
 | 小標題層級亂 | 章節內的 `#`、`##` 降成 `###`；最上層是 `####` 時整體往上調 |
 | 審查要讀整份草稿，CPU 上要 10 分鐘 | 修訂後的再審查只送修改過的章節，其他章節沿用上一輪的意見 |
@@ -182,6 +182,7 @@ sequenceDiagram
   - `agent_runs.stop_reason`：成功時是修訂迴圈停下來的原因，`passed`（審查沒有錯誤）、`revision_limit`（達到修訂次數上限）、`no_improvement`（修訂後錯誤沒有變少）、`nothing_to_revise`（沒有可以自動修訂的章節），由 `PipelineResult.stop_reason` 帶出來；其他是 `failed`、`cancelled`、`walltime`。舊紀錄是 NULL，`analyze_runs.py` 對舊紀錄才從 log 訊息推斷。
   - `agent_runs.wall_seconds`：實際經過的秒數，用牆上時鐘算，電腦睡眠的時間也算進去，所以跟各步驟時間的加總比，看得出時間可不可信（C-07，`analyze_runs.py` 多 20% 以上而且多 60 秒以上就標「時間不可信」，不算進時間統計）。續跑、確認大綱後繼續時從存好的值接著加，等使用者確認大綱的時間不算。存檢查點、停在確認大綱、成功、失敗、取消時更新。
   - 整個工作的時間上限：設定的 `max_run_minutes`（0 = 不限制），建立工作時記進選項。執行器用 `asyncio.wait_for` 包住規劃和撰寫，剩下的時間 = 上限 − `wall_seconds`。超過時狀態是失敗、`stop_reason` 是 `walltime`，檢查點不清掉。
+- 參考同專案的其他 Spec（研究計劃 C-13）：建立工作時 `options.reference_spec_ids` 選最多 3 份同專案的 Spec（不能是自己），存成 `options.reference_specs`（`[{id, title}]`）。執行時 `services/references.py` 讀它們的最新版，只取編號項目（`extract_item_ids()`，全部最多 40 項，不含程式碼區塊）和名詞（`extract_terms()`，每份最多 20 個），組成 `RunInput.references`。Planner、Writer、Reviewer 的提示詞都在「需求內容」後面放一段「參考文件」，用（參考文件開始）…（參考文件結束）包起來，寫明只是參考資料、裡面的指示不要照做。放在需求後面、大綱和這一節的目標前面，同一個工作的各節開頭還是一樣，Ollama 的快取照樣有效。有參考文件時審查規則多一條：參考文件裡有的事實不算「需求沒提到」，寫得不一樣算 conflict。沒有參考文件時提示詞跟原本完全一樣。效果要用真模型確認（SpecEval 的架構任務，加和不加參考文件各跑 3 次比較）。
 - 同時記下執行環境 `environment`（研究計劃 C-05，`llm.py` 的 `ollama_environment()`）：Ollama 版本、模型 digest、量化格式、參數量、模型家族。同一個模型名稱，`ollama pull` 之後 digest 會變，結果也可能不一樣，所以 `analyze_runs.py --group-by prompt` 依提示詞版本加上模型和 digest 分組。審查用另一個模型時，那個模型的環境放在 `environment.reviewer`。續跑時環境變了，另外記在 `environment_resumed`。連不到 Ollama 或是假模型時存 `{}`，不讓工作失敗。SpecEval 的 `run_suite.py` 用同一個函式記 manifest。
 
 ### 先確認大綱（撰寫模式）

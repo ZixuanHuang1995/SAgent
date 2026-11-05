@@ -22,6 +22,7 @@ from ..app_state import AppState
 from ..db import utcnow
 from ..models import AgentEvent, AgentRun, Spec
 from ..schemas import EventOut, ReviewCheckIn, RunContinue, RunCreate, RunDetail, RunOut, VerdictIn
+from ..services import references as reference_service
 from ..services import reviews as review_service
 from ..services import specs as spec_service
 from ..services.diagram_snippets import SNIPPETS
@@ -108,6 +109,7 @@ async def create_run(body: RunCreate, state: AppState = Depends(get_state)):
             if doc_type not in templates:
                 raise BadRequest(f"沒有「{doc_type}」這種文件範本")
             o = body.options
+            references = _reference_specs(s, spec, o.reference_spec_ids)
             options = {
                 "uml_syntax": o.uml_syntax or current.uml_syntax,
                 "max_revisions": current.max_revisions if o.max_revisions is None else o.max_revisions,
@@ -125,6 +127,8 @@ async def create_run(body: RunCreate, state: AppState = Depends(get_state)):
                 # 固定亂數種子（回歸測試用，None = 不固定）、存不存提示詞全文（C-08、C-09）
                 "seed": current.seed,
                 "store_prompts": current.store_prompts,
+                # 參考同專案的其他 Spec（C-13）：[{id, title}]，執行時讀它們的最新版
+                "reference_specs": references,
             }
             if doc_type != spec.doc_type:
                 spec.doc_type = doc_type
@@ -146,6 +150,21 @@ async def create_run(body: RunCreate, state: AppState = Depends(get_state)):
     out = await run_in_threadpool(_create)
     state.runner.submit(out.id)
     return out.model_copy(update={"queue_position": state.runner.queue_position(out.id)})
+
+
+def _reference_specs(s: Session, spec: Spec, ids: list[int]) -> list[dict[str, Any]]:
+    """檢查參考文件：同一個專案、不是這份 Spec 自己、最多 3 份。"""
+    out: list[dict[str, Any]] = []
+    for ref_id in dict.fromkeys(ids):
+        if ref_id == spec.id:
+            raise BadRequest("參考文件不能選這份 Spec 自己")
+        ref = s.get(Spec, ref_id)
+        if ref is None or ref.project_id != spec.project_id:
+            raise BadRequest("參考文件只能選同一個專案的 Spec")
+        out.append({"id": ref.id, "title": ref.title})
+    if len(out) > reference_service.MAX_SPECS:
+        raise BadRequest(f"參考文件最多 {reference_service.MAX_SPECS} 份")
+    return out
 
 
 @router.get("/runs", response_model=list[RunOut])

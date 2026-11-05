@@ -227,6 +227,8 @@ export interface RunOptions {
   max_diagrams?: number | null
   /** 規劃完先停下來確認大綱和待確認問題（只用在撰寫模式） */
   plan_first?: boolean
+  /** 撰寫時參考同專案的其他 Spec，最多 3 份 */
+  reference_spec_ids?: number[]
 }
 
 export interface Run {
