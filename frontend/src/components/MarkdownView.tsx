@@ -130,6 +130,26 @@ export const PlantUmlDiagram = memo(function PlantUmlDiagram({ code }: { code: s
 })
 
 // ---------------------------------------------------------------------------
+// <br>：模型常在表格格子裡用 <br> 換行。react-markdown 預設把 HTML 當文字顯示，
+// 這裡只把 <br> 換成換行，其他 HTML 照舊不解析（不用 rehype-raw，避免插入任意 HTML）
+// ---------------------------------------------------------------------------
+
+type MdNode = { type: string; value?: string; children?: MdNode[] }
+
+const BR = /^<br\s*\/?>$/i
+
+function remarkBr() {
+  const walk = (node: MdNode) => {
+    if (!node.children) return
+    node.children = node.children.map((c) => (c.type === 'html' && BR.test(c.value?.trim() ?? '') ? { type: 'break' } : c))
+    node.children.forEach(walk)
+  }
+  return (tree: MdNode) => walk(tree)
+}
+
+const remarkPlugins = [remarkGfm, remarkBr]
+
+// ---------------------------------------------------------------------------
 
 function textOf(node: ReactNode): string {
   if (typeof node === 'string' || typeof node === 'number') return String(node)
@@ -181,7 +201,7 @@ const components: Components = {
 export const MarkdownView = memo(function MarkdownView({ markdown, className }: { markdown: string; className?: string }) {
   return (
     <div className={`markdown ${className ?? ''}`}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown remarkPlugins={remarkPlugins} components={components}>
         {markdown}
       </ReactMarkdown>
     </div>
