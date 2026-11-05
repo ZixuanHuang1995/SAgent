@@ -16,6 +16,7 @@ FIELD_LABELS = {
     "ollama_url": "Ollama 網址",
     "default_model": "預設模型",
     "reviewer_model": "審查模型",
+    "max_run_minutes": "整個工作的時間上限",
     "uml_syntax": "UML 圖語法",
     "diagrams": "畫圖",
     "title": "標題",

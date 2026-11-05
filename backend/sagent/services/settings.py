@@ -29,6 +29,8 @@ class AppSettings(BaseModel):
     # 0 表示用 Ollama 伺服器的預設值。改這個值會讓 Ollama 重新載入模型
     num_ctx: int = Field(0, ge=0, le=262144)
     plantuml_server: str = ""
+    # 整個 AI 工作的時間上限（分鐘），超過就標失敗。0 = 不限制（研究計劃 C-06）
+    max_run_minutes: float = Field(0, ge=0, le=1440)
 
 
 class SettingsPatch(BaseModel):
@@ -41,6 +43,7 @@ class SettingsPatch(BaseModel):
     diagrams: bool | None = None
     num_ctx: int | None = Field(None, ge=0, le=262144)
     plantuml_server: str | None = None
+    max_run_minutes: float | None = Field(None, ge=0, le=1440)
 
 
 def check_http_url(url: str, label: str) -> None:

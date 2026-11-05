@@ -246,6 +246,9 @@ export interface Run {
   started_at: string | null
   finished_at: string | null
   stats: Record<string, AgentStat> | null
+  // 為什麼停下來、實際經過的秒數（含電腦睡眠）。舊的工作是 null
+  stop_reason: string | null
+  wall_seconds: number | null
   spec_title: string
   queue_position: number | null
 }
@@ -357,6 +360,8 @@ export interface Settings {
   diagrams: boolean
   num_ctx: number
   plantuml_server: string
+  // 整個 AI 工作的時間上限（分鐘），0 = 不限制
+  max_run_minutes: number
 }
 
 export interface Health {

@@ -93,6 +93,16 @@ def _add_run_review_labels(engine: Engine) -> None:
             conn.execute(text("ALTER TABLE agent_runs ADD COLUMN review_labels JSON NOT NULL DEFAULT '{}'"))
 
 
+def _add_run_stop_reason(engine: Engine) -> None:
+    """agent_runs 加上 stop_reason（為什麼停下來）、wall_seconds（實際經過的秒數）。舊紀錄是 NULL。"""
+    with engine.begin() as conn:
+        columns = _columns(conn, "agent_runs")
+        if columns and "stop_reason" not in columns:
+            conn.execute(text("ALTER TABLE agent_runs ADD COLUMN stop_reason VARCHAR(40)"))
+        if columns and "wall_seconds" not in columns:
+            conn.execute(text("ALTER TABLE agent_runs ADD COLUMN wall_seconds FLOAT"))
+
+
 def migrate(engine: Engine) -> None:
     _add_version_line_stats(engine)
     _add_spec_source(engine)
@@ -100,3 +110,4 @@ def migrate(engine: Engine) -> None:
     _add_run_review_checked(engine)
     _add_run_checkpoint(engine)
     _add_run_review_labels(engine)
+    _add_run_stop_reason(engine)

@@ -27,6 +27,7 @@ import re
 import sqlite3
 import sys
 from collections import Counter, defaultdict
+from datetime import datetime
 from pathlib import Path
 
 # 這些字串是 agents/ 裡記錄步驟時用的訊息
@@ -39,7 +40,22 @@ LOG_PATTERNS = {
     "錯誤沒有變少，停止修訂": "修訂後錯誤沒有變少",
     "一輪最多改 4 節，有章節沒改到": "這一輪最多修改",
     "修改後內容變少，保留原內容": "明顯變少",
+    "沒有可以自動修訂的章節": "沒有可以自動修訂的章節",
 }
+# 這幾種是停止原因。新的工作記在 agent_runs.stop_reason（C-06），只有舊紀錄才從訊息推斷
+STOP_LOG_LABELS = {"達到修訂次數上限", "錯誤沒有變少，停止修訂", "沒有可以自動修訂的章節"}
+STOP_NAMES = {
+    "passed": "審查沒有錯誤",
+    "revision_limit": "達到修訂次數上限",
+    "no_improvement": "修訂後錯誤沒有變少",
+    "nothing_to_revise": "沒有可以自動修訂的章節",
+    "failed": "失敗",
+    "cancelled": "取消",
+    "walltime": "超過整個工作的時間上限",
+}
+# 時間不可信（C-07）：整個工作的時間比各步驟加總多這麼多，多半是電腦睡眠
+SUSPECT_RATIO = 1.2
+SUSPECT_EXTRA_SECONDS = 60
 
 
 def _errors(review: dict) -> list[dict]:
@@ -64,6 +80,37 @@ def doc_signals(markdown: str) -> dict[str, float]:
         "tables": len(_TABLE_SEP_RE.findall(markdown)),
         "chars_per_section": chars / sections,
     }
+
+
+def _parse_time(value) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+
+
+def run_wall_seconds(row: dict) -> float | None:
+    """整個工作實際經過的秒數。新的工作有 wall_seconds（C-06）；舊紀錄用 finished_at - started_at，
+    但先確認大綱的舊工作會把等使用者的時間算進去，不算。"""
+    if row.get("wall_seconds") is not None:
+        return float(row["wall_seconds"])
+    opts = json.loads(row.get("options") or "{}") or {}
+    if opts.get("plan_first"):
+        return None
+    start, end = _parse_time(row.get("started_at")), _parse_time(row.get("finished_at"))
+    return (end - start).total_seconds() if start and end else None
+
+
+def time_suspect(row: dict) -> bool:
+    """時間不可信（C-07）：整個工作的時間比各 agent 的時間加總多 20% 以上、而且多 60 秒以上。"""
+    wall = run_wall_seconds(row)
+    stats = json.loads(row.get("stats") or "{}") or {}
+    steps = sum(float((v or {}).get("seconds") or 0) for v in stats.values())
+    if wall is None or steps <= 0:
+        return False
+    return wall > steps * SUSPECT_RATIO and wall - steps > SUSPECT_EXTRA_SECONDS
 
 
 def _print_signals(db: sqlite3.Connection, ids: list[int]) -> None:
@@ -224,6 +271,23 @@ def main() -> int:
     print(f"AI 工作 {len(runs)} 個：" + "、".join(f"{k} {v}" for k, v in status.most_common()))
     print("模型：" + "、".join(f"{k} {v}" for k, v in Counter(r[2] for r in runs).most_common()))
 
+    # 舊資料庫可能還沒有這些欄位（伺服器更新後啟動一次就有）
+    columns = {r[1] for r in db.execute("pragma table_info(agent_runs)")}
+    extra_cols = [c for c in ("stop_reason", "wall_seconds", "started_at", "finished_at") if c in columns]
+    info: dict[int, dict] = {}
+    for row in db.execute(
+        f"select id, stats, options{''.join(', ' + c for c in extra_cols)} from agent_runs "
+        f"where id in ({','.join('?' * len(runs))})",
+        [r[0] for r in runs],
+    ):
+        info[row[0]] = dict(zip(["id", "stats", "options", *extra_cols], row, strict=True))
+
+    # --- 停止原因（C-06） ---
+    reasons = Counter(info[r[0]].get("stop_reason") for r in runs if info[r[0]].get("stop_reason"))
+    if reasons:
+        print("停止原因：" + "、".join(f"{STOP_NAMES.get(k, k)} {v}" for k, v in reasons.most_common()))
+    legacy = {r[0] for r in runs if not info[r[0]].get("stop_reason")}
+
     # --- 時間花在哪 ---
     minutes: Counter[str] = Counter()
     calls: Counter[str] = Counter()
@@ -233,6 +297,8 @@ def main() -> int:
     run_minutes: Counter[int] = Counter()
     plan_fallback = 0
     ids = [r[0] for r in runs if r[1] == "succeeded"]
+    # 時間不可信的工作（C-07）不算進時間統計，另外列出
+    suspect = [i for i in ids if time_suspect(info[i])]
     for run_id, typ, message, data in db.execute(
         f"select run_id, type, message, data from agent_events where run_id in ({','.join('?' * len(ids))}) "
         "order by run_id, seq",
@@ -246,10 +312,11 @@ def main() -> int:
             kind = step.split(":")[0]
             if kind == "review":
                 kind = "review:1" if step == "review:1" else "review:2+"
-            minutes[kind] += d.get("duration_ms", 0) / 60000
-            run_minutes[run_id] += d.get("duration_ms", 0) / 60000
-            calls[kind] += 1
-            out_tokens[kind] += d.get("completion_tokens", 0) or 0
+            if run_id not in suspect:
+                minutes[kind] += d.get("duration_ms", 0) / 60000
+                run_minutes[run_id] += d.get("duration_ms", 0) / 60000
+                calls[kind] += 1
+                out_tokens[kind] += d.get("completion_tokens", 0) or 0
             if step.startswith("review:") and d.get("output"):
                 if step == "review:1":
                     rounds[run_id] = []  # 續跑時從第一次審查重來，只算最後那一次
@@ -258,7 +325,7 @@ def main() -> int:
                 plan_fallback += 1
         elif typ == "log":
             for label, pattern in LOG_PATTERNS.items():
-                if pattern in message:
+                if pattern in message and (label not in STOP_LOG_LABELS or run_id in legacy):
                     logs[label] += 1
 
     names = {
@@ -271,7 +338,13 @@ def main() -> int:
         "fixdiagram": "修圖",
     }
     total = sum(minutes.values())
-    print(f"\n成功的工作 {len(ids)} 個，共 {total / 60:.1f} 小時，平均每份 {total / max(len(ids), 1):.0f} 分鐘")
+    timed = len(ids) - len(suspect)
+    print(f"\n成功的工作 {len(ids)} 個，共 {total / 60:.1f} 小時，平均每份 {total / max(timed, 1):.0f} 分鐘")
+    if suspect:
+        print(
+            f"時間不可信 {len(suspect)} 份（整個工作的時間比各步驟加總多 20% 以上、而且多 60 秒以上，"
+            f"多半是電腦睡眠），不算進時間統計：工作 {', '.join(str(i) for i in suspect)}"
+        )
     print("步驟            呼叫   分鐘   佔比  平均輸出 tokens")
     for kind, m in minutes.most_common():
         print(f"{names.get(kind, kind):12} {calls[kind]:5} {m:6.0f} {_pct(m, total):>6} {out_tokens[kind] / calls[kind]:10.0f}")
@@ -282,7 +355,8 @@ def main() -> int:
     print("\n出錯紀錄：")
     print(f"  大綱改用範本章節：{plan_fallback} 次")
     for label in LOG_PATTERNS:
-        print(f"  {label}：{logs[label]} 次")
+        note = "（只算沒有 stop_reason 的舊紀錄）" if label in STOP_LOG_LABELS else ""
+        print(f"  {label}：{logs[label]} 次{note}")
     llm_failed = sum(1 for rs in rounds.values() for r in rs if r.get("llm_ok") is False)
     print(f"  審查模型沒有結果（只有程式檢查）：{llm_failed} / {sum(len(rs) for rs in rounds.values())} 次審查")
 
@@ -313,7 +387,7 @@ def main() -> int:
         _print_precision(db, ids)
         _print_signals(db, ids)
     if args.group_by == "prompt":
-        _print_by_prompt(runs, run_minutes, rounds)
+        _print_by_prompt(runs, run_minutes, rounds, set(suspect))
     return 0
 
 
@@ -330,7 +404,9 @@ def _version_label(options_json: str | None, model: str = "") -> str:
     return f"{label}｜{model or '?'} {digest[:12] if digest else '（沒有 digest）'}"
 
 
-def _print_by_prompt(runs: list, run_minutes: Counter, rounds: dict[int, list[dict]]) -> None:
+def _print_by_prompt(
+    runs: list, run_minutes: Counter, rounds: dict[int, list[dict]], suspect: set[int] | None = None
+) -> None:
     """改提示詞前後的比較。同一個版本、同一個模型 digest 的工作放在一起，只算成功的。"""
     groups: dict[str, list[int]] = defaultdict(list)
     for run_id, status, model, *_rest, options in runs:
@@ -342,7 +418,8 @@ def _print_by_prompt(runs: list, run_minutes: Counter, rounds: dict[int, list[di
         rs = [rounds[i] for i in ids if rounds.get(i)]
         first = sum(len(_errors(r[0])) for r in rs) / max(len(rs), 1)
         last = sum(len(_errors(r[-1])) for r in rs) / max(len(rs), 1)
-        avg = sum(run_minutes[i] for i in ids) / len(ids)
+        timed = [i for i in ids if i not in (suspect or set())]  # 時間不可信的不算平均分鐘
+        avg = sum(run_minutes[i] for i in timed) / max(len(timed), 1)
         print(f"  {len(ids):4} {avg:9.0f} {first:12.1f} {last:9.1f}  {label}")
 
 

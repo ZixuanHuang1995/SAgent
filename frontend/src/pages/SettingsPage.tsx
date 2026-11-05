@@ -15,10 +15,17 @@ const CTX_PRESETS = [0, 8192, 16384, 32768]
 const MAX_CTX = 262144
 
 /** 數字欄位用字串存，清空時才看得出來，不會悄悄變成 0 */
-type Form = Omit<Settings, 'temperature' | 'num_ctx'> & { temperature: string; num_ctx: string }
-type Errors = Partial<Record<'ollama_url' | 'temperature' | 'num_ctx', string>>
+type NumberField = 'temperature' | 'num_ctx' | 'max_run_minutes'
+type Form = Omit<Settings, NumberField> & Record<NumberField, string>
+type Errors = Partial<Record<'ollama_url' | NumberField, string>>
+const MAX_RUN_MINUTES = 1440
 
-const toForm = (s: Settings): Form => ({ ...s, temperature: String(s.temperature), num_ctx: String(s.num_ctx) })
+const toForm = (s: Settings): Form => ({
+  ...s,
+  temperature: String(s.temperature),
+  num_ctx: String(s.num_ctx),
+  max_run_minutes: String(s.max_run_minutes),
+})
 const normalizeUrl = (url: string) => url.trim().replace(/\/+$/, '')
 
 function validate(f: Form): Errors {
@@ -30,11 +37,20 @@ function validate(f: Form): Errors {
   const c = f.num_ctx.trim() === '' ? NaN : Number(f.num_ctx)
   if (!Number.isInteger(c)) errors.num_ctx = '請填整數'
   else if (c < 0 || c > MAX_CTX) errors.num_ctx = `要在 0～${MAX_CTX} 之間`
+  const m = f.max_run_minutes.trim() === '' ? NaN : Number(f.max_run_minutes)
+  if (!Number.isInteger(m)) errors.max_run_minutes = '請填整數'
+  else if (m < 0 || m > MAX_RUN_MINUTES) errors.max_run_minutes = `要在 0～${MAX_RUN_MINUTES} 之間`
   return errors
 }
 
 function toSettings(f: Form): Settings {
-  return { ...f, ollama_url: normalizeUrl(f.ollama_url), temperature: Number(f.temperature), num_ctx: Number(f.num_ctx) }
+  return {
+    ...f,
+    ollama_url: normalizeUrl(f.ollama_url),
+    temperature: Number(f.temperature),
+    num_ctx: Number(f.num_ctx),
+    max_run_minutes: Number(f.max_run_minutes),
+  }
 }
 
 /** 欄位名稱和一組按鈕：不能用 Field（label），點名稱會按到第一個按鈕 */
@@ -443,6 +459,21 @@ export function SettingsPage() {
                 </option>
               ))}
             </select>
+          </Field>
+          <Field
+            label="整個工作的時間上限（分鐘）"
+            error={errors.max_run_minutes}
+            hint="從開始算到結束（確認大綱前等待的時間不算），超過就停止並標成失敗，不會存成新版本。0 = 不限制。CPU 上一份功能規格書約 30～70 分鐘，要設的話建議 120 以上。"
+          >
+            <input
+              className={`input${errors.max_run_minutes ? ' invalid' : ''}`}
+              type="number"
+              step={10}
+              min={0}
+              max={MAX_RUN_MINUTES}
+              value={form.max_run_minutes}
+              onChange={(e) => set('max_run_minutes', e.target.value)}
+            />
           </Field>
         </section>
 

@@ -116,6 +116,7 @@ class SpecPipeline:
         reviews: list[Review] = []
         revisions = 0
         focus: set[str] | None = None
+        stop_reason = ""
         while True:
             round_no = len(reviews) + 1
             await emit(
@@ -126,11 +127,14 @@ class SpecPipeline:
             )
             reviews.append(review)
             if not review.needs_revision:
+                stop_reason = "passed"
                 break
             if revisions >= inp.options.max_revisions:
+                stop_reason = "revision_limit"
                 await emit("log", "reviewer", "已達修訂次數上限，剩下的問題保留在審查報告", {"level": "info"})
                 break
             if len(reviews) >= 2 and review.error_count >= reviews[-2].error_count:
+                stop_reason = "no_improvement"
                 # 改了一輪錯誤卻沒變少，再改多半也一樣，CPU 上一輪要十幾分鐘，交給人處理
                 await emit(
                     "log",
@@ -149,6 +153,7 @@ class SpecPipeline:
             )
             focus = await self.writer.revise(inp, plan, draft, review, revisions)
             if not focus:
+                stop_reason = "nothing_to_revise"
                 await emit("log", "writer", "沒有可以自動修訂的章節，結束修訂", {"level": "info"})
                 break
 
@@ -160,4 +165,5 @@ class SpecPipeline:
             reviews=reviews,
             stats=self.stats,
             summary=plan.summary,
+            stop_reason=stop_reason,
         )

@@ -272,3 +272,6 @@ class PipelineResult:
     reviews: list[Review]
     stats: dict[str, AgentStats]
     summary: str
+    # 修訂迴圈為什麼停下來（研究計劃 C-06）：passed 審查沒有錯誤、revision_limit 達到修訂次數上限、
+    # no_improvement 修訂後錯誤沒有變少、nothing_to_revise 沒有可以自動修訂的章節
+    stop_reason: str = ""

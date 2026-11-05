@@ -267,6 +267,9 @@ class RunOut(ORMModel):
     started_at: datetime | None
     finished_at: datetime | None
     stats: dict[str, Any] | None
+    # 為什麼停下來、實際經過的秒數（C-06）。舊紀錄是 None
+    stop_reason: str | None = None
+    wall_seconds: float | None = None
     spec_title: str = ""
     queue_position: int | None = None
 
