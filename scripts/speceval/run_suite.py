@@ -45,6 +45,7 @@ from sagent.agents.llm import OllamaClient, ollama_environment  # noqa: E402
 from sagent.agents.pipeline import SpecPipeline  # noqa: E402
 from sagent.agents.types import PipelineOptions, RunInput  # noqa: E402
 from sagent.agents.versioning import prompt_version  # noqa: E402
+from sagent.services.power import KeepAwake  # noqa: E402
 
 STOP_MESSAGES = {"已達修訂次數上限": "revision_limit", "修訂後錯誤沒有變少": "no_improvement"}
 
@@ -206,6 +207,7 @@ async def main() -> int:
     ap.add_argument("--out-dir", type=Path, default=Path("speceval-out/run"))
     ap.add_argument("--fake", action="store_true", help="用假模型，只檢查流程")
     ap.add_argument("--summary-only", action="store_true", help="不跑，只重算 summary（judge.py 補完 L2 之後）")
+    ap.add_argument("--holdout", action="store_true", help="也跑保留集（任務卡寫 holdout: true 的），只在大版本前跑")
     args = ap.parse_args()
     if args.times is None:
         args.times = 1 if args.suite == "tiny" else 3
@@ -216,12 +218,27 @@ async def main() -> int:
     if args.suite == "tiny":
         cards = [c for c in cards if c["doc_type"] == "idea_proposal"]
         args.no_diagrams = True
+    if not args.holdout:
+        # 保留集（C-17：任務 20 個以上時切 4 個出來）只在大版本前跑，平常調提示詞不看它，免得對它過度最佳化
+        cards = [c for c in cards if not c.get("holdout")]
     if args.only:
         wanted = set(args.only.split(","))
         cards = [c for c in cards if c["id"] in wanted]
-    templates = load_templates()
     args.out_dir.mkdir(parents=True, exist_ok=True)
     info = await manifest(args)
+    # 真模型一次要好幾個小時，電腦待命的話會整個暫停到有人喚醒（時間也會不可信）
+    awake = KeepAwake(enabled=not args.fake)
+    awake.hold()
+    try:
+        await run_cards(cards, info, args)
+    finally:
+        awake.release()
+    print(json.dumps(summarize(args.out_dir, args.times), ensure_ascii=False, indent=1))
+    return 0
+
+
+async def run_cards(cards: list[dict], info: dict, args) -> None:
+    templates = load_templates()
     for card in cards:
         tpl = templates[card["doc_type"]]
         info_task = {**info, "prompt_version": prompt_version(tpl)}
@@ -245,8 +262,6 @@ async def main() -> int:
                   f"L0={rec.get('l0_errors')} L1={rec.get('l1', {}).get('passed')} "
                   f"expect={rec.get('expect', {}).get('expect_ok')} {rec['wall_s']}s", flush=True)
             summarize(args.out_dir, args.times)
-    print(json.dumps(summarize(args.out_dir, args.times), ensure_ascii=False, indent=1))
-    return 0
 
 
 if __name__ == "__main__":

@@ -359,6 +359,28 @@ uv run --project backend python scripts/run_pipeline.py --requirement-file 需�
 
 `frontend/scripts/mermaid-validate.mjs` 可以用前端同版本的 Mermaid 檢查圖表語法，升級 Mermaid 後可以用它重新產生 `backend/tests/data/mermaid_cases.json`。
 
+### SpecEval（評估 AI 寫的文件能不能交付）
+
+`scripts/speceval/` 是改提示詞、流程時用的評估工具。主要指標是可交付率（`run_suite.py` 算的 pass@1 和信賴區間），不是審查錯誤數，見 `docs/real-model-test-plan.md` 第 4 節。真模型很慢，排在晚上或週末跑：
+
+```powershell
+# 產生任務卡（要人審過，把 reviewed_by_human 改成 true 再 commit）
+uv run --project backend python scripts/speceval/build_tasks.py --out-dir speceval/tasks
+# 手動跑一次 tiny-4（4 張構想提案任務，真模型約 2～4 小時）
+uv run --project backend python scripts/speceval/run_suite.py --suite tiny --out-dir speceval-out/tiny-A
+# 比較兩次的可交付率
+uv run --project backend python scripts/analyze_runs.py --speceval speceval-out/tiny-A --speceval speceval-out/tiny-B
+```
+
+排程：`scripts/speceval/nightly.ps1` 每次跑之前先問 SAgent 有沒有 AI 工作在跑或排隊，有就不跑；結果放在 `speceval-out/nightly-日期-集合`。用 Windows 工作排程器註冊（路徑換成自己的專案位置；SAgent 不會自動註冊）：
+
+```powershell
+schtasks /Create /TN "SAgent SpecEval tiny" /SC DAILY /ST 01:00 /TR "powershell -NoProfile -ExecutionPolicy Bypass -File D:\AI\playground\SAgent\scripts\speceval\nightly.ps1 -Suite tiny"
+schtasks /Create /TN "SAgent SpecEval full" /SC WEEKLY /D SAT /ST 01:00 /TR "powershell -NoProfile -ExecutionPolicy Bypass -File D:\AI\playground\SAgent\scripts\speceval\nightly.ps1 -Suite full"
+```
+
+`speceval-out/` 可能有需求原文，不進 git。
+
 ## 專案結構
 
 ```
