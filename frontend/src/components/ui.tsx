@@ -525,6 +525,19 @@ export function ArrowLabel({ children, small }: { children: ReactNode; small?: b
   )
 }
 
+/**
+ * 回上一步的按鈕文字（例如「換類型」）：ArrowLabel 左右對調。
+ * 滑過時文字往右讓位、左邊淡入箭頭（參考 figma.com 的主要按鈕）
+ */
+export function BackLabel({ children }: { children: ReactNode }) {
+  return (
+    <span className="btn-arrow-inner btn-arrow-back">
+      <Icon name="arrow-left" size={16} />
+      <span className="btn-label">{children}</span>
+    </span>
+  )
+}
+
 export function Badge({ children, tone = 'neutral', title }: { children: ReactNode; tone?: string; title?: string }) {
   return (
     <span className={`badge badge-${tone}`} title={title}>

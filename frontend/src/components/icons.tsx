@@ -23,6 +23,8 @@ const PATHS: Record<string, ReactNode> = {
   x: <path d="M18 6 6 18M6 6l12 12" />,
   // 往下一步的按鈕滑過時出現（ui.tsx 的 ArrowLabel）
   'arrow-right': <path d="M5 12h14M13 6l6 6-6 6" />,
+  // 回上一步的按鈕（ui.tsx 的 BackLabel）
+  'arrow-left': <path d="M19 12H5M11 6l-6 6 6 6" />,
   // 詞彙表
   book: <path d="M4 19.5V4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5a2.5 2.5 0 0 0 0 5H20v-5M8 7h8M8 11h6" />,
   bot: (

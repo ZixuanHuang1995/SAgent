@@ -444,8 +444,11 @@ h1 {
   background: var(--danger-soft);
   border-color: var(--danger);
 }
-/* 往下一步走的按鈕（開始 AI 撰寫、繼續撰寫、查看文件）：滑過時文字往左讓出位置，右邊淡入箭頭。
-   參考 figma.com 的主要按鈕，只用在這幾個，其他按鈕只有顏色漸變 */
+/* 箭頭動態，照 figma.com 的兩種按鈕：
+   1. 往下一步走的主要按鈕（開始 AI 撰寫、繼續撰寫、查看文件，ui.tsx 的 ArrowLabel）：
+      滑過時文字往左移 9px，箭頭在原地淡入（不移動），180ms ease-out
+   2. 回上一步的按鈕（換類型，BackLabel）：同一種動畫左右對調，文字往右移 9px，左邊箭頭淡入
+   只在有滑鼠的裝置觸發（觸控沒有滑過），鍵盤選到時也一樣。箭頭用細線 */
 .btn-arrow-inner {
   position: relative;
   display: inline-flex;
@@ -461,23 +464,41 @@ h1 {
   top: 50%;
   translate: 0 -50%;
   opacity: 0;
-  transition: opacity 180ms ease-out, translate 180ms ease-out;
-}
-.btn:hover:not(:disabled) .btn-arrow-inner .btn-label,
-.btn:focus-visible .btn-arrow-inner .btn-label {
-  translate: -9px 0;
-}
-.btn:hover:not(:disabled) .btn-arrow-inner .icon,
-.btn:focus-visible .btn-arrow-inner .icon {
-  opacity: 1;
-  translate: 4px -50%;
+  stroke-width: 1.5;
+  transition: opacity 180ms ease-out;
 }
 .btn-sm .btn-arrow-inner .icon {
   right: -8px;
 }
-.btn-sm:hover:not(:disabled) .btn-arrow-inner .btn-label,
+.btn-arrow-back .icon {
+  right: auto;
+  left: -10px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover:not(:disabled) .btn-arrow-inner .btn-label {
+    translate: -9px 0;
+  }
+  .btn-sm:hover:not(:disabled) .btn-arrow-inner .btn-label {
+    translate: -7px 0;
+  }
+  .btn:hover:not(:disabled) .btn-arrow-inner .icon {
+    opacity: 1;
+  }
+  .btn:hover:not(:disabled) .btn-arrow-back .btn-label {
+    translate: 9px 0;
+  }
+}
+.btn:focus-visible .btn-arrow-inner .btn-label {
+  translate: -9px 0;
+}
 .btn-sm:focus-visible .btn-arrow-inner .btn-label {
   translate: -7px 0;
+}
+.btn:focus-visible .btn-arrow-inner .icon {
+  opacity: 1;
+}
+.btn:focus-visible .btn-arrow-back .btn-label {
+  translate: 9px 0;
 }
 
 .icon-btn {

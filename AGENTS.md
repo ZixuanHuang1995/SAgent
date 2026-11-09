@@ -114,7 +114,7 @@
 - 按鈕字一律 13px 半粗，大小只差高度。刪除用 `btn-danger-outline`（平常只有紅字），真的要刪的確認按鈕才用實心 `btn-danger`。
 - 訊息框（`info-box`、`success-box`、`warn-box`、`error-box`）是淡底、細框加左邊的圖示，文字用內文顏色，不要整段染色。
 - 核取方塊用全站的樣式（`styles.css` 的 `input[type='checkbox']`），不要換回瀏覽器預設的。
-- 動態少而快：顏色變化 180ms ease-out。只有往下一步走的主要按鈕（開始 AI 撰寫、繼續撰寫、查看文件）用 `ArrowLabel`：滑過時文字左移、淡入箭頭。不要每個按鈕都加；「減少動態」時不移動。
+- 動態少而快，照 figma.com：顏色變化 180ms ease-out。往下一步走的主要按鈕（開始 AI 撰寫、繼續撰寫、查看文件）用 `ArrowLabel`：滑過時文字左移 9px、細線箭頭在原地淡入；回上一步的按鈕（換類型）用 `BackLabel`：同一種動畫左右對調，文字右移 9px、左邊箭頭淡入。只在有滑鼠的裝置觸發，不要每個按鈕都加；「減少動態」時不移動。
 - 徽章（`Badge`）的 tone 照意思選：`neutral` 識別、`green`／`amber`／`red` 狀態、`violet` AI 產生的版本、`blue` 執行中或要人看一下、`outline` 只給版本標籤（加 `tag` 圖示）。
 - 圓角：`--radius-xs` 徽章和小標記，`--radius-sm` 按鈕、輸入框、篩選按鈕，`--radius` 卡片和對話框。膠囊形只給數字計數（`.count`、`.tab-count`）和頂端列的狀態。
 - 切換用 `.seg`：選中的是白底，不是整塊主色。小的篩選、建議用 `.doc-chip`（選中加 `is-active`）。

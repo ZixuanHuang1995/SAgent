@@ -9,6 +9,7 @@ import { api, type Phase, type Spec } from '../api'
 import { AI_STATUS, SPEC_STATUS, requirementHelp } from '../format'
 import { keys, useProjectTree, useTemplateCategories, useTemplates } from '../queries'
 import {
+  BackLabel,
   CategoryBadge,
   ConfirmDialog,
   Empty,
@@ -537,7 +538,7 @@ export function NewSpecDialog(props: {
         <>
           {!preset && (
             <button className="btn" onClick={() => setCategory(null)}>
-              ← 換類型
+              <BackLabel>換類型</BackLabel>
             </button>
           )}
           <span className="spacer" />

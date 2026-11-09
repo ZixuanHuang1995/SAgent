@@ -1,7 +1,6 @@
 import { createBrowserRouter, Link, Outlet, RouterProvider, useMatch, useParams, useRouteError } from 'react-router'
 import { Icon } from './components/icons'
 import { RunIndicator } from './components/RunIndicator'
-import logoUrl from './logo.svg'
 import { useHealth, useProjectTree } from './queries'
 import { useThemePref, type ThemePref } from './theme'
 import { BaselinesPage } from './pages/BaselinesPage'
@@ -82,7 +81,6 @@ function Shell() {
     <div className="app">
       <header className="topbar">
         <Link to="/" className="brand">
-          <img src={logoUrl} alt="" width={22} height={22} />
           <span>SAgent</span>
           <span className="brand-sub">系統分析代理</span>
         </Link>
