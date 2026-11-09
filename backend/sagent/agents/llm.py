@@ -67,10 +67,13 @@ class OllamaClient:
         keep_alive: str = "30m",
         timeout_s: float = 900,
         transport: httpx.AsyncBaseTransport | None = None,
+        seed: int | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.num_ctx = num_ctx
+        # 固定亂數種子（C-08），回歸測試時讓同一份輸入的結果盡量一樣。None = 不固定
+        self.seed = seed
         self.think = think
         self.keep_alive = keep_alive
         self._client = httpx.AsyncClient(
@@ -83,6 +86,13 @@ class OllamaClient:
 
     async def close(self) -> None:
         await self._client.aclose()
+
+    async def environment(self) -> dict[str, Any]:
+        """這次用的 Ollama 版本、模型 digest 和量化（研究計劃 C-05）。查不到時回 {}，不讓工作失敗。"""
+        try:
+            return await ollama_environment(self._client, self.model)
+        except (httpx.HTTPError, ValueError, TypeError, AttributeError):
+            return {}
 
     async def capabilities(self) -> list[str]:
         if self._capabilities is None:
@@ -131,6 +141,8 @@ class OllamaClient:
             options["num_predict"] = max_tokens
         if self.num_ctx:
             options["num_ctx"] = self.num_ctx
+        if self.seed is not None:
+            options["seed"] = self.seed
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
@@ -209,6 +221,26 @@ async def ollama_loaded_models(client: httpx.AsyncClient) -> list[dict[str, Any]
         {"name": m.get("name") or m.get("model") or "", "context_length": int(m.get("context_length") or 0)}
         for m in resp.json().get("models", [])
     ]
+
+
+async def ollama_environment(client: httpx.AsyncClient, model: str) -> dict[str, Any]:
+    """Ollama 版本、模型 digest、量化格式、參數量、模型家族（研究計劃 C-05）。
+
+    同一個模型名稱 ollama pull 之後 digest 會變，結果也可能不一樣；分析時 digest 不同要分開算。
+    連不到或格式不對時丟 httpx.HTTPError、ValueError，由呼叫的地方決定怎麼處理。
+    """
+    resp = await client.get("/api/version")
+    resp.raise_for_status()
+    env: dict[str, Any] = {"ollama_version": resp.json().get("version", "")}
+    resp = await client.get("/api/tags")
+    resp.raise_for_status()
+    tag = next((m for m in resp.json().get("models", []) if model in (m.get("name"), m.get("model"))), {})
+    env["digest"] = tag.get("digest", "")
+    resp = await client.post("/api/show", json={"model": model})
+    resp.raise_for_status()
+    details = resp.json().get("details") or {}
+    env |= {k: details.get(k, "") for k in ("quantization_level", "parameter_size", "family")}
+    return env
 
 
 async def ollama_version(base_url: str) -> str:

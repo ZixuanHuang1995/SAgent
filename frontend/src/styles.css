@@ -2308,6 +2308,20 @@ body.is-resizing .cm-editor {
   max-width: 360px;
   padding: 12px 12px 2px;
 }
+/* AI 撰寫時參考的其他 Spec（C-13） */
+.ref-picker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ref-popover {
+  min-width: 260px;
+  max-width: 360px;
+  max-height: 360px;
+  padding: 10px 12px;
+  gap: 6px;
+}
 .meta-summary {
   font-weight: var(--fw-normal);
 }
@@ -2679,6 +2693,41 @@ kbd {
 }
 .review-progress {
   margin-bottom: 6px;
+}
+/* 文件層級的人工判斷（C-10） */
+.verdict-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.verdict-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.verdict-label {
+  font-weight: var(--fw-semibold);
+}
+/* 人工覆核項目的分組（C-11） */
+.point-group {
+  margin-top: 6px;
+}
+.point-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.point-group-title {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text-2);
 }
 .review-progress-text {
   display: flex;

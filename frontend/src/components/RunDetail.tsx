@@ -2,10 +2,11 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api'
-import { formatTime, UML_SYNTAX } from '../format'
+import { formatDuration, formatTime, STOP_REASON, UML_SYNTAX } from '../format'
 import { useRunStream } from '../hooks/useRunStream'
 import { keys, useTemplates } from '../queries'
 import { RunProgress } from './RunProgress'
+import { RunVerdict } from './RunVerdict'
 import { Modal, Spinner } from './ui'
 
 export function RunDetailModal(props: {
@@ -36,6 +37,12 @@ export function RunDetailModal(props: {
               <dl className="kv">
                 <dt>模型</dt>
                 <dd>{run.model}</dd>
+                {!!run.options.reviewer_model && run.options.reviewer_model !== run.model && (
+                  <>
+                    <dt>審查模型</dt>
+                    <dd>{String(run.options.reviewer_model)}</dd>
+                  </>
+                )}
                 <dt>文件類型</dt>
                 <dd>{templateName}</dd>
                 <dt>UML 語法</dt>
@@ -43,8 +50,38 @@ export function RunDetailModal(props: {
                 <dt>畫圖</dt>
                 <dd>{/* 舊的 AI 工作有記張數上限；新的工作不限制張數，沒有這個值 */}
                   {run.options.diagrams ? (run.options.max_diagrams != null ? `是（最多 ${run.options.max_diagrams} 張）` : '是') : '否'}</dd>
+                {Array.isArray(run.options.reference_specs) && run.options.reference_specs.length > 0 && (
+                  <>
+                    <dt>參考文件</dt>
+                    <dd>{(run.options.reference_specs as { title: string }[]).map((r) => r.title).join('、')}</dd>
+                  </>
+                )}
+                {!!run.options.fewshot_examples && (
+                  <>
+                    <dt>範例（實驗）</dt>
+                    <dd>用人改過的章節當範例</dd>
+                  </>
+                )}
                 <dt>修訂輪數上限</dt>
                 <dd>{String(run.options.max_revisions ?? '')}</dd>
+                {Number(run.options.max_run_minutes) > 0 && (
+                  <>
+                    <dt>時間上限</dt>
+                    <dd>{String(run.options.max_run_minutes)} 分鐘</dd>
+                  </>
+                )}
+                {run.stop_reason && (
+                  <>
+                    <dt>停止原因</dt>
+                    <dd>{STOP_REASON[run.stop_reason] ?? run.stop_reason}</dd>
+                  </>
+                )}
+                {run.wall_seconds != null && (
+                  <>
+                    <dt>實際經過時間</dt>
+                    <dd title="從開始到結束的時間，電腦睡眠也算；等使用者確認大綱的時間不算">{formatDuration(run.wall_seconds * 1000)}</dd>
+                  </>
+                )}
                 <dt>開始版本</dt>
                 <dd>v{run.base_version_no}</dd>
                 <dt>結果版本</dt>
@@ -53,6 +90,12 @@ export function RunDetailModal(props: {
                 <dd>{formatTime(run.created_at)}</dd>
               </dl>
             </div>
+            {run.status === 'succeeded' && (
+              <div className="card">
+                <div className="card-title">人工判斷</div>
+                <RunVerdict run={run} />
+              </div>
+            )}
             {run.error && <div className="error-box">{run.error}</div>}
           </aside>
           <div className="run-detail-main">

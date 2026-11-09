@@ -37,6 +37,7 @@ class AppState:
             self.templates,
             lambda: self.plantuml.available,
             keep_awake=KeepAwake(cfg.keep_awake),
+            examples_dir=cfg.data_dir / "examples",
         )
 
     @contextmanager
@@ -58,8 +59,10 @@ class AppState:
     def default_llm_factory(self, model: str, opts: dict[str, Any]) -> LLMClient:
         if self.cfg.llm_provider == "fake":
             return FakeLLM(model=model, delay=self.cfg.fake_delay)
+        seed = opts.get("seed")
         return OllamaClient(
             opts.get("ollama_url") or self.cfg.ollama_url,
             model,
             num_ctx=int(opts.get("num_ctx") or 0),
+            seed=int(seed) if seed is not None else None,
         )

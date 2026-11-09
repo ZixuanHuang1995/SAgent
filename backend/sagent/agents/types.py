@@ -21,6 +21,8 @@ class PipelineOptions:
     diagrams: bool = True
     max_diagrams: int | None = None  # None：不限制張數（範本有設 max_diagrams 時照範本）
     max_sections: int = 10
+    # 每一步的提示詞全文存進 step_end（C-09）；關閉時只存雜湊 prompt_hash
+    store_prompts: bool = False
 
 
 @dataclass
@@ -36,6 +38,10 @@ class RunInput:
     options: PipelineOptions = field(default_factory=PipelineOptions)
     # 專案詞彙表：同一個專案的文件都用這些名稱
     project_terms: list[Term] = field(default_factory=list)
+    # 同專案其他 Spec 的編號項目和名詞（C-13，services/references.py 組的），空字串表示沒有參考文件
+    references: str = ""
+    # 實驗（C-19）：每一節的 few-shot 範例 {章節名稱（去掉編號）: [範例]}，agents/examples.py 讀的
+    examples: dict[str, list[str]] = field(default_factory=dict)
 
 
 @dataclass
@@ -272,3 +278,6 @@ class PipelineResult:
     reviews: list[Review]
     stats: dict[str, AgentStats]
     summary: str
+    # 修訂迴圈為什麼停下來（研究計劃 C-06）：passed 審查沒有錯誤、revision_limit 達到修訂次數上限、
+    # no_improvement 修訂後錯誤沒有變少、nothing_to_revise 沒有可以自動修訂的章節
+    stop_reason: str = ""

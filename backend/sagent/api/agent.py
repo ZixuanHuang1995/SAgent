@@ -21,7 +21,8 @@ from ..agents.planner import parse_terms
 from ..app_state import AppState
 from ..db import utcnow
 from ..models import AgentEvent, AgentRun, Spec
-from ..schemas import EventOut, ReviewCheckIn, RunContinue, RunCreate, RunDetail, RunOut
+from ..schemas import EventOut, ReviewCheckIn, RunContinue, RunCreate, RunDetail, RunOut, VerdictIn
+from ..services import references as reference_service
 from ..services import reviews as review_service
 from ..services import specs as spec_service
 from ..services.diagram_snippets import SNIPPETS
@@ -108,6 +109,7 @@ async def create_run(body: RunCreate, state: AppState = Depends(get_state)):
             if doc_type not in templates:
                 raise BadRequest(f"沒有「{doc_type}」這種文件範本")
             o = body.options
+            references = _reference_specs(s, spec, o.reference_spec_ids)
             options = {
                 "uml_syntax": o.uml_syntax or current.uml_syntax,
                 "max_revisions": current.max_revisions if o.max_revisions is None else o.max_revisions,
@@ -118,6 +120,17 @@ async def create_run(body: RunCreate, state: AppState = Depends(get_state)):
                 "plan_first": bool(o.plan_first) and body.mode == "draft",
                 "ollama_url": current.ollama_url,
                 "num_ctx": current.num_ctx,
+                # 空白 = 審查跟撰寫用同一個模型
+                "reviewer_model": current.reviewer_model.strip(),
+                # 整個工作的時間上限（分鐘），0 = 不限制。之後改設定不影響已經建立的工作
+                "max_run_minutes": current.max_run_minutes,
+                # 固定亂數種子（回歸測試用，None = 不固定）、存不存提示詞全文（C-08、C-09）
+                "seed": current.seed,
+                "store_prompts": current.store_prompts,
+                # 參考同專案的其他 Spec（C-13）：[{id, title}]，執行時讀它們的最新版
+                "reference_specs": references,
+                # 實驗（C-19）：人改過的章節當 few-shot 範例
+                "fewshot_examples": current.fewshot_examples,
             }
             if doc_type != spec.doc_type:
                 spec.doc_type = doc_type
@@ -139,6 +152,21 @@ async def create_run(body: RunCreate, state: AppState = Depends(get_state)):
     out = await run_in_threadpool(_create)
     state.runner.submit(out.id)
     return out.model_copy(update={"queue_position": state.runner.queue_position(out.id)})
+
+
+def _reference_specs(s: Session, spec: Spec, ids: list[int]) -> list[dict[str, Any]]:
+    """檢查參考文件：同一個專案、不是這份 Spec 自己、最多 3 份。"""
+    out: list[dict[str, Any]] = []
+    for ref_id in dict.fromkeys(ids):
+        if ref_id == spec.id:
+            raise BadRequest("參考文件不能選這份 Spec 自己")
+        ref = s.get(Spec, ref_id)
+        if ref is None or ref.project_id != spec.project_id:
+            raise BadRequest("參考文件只能選同一個專案的 Spec")
+        out.append({"id": ref.id, "title": ref.title})
+    if len(out) > reference_service.MAX_SPECS:
+        raise BadRequest(f"參考文件最多 {reference_service.MAX_SPECS} 份")
+    return out
 
 
 @router.get("/runs", response_model=list[RunOut])
@@ -168,7 +196,7 @@ def get_run(run_id: int, state: AppState = Depends(get_state)):
             {
                 **run_out(s, run, state).model_dump(),
                 "plan": run.plan,
-                "review": run.review,
+                "review": review_service.with_groups(run.review),
                 "review_checked": run.review_checked or [],
                 "review_labels": run.review_labels or {},
                 "events": [_event_out(e) for e in events],
@@ -182,6 +210,15 @@ def set_review_check(run_id: int, body: ReviewCheckIn, state: AppState = Depends
     with state.db() as s:
         checked, labels = review_service.set_checked(s, run_id, body.key, body.done, body.label)
         return {"checked": checked, "labels": labels}
+
+
+@router.put("/runs/{run_id}/verdict", response_model=RunOut)
+def set_verdict(run_id: int, body: VerdictIn, state: AppState = Depends(get_state)):
+    """使用者判斷這份 AI 版可不可以直接交付（C-10）：yes 可以、partial 要小改、no 不行，null 清掉。"""
+    with state.db() as s:
+        run = review_service.set_verdict(s, run_id, body.verdict, body.note)
+        s.flush()
+        return run_out(s, run, state)
 
 
 @router.post("/runs/{run_id}/continue", response_model=RunOut)

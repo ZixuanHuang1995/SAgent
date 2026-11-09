@@ -6,10 +6,15 @@
 - 一致性比較名詞表、編號項目和大綱的要點。章節固定的範本章節名稱一定一樣，不拿來比（比了一定是 1，沒有意義）。
 - 一份出錯（例如模型逾時）只記下錯誤、接著跑下一份；每跑完一份就更新 summary.json，中途停掉也留得住前面的結果。
 - summary.json 記下模型和提示詞版本（agents/versioning.py），改提示詞前後的結果才比得起來。
+- 「要人確認的數字」（numbers_to_check，研究計劃 C-15）：文件裡帶單位、需求和 --context-file 都沒有的數字。
+  不等於編造：SpecEval 的對照組裡，22 份人審過的示範文件有 6 份被舊規則判成有編造的數字，加上專案脈絡後還有 3 份，
+  剩下的都是合理的（換算、測試的邊界值、文件自己的統計），所以要打開文件看。舊欄位 invented_numbers
+  （不看單位、不看脈絡）先留一個版本，summary.json 的 renamed 有標示，下一版移除。
 
 用法（在專案根目錄）：
     uv run --project backend python scripts/eval_reliability.py --requirement-file 需求.txt --times 3 \\
-        --rephrased-file 換句話說的需求.txt --sparse-file 只有兩三句的需求.txt --out-dir eval-out
+        --rephrased-file 換句話說的需求.txt --sparse-file 只有兩三句的需求.txt --out-dir eval-out \\
+        --context-file 同專案的功能規格書.md
 """
 
 from __future__ import annotations
@@ -34,6 +39,9 @@ from sagent.agents.versioning import prompt_version
 from sagent.services.markdown_doc import normalize_heading
 from sagent.services.power import KeepAwake
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "speceval"))
+from l1 import invented_numbers  # noqa: E402  跟 SpecEval L1 同一套：只算帶單位的數字
+
 _NUMBER_RE = re.compile(r"\d+(?:\.\d+)?")
 # 前面接英文字母的（HTML5）、「2D」「3D」是名稱，不算；「16ms」「5MB」這種數字加單位要算
 _PLAIN_NUMBER_RE = re.compile(r"(?<![A-Za-z\d.])\d+(?:\.\d+)?(?![\dD])")
@@ -45,8 +53,8 @@ def _jaccard(a: set[str], b: set[str]) -> float:
     return len(a & b) / len(a | b) if a | b else 1.0
 
 
-def measure(requirement: str, result: PipelineResult) -> dict:
-    """一次結果的指標。編號、章節編號裡的數字不算；需求沒出現過的數字算「可能是編的」。"""
+def measure(requirement: str, result: PipelineResult, context: str = "") -> dict:
+    """一次結果的指標。context：同專案的其他文件或需求，只用來判斷數字是不是有來源。"""
     text = _FENCE_RE.sub("", result.markdown)
     # 條列的編號不算：行首、表格格子開頭的「1. 」，以及格子裡換行後的「<br>2. 」（真模型常這樣寫）
     plain = re.sub(r"\b[A-Z]{1,4}-\d{2,3}\b|^#+ \d+\.|(?:^\s*|\|\s*|<br>\s*)\d+[.)、]\s*", "", text, flags=re.M)
@@ -63,6 +71,9 @@ def measure(requirement: str, result: PipelineResult) -> dict:
         "points": sorted(_bigrams("".join(k for s in result.plan.sections for k in s.key_points))),
         "open_questions": len(result.plan.open_questions),
         "marks": len(_MARK_RE.findall(text)),
+        # 要人確認的數字（C-15）：帶單位、需求和專案脈絡都沒有的。不等於編造，要打開文件看
+        "numbers_to_check": invented_numbers(result.markdown, requirement + "\n" + context),
+        # 舊的欄位（不看單位、不看脈絡），先留一個版本
         "invented_numbers": invented,
         "review_errors": len(errors),
         "review_points": len(review.review_points) if review else 0,
@@ -118,7 +129,15 @@ async def main() -> int:
     parser.add_argument("--ollama", default="http://127.0.0.1:11434")
     parser.add_argument("--out-dir", type=Path, default=Path("eval-reliability"))
     parser.add_argument("--fake", action="store_true", help="用假模型，只檢查流程")
+    parser.add_argument(
+        "--context-file",
+        type=Path,
+        action="append",
+        default=[],
+        help="同專案的其他文件或需求（可以給好幾個），文件裡的數字在這裡出現過就不用確認",
+    )
     args = parser.parse_args()
+    context = "\n".join(p.read_text(encoding="utf-8") for p in args.context_file)
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
     cases = [(f"same-{n}", args.requirement_file) for n in range(1, args.times + 1)]
@@ -137,6 +156,9 @@ async def main() -> int:
         "prompt_version": prompt_version(template),
         "metrics": metrics,
         "errors": errors,
+        "context_files": [str(p) for p in args.context_file],
+        # 欄位改名（C-15）：舊欄位先留一個版本
+        "renamed": {"invented_numbers": "已改名為 numbers_to_check（只算帶單位的數字、看 --context-file），下一版移除"},
     }
 
     def save() -> None:
@@ -162,13 +184,13 @@ async def main() -> int:
                 save()
                 continue
             (args.out_dir / f"{name}.md").write_text(result.markdown, encoding="utf-8")
-            m = measure(requirement, result)
+            m = measure(requirement, result, context)
             m["minutes"] = round((time.monotonic() - started) / 60, 1)
             metrics[name] = m
             save()
             print(
                 f"{name}：{m['minutes']} 分鐘，{len(m['headings'])} 節，標註假設或待確認 {m['marks']} 處，"
-                f"需求沒有的數字 {len(m['invented_numbers'])} 個，審查錯誤 {m['review_errors']} 個，"
+                f"要人確認的數字 {len(m['numbers_to_check'])} 個（不等於編造），審查錯誤 {m['review_errors']} 個，"
                 f"輸出 {m['output_tokens']} tokens",
                 flush=True,
             )
@@ -187,7 +209,7 @@ async def main() -> int:
         s = metrics["sparse"]
         print(
             f"資訊不夠時：待確認問題 {s['open_questions']} 個、標註 {s['marks']} 處、"
-            f"需求沒有的數字 {s['invented_numbers'][:10]}"
+            f"要人確認的數字 {s['numbers_to_check'][:10]}（不等於編造，要打開文件看）"
         )
     print(f"結果：{args.out_dir}")
     return 1 if errors else 0

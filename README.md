@@ -89,6 +89,7 @@ uv run --project backend python scripts/seed_demo.py --data-dir data-demo-build 
 5. 右側「AI 撰寫」（文件類型建立後不能改，AI 一律照這份 Spec 的文件類型撰寫）：
    - 撰寫整份文件：依需求從頭寫。「先確認大綱再撰寫」預設勾選，Planner 規劃完（約 3～5 分鐘）會先停下來，讓你回答待確認問題、調整名詞表和各節要點，按「繼續撰寫」才開始寫。回答過的問題會寫進文件的「待確認事項」，標成已確認
    - 依需求修訂：只修改跟需求有關的章節，其他章節不動
+   - 「參考其他 Spec」：勾選同一個專案已經寫好的文件（最多 3 份），AI 會參考它們最新版的編號項目和名詞，沿用裡面的名稱，不用再標待確認。例如寫系統架構設計時參考功能規格書
 6. 右側「審查」：最近一次 AI 工作的審查列出的格式、邏輯錯誤和需要人工覆核的地方。點章節名稱跳到文件對應的位置，改好或確認過的項目打勾標成已處理（記在伺服器，換瀏覽器也看得到）。審查說錯的項目可以從右邊的「⋯」標成「誤報」，先不處理的標成「略過」，兩種都算處理過；這些標記用來統計 AI 審查有多準（`scripts/analyze_runs.py`）。還有沒處理的項目時，標題旁會顯示「待處理 N」，左側清單和專案總覽也會顯示數量。新的 AI 工作完成後改看新的審查結果。
 7. 右側「版本」：檢視、比較、還原、加標籤、下載任何一個版本。
 8. 文件告一段落（例如送客戶確認）時，到「基準版本」建立一個基準。之後可以看哪些文件改過，或匯出當時的全部文件。
@@ -227,7 +228,11 @@ flowchart LR
 | Writer | 一節一節寫，再一張一張畫圖。圖表語法有錯會自動修正，修不好就請模型重畫一次 | Markdown |
 | Reviewer | 只找格式和邏輯上的錯誤，以及需要人工覆核的地方。格式問題（表格欄數、引用沒定義的編號、圖表語法）由程式檢查；邏輯問題（前後矛盾、跟需求矛盾）由模型找 | 錯誤清單（交給 Writer 修正）、人工覆核清單（列給使用者確認） |
 
-執行過程會即時顯示在畫面上：目前在哪一步、模型正在輸出的文字、大綱、審查結果。審查結果分兩塊：「格式、邏輯錯誤」會自動交給 Writer 修正；「需要人工覆核」列出文件標註（假設）、（待確認）的地方，需求沒提到、文件卻寫得很具體的內容，以及需求有、文件裡卻找不到的數字或句子，請使用者自己確認。審查不打分數。可以離開頁面，完成後會自動存成新版本。每次執行的完整過程都會保留，可以在「AI 工作紀錄」回頭看。
+執行過程會即時顯示在畫面上：目前在哪一步、模型正在輸出的文字、大綱、審查結果。審查結果分兩塊：「格式、邏輯錯誤」會自動交給 Writer 修正；「需要人工覆核」列出文件標註（假設）、（待確認）的地方，需求沒提到、文件卻寫得很具體的內容，以及需求有、文件裡卻找不到的數字或句子，請使用者自己確認。審查不打分數。可以離開頁面，完成後會自動存成新版本。每次執行的完整過程都會保留，可以在「AI 工作紀錄」回頭看，詳細內容裡有停止原因（例如「達到修訂次數上限」「修訂後錯誤沒有變少」）和實際經過的時間。
+
+Spec 頁的「審查」分頁：
+- 最上面問「這份 AI 版可以直接交付嗎？」，選可以、要小改或不行，可以加一句理由（再按一次同一個選項是取消）。AI 工作紀錄的詳細內容也可以標。累積下來用來算 AI 版有幾成可以直接交付，也用來校準評審模型（`scripts/speceval/judge.py --calibrate --from-db`）。
+- 「需要人工覆核」分三組，依序是需求追溯（需求有、文件裡找不到的數字或句子）、審查模型列的（需求沒提到、要業務決定的內容）、文件自己標的（假設）（待確認）。文件自己標的通常最多，預設摺疊。每一組可以「全部標成已處理」。
 
 更多細節見 [docs/architecture.md](docs/architecture.md)。
 
@@ -282,7 +287,7 @@ PlantUML 是選用功能。要啟用，二選一：
 
 ## 設定
 
-畫面上的「設定」頁可以改：Ollama 網址、預設模型、溫度、Context 長度、修訂輪數、畫圖、UML 語法。AI 撰寫一律用這裡的值，面板上不另外選；Spec 頁的 AI 撰寫面板會列出這次會用的模型、修訂輪數、畫不畫圖，旁邊有「改設定」的連結。修訂輪數預設 2 輪（審查最多 3 次）。圖的張數不限制，Planner 規劃幾張就畫幾張；自訂範本設了 `max_diagrams` 時照範本。PlantUML 伺服器用環境變數設定。
+畫面上的「設定」頁可以改：Ollama 網址、預設模型、審查模型（空白 = 跟預設模型相同）、溫度、Context 長度、修訂輪數、畫圖、UML 語法、整個工作的時間上限（分鐘，0 = 不限制，超過就停止並標成失敗）。「進階」卡片是回歸測試和研究用的：亂數種子（固定之後同樣的輸入結果盡量一樣，正式撰寫留空）、儲存每一步的提示詞（工作紀錄存下完整提示詞，可以用 `scripts/speceval/export_traces.py` 匯出重放；資料庫會變大，內容含需求原文）、實驗：用人改過的章節當範例（Writer 寫每一節時附上資料資料夾 `examples/文件類型/章節名稱.md` 的範例，一個檔案最多 2 段、用一行 `<!-- 範例分隔 -->` 隔開；預設關閉，要用 SpecEval 比較過才改成預設）。AI 撰寫一律用這裡的值，面板上不另外選；Spec 頁的 AI 撰寫面板會列出這次會用的模型、修訂輪數、畫不畫圖，旁邊有「改設定」的連結。修訂輪數預設 2 輪（審查最多 3 次）。圖的張數不限制，Planner 規劃幾張就畫幾張；自訂範本設了 `max_diagrams` 時照範本。PlantUML 伺服器用環境變數設定。
 
 - 改了 Ollama 網址，按「測試連線」確認連得到，預設模型的清單也會換成新網址的模型（還沒存檔也可以測）。
 - 溫度、Context 長度填錯（空白、超出範圍）時欄位下方會說明，改好才能儲存。沒有修改時「儲存設定」不能按；有修改時可以按「還原」回到存檔的值，也可以按 Ctrl+S 儲存。
@@ -353,6 +358,28 @@ uv run --project backend python scripts/run_pipeline.py --requirement-file 需�
 ```
 
 `frontend/scripts/mermaid-validate.mjs` 可以用前端同版本的 Mermaid 檢查圖表語法，升級 Mermaid 後可以用它重新產生 `backend/tests/data/mermaid_cases.json`。
+
+### SpecEval（評估 AI 寫的文件能不能交付）
+
+`scripts/speceval/` 是改提示詞、流程時用的評估工具。主要指標是可交付率（`run_suite.py` 算的 pass@1 和信賴區間），不是審查錯誤數，見 `docs/real-model-test-plan.md` 第 4 節。真模型很慢，排在晚上或週末跑：
+
+```powershell
+# 產生任務卡（要人審過，把 reviewed_by_human 改成 true 再 commit）
+uv run --project backend python scripts/speceval/build_tasks.py --out-dir speceval/tasks
+# 手動跑一次 tiny-4（4 張構想提案任務，真模型約 2～4 小時）
+uv run --project backend python scripts/speceval/run_suite.py --suite tiny --out-dir speceval-out/tiny-A
+# 比較兩次的可交付率
+uv run --project backend python scripts/analyze_runs.py --speceval speceval-out/tiny-A --speceval speceval-out/tiny-B
+```
+
+排程：`scripts/speceval/nightly.ps1` 每次跑之前先問 SAgent 有沒有 AI 工作在跑或排隊，有就不跑；結果放在 `speceval-out/nightly-日期-集合`。用 Windows 工作排程器註冊（路徑換成自己的專案位置；SAgent 不會自動註冊）：
+
+```powershell
+schtasks /Create /TN "SAgent SpecEval tiny" /SC DAILY /ST 01:00 /TR "powershell -NoProfile -ExecutionPolicy Bypass -File D:\AI\playground\SAgent\scripts\speceval\nightly.ps1 -Suite tiny"
+schtasks /Create /TN "SAgent SpecEval full" /SC WEEKLY /D SAT /ST 01:00 /TR "powershell -NoProfile -ExecutionPolicy Bypass -File D:\AI\playground\SAgent\scripts\speceval\nightly.ps1 -Suite full"
+```
+
+`speceval-out/` 可能有需求原文，不進 git。
 
 ## 專案結構
 

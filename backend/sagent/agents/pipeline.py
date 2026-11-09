@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 
 from ..services.markdown_doc import MdDoc, MdSection, render_markdown
-from .base import Emitter
+from .base import Emitter, TokenEstimate
 from .llm import LLMClient
 from .planner import Planner
 from .reviewer import Reviewer
@@ -52,13 +52,27 @@ def assemble(inp: RunInput, plan: Plan, draft: Draft) -> str:
 
 
 class SpecPipeline:
-    def __init__(self, llm: LLMClient, emitter: Emitter, stats: dict[str, AgentStats] | None = None):
-        """stats：先確認大綱的工作繼續撰寫時，帶入規劃階段的用量，最後的統計才完整。"""
+    def __init__(
+        self,
+        llm: LLMClient,
+        emitter: Emitter,
+        stats: dict[str, AgentStats] | None = None,
+        reviewer_llm: LLMClient | None = None,
+    ):
+        """stats：先確認大綱的工作繼續撰寫時，帶入規劃階段的用量，最後的統計才完整。
+
+        reviewer_llm：審查用的模型（C-03）。沒給就跟 Planner、Writer 用同一個。
+        同一個模型審查自己寫的文件，容易偏好自己的輸出（第 15 堂：self-enhancement bias）。
+        """
         self.emitter = emitter
         self.stats: dict[str, AgentStats] = stats if stats is not None else {}
         self.planner = Planner(llm, emitter, self.stats)
         self.writer = Writer(llm, emitter, self.stats)
-        self.reviewer = Reviewer(llm, emitter, self.stats)
+        self.reviewer = Reviewer(reviewer_llm or llm, emitter, self.stats)
+        # Writer 實際用掉的 token 數拿來估計審查的輸入有多長（C-14）
+        estimate = TokenEstimate()
+        for agent in (self.planner, self.writer, self.reviewer):
+            agent.token_estimate = estimate
 
     @staticmethod
     def _apply_template_limits(inp: RunInput) -> None:
@@ -70,9 +84,14 @@ class SpecPipeline:
             current = inp.options.max_diagrams
             inp.options.max_diagrams = limit if current is None else min(current, limit)
 
+    def _prepare(self, inp: RunInput) -> None:
+        self._apply_template_limits(inp)
+        for agent in (self.planner, self.writer, self.reviewer):
+            agent.store_prompts = inp.options.store_prompts
+
     async def plan_only(self, inp: RunInput) -> Plan:
         """先確認大綱：只跑 Planner，大綱和待確認問題交給使用者確認後，再用 run(plan=…) 繼續。"""
-        self._apply_template_limits(inp)
+        self._prepare(inp)
         await self.emitter.emit("phase", "planner", "Planner：規劃文件", {"phase": "plan"})
         return await self.planner.plan(inp)
 
@@ -88,7 +107,7 @@ class SpecPipeline:
         progress：續跑時上次寫到哪裡。on_checkpoint：規劃完、每寫完一節或一張圖時呼叫，讓執行器存檢查點。
         審查和修訂不存檢查點：中斷後從第一次審查重來（大部分的時間花在撰寫）。
         """
-        self._apply_template_limits(inp)
+        self._prepare(inp)
         emit = self.emitter.emit
         if plan is None:
             await emit("phase", "planner", "Planner：規劃文件", {"phase": "plan"})
@@ -106,6 +125,7 @@ class SpecPipeline:
         reviews: list[Review] = []
         revisions = 0
         focus: set[str] | None = None
+        stop_reason = ""
         while True:
             round_no = len(reviews) + 1
             await emit(
@@ -116,11 +136,14 @@ class SpecPipeline:
             )
             reviews.append(review)
             if not review.needs_revision:
+                stop_reason = "passed"
                 break
             if revisions >= inp.options.max_revisions:
+                stop_reason = "revision_limit"
                 await emit("log", "reviewer", "已達修訂次數上限，剩下的問題保留在審查報告", {"level": "info"})
                 break
             if len(reviews) >= 2 and review.error_count >= reviews[-2].error_count:
+                stop_reason = "no_improvement"
                 # 改了一輪錯誤卻沒變少，再改多半也一樣，CPU 上一輪要十幾分鐘，交給人處理
                 await emit(
                     "log",
@@ -139,6 +162,7 @@ class SpecPipeline:
             )
             focus = await self.writer.revise(inp, plan, draft, review, revisions)
             if not focus:
+                stop_reason = "nothing_to_revise"
                 await emit("log", "writer", "沒有可以自動修訂的章節，結束修訂", {"level": "info"})
                 break
 
@@ -150,4 +174,5 @@ class SpecPipeline:
             reviews=reviews,
             stats=self.stats,
             summary=plan.summary,
+            stop_reason=stop_reason,
         )

@@ -991,6 +991,7 @@ def test_unresolved_issues_stay_and_revision_stops_without_progress():
     # 錯誤從 1 個變 2 個：不再修第 2 輪
     logs = [e["message"] for e in emitter.events if e["type"] == "log"]
     assert any("修訂後錯誤沒有變少（上一輪 1 個，這一輪 2 個）" in m for m in logs)
+    assert result.stop_reason == "no_improvement"
     phases = [e["data"]["phase"] for e in emitter.events if e["type"] == "phase"]
     assert phases.count("revise") == 1
 

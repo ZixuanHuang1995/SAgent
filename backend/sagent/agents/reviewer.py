@@ -12,7 +12,7 @@ from typing import Any
 from ..services.diagrams import extract_diagrams, lint_mermaid, lint_plantuml
 from .base import AgentBase
 from .prompts import ISSUE_KINDS, review_schema, reviewer_messages
-from .textutil import normalize_sid, text_length
+from .textutil import copied_ratio, normalize_sid, substantive_chars, text_length
 from .types import Draft, Issue, Plan, Review, ReviewPoint, RunInput
 
 _PLACEHOLDER_RE = re.compile(r"\b(TODO|TBD|FIXME|Lorem ipsum)\b|（待補充）", re.I)
@@ -25,6 +25,16 @@ _ID_CELL_RE = re.compile(r"(?:\*\*|`)?([A-Z]{1,4}-\d{2,3})(?:\*\*|`)?")
 _MARK_RE = re.compile(r"[（(](假設|待確認)[）)]")
 _QUOTED_RE = re.compile(r"「([^」]{2,30})」")
 MAX_CHECK_POINTS = 20
+# 第一輪審查分批（C-14）：估計的輸入加上輸出上限，超過上下文長度的這個比例就分批
+REVIEW_MAX_TOKENS = 3000
+CONTEXT_SHARE = 0.85
+_BATCH_FAILED_REASON = "文件太長分批審查時，這一批審查模型沒有給出結果，要人工看過"
+# 空洞、照抄的門檻（C-01）。用 scripts/speceval/controls.py 校正：22 份示範文件都不會被擋，
+# 「每節只寫待確認加編號」「需求原文加編號」兩種假文件都會被擋
+MIN_ITEMS_FOR_HOLLOW = 3  # 需求至少有幾句完整的句子，才檢查空洞
+MIN_SUBSTANTIVE_CHARS = 30
+MIN_COPY_CHARS = 80  # 太短的章節（例如一句目的）照抄需求是正常的
+MAX_COPIED_RATIO = 0.8  # 示範文件最高 0.66（變更原因本來就會重述需求），照抄的假文件約 0.9
 _UNSTATED_REASON = "需求沒提到，可能是撰寫者自己補的，要確認是否正確"
 _STALE_REASON = "上一輪審查指出的問題，修改後沒有重新審查成功，要確認是否已經修正"
 _KEEP_REASON = "這一節設定為保留原內容，不會自動修改，要確認是否需要調整"
@@ -201,16 +211,41 @@ def has_item_ids(body: str, prefix: str) -> bool:
     return any(d.split("-")[0] == prefix for d in defined_ids(_without_code(body)))
 
 
-def static_checks(plan: Plan, draft: Draft) -> list[Issue]:
+def static_checks(plan: Plan, draft: Draft, requirement: str = "") -> list[Issue]:
+    """requirement：撰寫模式才傳（修訂模式的需求是「要改什麼」，不拿來比對照抄和空洞）。"""
     issues: list[Issue] = []
     undefined = undefined_ids(draft)
     mismatched = mismatched_ids(draft)
+    # 需求只有一兩句時，大部分章節本來就只能標待確認，不算空洞（構想文件常這樣）
+    rich_requirement = len(requirement_items(requirement)) >= MIN_ITEMS_FOR_HOLLOW if requirement else False
     for sec in draft.sections:
         sec_plan = plan.section(sec.id)
         if sec_plan is not None and sec_plan.action == "keep":
             continue
         if text_length(sec.body) < 30:
             issues.append(Issue(sec.id, "high", "這一節內容太少", "依大綱的目標補上具體內容", source="check"))
+        elif rich_requirement and substantive_chars(sec.body) < MIN_SUBSTANTIVE_CHARS:
+            issues.append(
+                Issue(
+                    sec.id,
+                    "high",
+                    "這一節幾乎都是待確認或編號，沒有實質內容",
+                    "依需求寫出這一節能確定的內容；只有需求真的沒寫的事項才標（待確認）",
+                    source="check",
+                )
+            )
+        if requirement and text_length(sec.body) >= MIN_COPY_CHARS:
+            ratio = copied_ratio(sec.body, requirement)
+            if ratio >= MAX_COPIED_RATIO:
+                issues.append(
+                    Issue(
+                        sec.id,
+                        "medium",
+                        f"這一節約 {ratio:.0%} 是照抄需求原文",
+                        "依這一節的目標整理需求：拆成編號項目、表格或規則，不要整段貼上需求",
+                        source="check",
+                    )
+                )
         for idx, block in enumerate(extract_diagrams(sec.body)):
             errors = lint_plantuml(block.code) if block.lang == "plantuml" else lint_mermaid(block.code)
             if errors:
@@ -287,8 +322,8 @@ _FACT_RE = re.compile(
     r"(?<![\d/.-])(\d+(?:\.\d+)?)\s*(個工作天|工作天|個月|小時|分鐘|天|週|年|次|張|件|筆|MB|GB|KB|%|秒|字元)?(?![\d/])"
 )
 MAX_GAP_POINTS = 5
-_NUMBER_GAP_REASON = "文件裡找不到這個數字，要確認有沒有漏寫或寫錯"
-_ITEM_GAP_REASON = "文件裡幾乎找不到對應的內容，要確認有沒有漏寫"
+NUMBER_GAP_REASON = "文件裡找不到這個數字，要確認有沒有漏寫或寫錯"
+ITEM_GAP_REASON = "文件裡幾乎找不到對應的內容，要確認有沒有漏寫"
 
 
 def requirement_items(requirement: str) -> list[str]:
@@ -330,11 +365,11 @@ def requirement_gaps(requirement: str, draft: Draft) -> list[ReviewPoint]:
         if re.search(rf"(?<![\d.]){re.escape(number)}(?![\d.])[^\d]{{0,4}}{re.escape(unit[-1:])}", flat):
             continue
         seen.add(key)
-        points.append(ReviewPoint(None, f"需求提到「{m.group(0).strip()}」", _NUMBER_GAP_REASON, "check"))
+        points.append(ReviewPoint(None, f"需求提到「{m.group(0).strip()}」", NUMBER_GAP_REASON, "check"))
     for item in requirement_items(requirement):
         grams = _grams(item)
         if grams and len(grams & doc_grams) / len(grams) < 0.3:
-            points.append(ReviewPoint(None, f"需求：{item[:80]}", _ITEM_GAP_REASON, "check"))
+            points.append(ReviewPoint(None, f"需求：{item[:80]}", ITEM_GAP_REASON, "check"))
     return points[:MAX_GAP_POINTS]
 
 
@@ -501,7 +536,7 @@ class Reviewer(AgentBase):
             else f"第 {round_no} 次審查"
         )
         async with self.step(step, label) as info:
-            checks = static_checks(plan, draft)
+            checks = static_checks(plan, draft, inp.requirement if inp.mode == "draft" else "")
             marked = marked_points(draft)
             if inp.mode == "draft":  # 修訂模式的需求是要改什麼，不用每一點都在文件裡找得到
                 marked += requirement_gaps(inp.requirement, draft)
@@ -513,21 +548,26 @@ class Reviewer(AgentBase):
                     for i in previous.issues
                     if i.source == "llm" and i.section_id in focus and i.severity in ("high", "medium")
                 ]
-            data = await self.chat_json(
-                step,
-                reviewer_messages(
-                    inp,
-                    plan,
-                    draft_for_review(plan, draft, focus),
-                    notes,
-                    partial=bool(focus),
-                    previous=[f"[{i.section_id}] {i.problem}" for i in ledger],
-                ),
-                review_schema(partial=bool(focus), resolved=len(ledger)),
-                temperature=0.1,
-                # 真模型實測審查輸出平均約 1500 tokens，2000 常被截斷
-                max_tokens=3000,
-            )
+            batches = None if focus else await self._batches(inp, plan, draft, checks, notes)
+            batch_failed: list[str] = []
+            if batches:
+                data, batch_failed = await self._review_batches(step, inp, plan, draft, checks, batches)
+            else:
+                data = await self.chat_json(
+                    step,
+                    reviewer_messages(
+                        inp,
+                        plan,
+                        draft_for_review(plan, draft, focus),
+                        notes,
+                        partial=bool(focus),
+                        previous=[f"[{i.section_id}] {i.problem}" for i in ledger],
+                    ),
+                    review_schema(partial=bool(focus), resolved=len(ledger)),
+                    temperature=0.1,
+                    # 真模型實測審查輸出平均約 1500 tokens，2000 常被截斷
+                    max_tokens=REVIEW_MAX_TOKENS,
+                )
             carried: list[Issue] = []
             carried_points: list[ReviewPoint] = []
             if focus and previous is not None:
@@ -571,14 +611,21 @@ class Reviewer(AgentBase):
                     late = [i for i in new_issues if i.severity == "medium"]
                     new_issues = [i for i in new_issues if i.severity != "medium"]
                     new_points += [ReviewPoint(i.section_id, i.problem, _LATE_REASON, "llm") for i in late]
+                if batch_failed:
+                    new_points.append(
+                        ReviewPoint(None, f"沒有審查到的章節：{'、'.join(batch_failed)}", _BATCH_FAILED_REASON, "llm")
+                    )
                 review = Review(
                     round=round_no,
                     summary=str(data.get("summary", "")).strip()[:500],
                     issues=checks + still_open + new_issues + carried,
                     review_points=marked + new_points + carried_points,
                     resolved=resolved,
+                    llm_ok=not batch_failed,
                 )
             info.output = review.to_dict()
+            if batches:
+                info.output["batches"] = [sorted(b, key=_section_order(draft)) for b in batches]
             errors = review.error_count
             verdict = f"需要修訂（錯誤 {errors} 個）" if review.needs_revision else "沒有需要修正的錯誤"
             if not review.llm_ok:
@@ -586,6 +633,115 @@ class Reviewer(AgentBase):
             fixed = f"，上一輪的意見已修正 {len(review.resolved)} 個" if ledger and review.llm_ok else ""
             info.message = f"審查結果：{verdict}{fixed}，需要人工覆核 {len(review.review_points)} 項"
         return review
+
+
+    async def _context_limit(self) -> int:
+        get = getattr(self.llm, "context_length", None)
+        if get is None:
+            return 0
+        try:
+            return int(await get() or 0)
+        except Exception:  # noqa: BLE001  查不到上下文長度就不分批
+            return 0
+
+    async def _batches(
+        self, inp: RunInput, plan: Plan, draft: Draft, checks: list[Issue], notes: list[str]
+    ) -> list[set[str]] | None:
+        """第一輪審查要不要分批（C-14，筆記 D19）。不用分批時回傳 None。
+
+        估計輸入的 token 數（字元數 × 這個工作實際的比例）加上輸出上限，超過上下文長度的 85% 就把章節
+        照順序分成幾批，每一批都帶完整的大綱、名詞表和那一批章節的程式檢查結果。
+        分批後模型看不到不同批之間的矛盾，所以只在真的放不下時才分。上下文長度不知道時不分批。
+        """
+        limit = await self._context_limit()
+        if limit <= 0:
+            return None
+        budget = int(limit * CONTEXT_SHARE) - REVIEW_MAX_TOKENS
+        model = self.llm.model
+
+        def cost(sections: set[str]) -> int:
+            batch_notes = [n for n in notes if any(n.startswith(f"[{s}]") for s in sections)]
+            messages = reviewer_messages(inp, plan, draft_for_review(plan, draft, sections), batch_notes, batch=(9, 9))
+            return self.token_estimate.tokens(model, sum(len(m["content"]) for m in messages))
+
+        all_ids = [s.id for s in draft.sections]
+        whole = self.token_estimate.tokens(
+            model,
+            sum(len(m["content"]) for m in reviewer_messages(inp, plan, draft_for_review(plan, draft), notes)),
+        )
+        if whole <= budget:
+            return None
+        batches: list[set[str]] = []
+        current: set[str] = set()
+        for sid in all_ids:
+            if current and cost(current | {sid}) > budget:
+                batches.append(current)
+                current = set()
+            current.add(sid)
+        if current:
+            batches.append(current)
+        if len(batches) <= 1:
+            return None
+        await self.log(
+            f"審查內容太長（估計輸入約 {whole} tokens，上下文 {limit}），分成 {len(batches)} 批審查",
+            "warn",
+            estimated_tokens=whole,
+            context_length=limit,
+            batches=len(batches),
+        )
+        return batches
+
+    async def _review_batches(
+        self,
+        step: str,
+        inp: RunInput,
+        plan: Plan,
+        draft: Draft,
+        checks: list[Issue],
+        batches: list[set[str]],
+    ) -> tuple[dict[str, Any] | None, list[str]]:
+        """每一批各審查一次，合併 issues、review_points（去掉重複的）。回傳（合併的結果, 沒審查到的章節名稱）。"""
+        merged: dict[str, Any] = {"issues": [], "review_points": [], "summary": ""}
+        summaries: list[str] = []
+        failed: list[str] = []
+        seen: set[tuple[str, str, str]] = set()
+        for n, sections in enumerate(batches, start=1):
+            batch_notes = [f"[{i.section_id}] {i.problem}" for i in checks if i.severity != "low" and i.section_id in sections]
+            data = await self.chat_json(
+                step,
+                reviewer_messages(
+                    inp, plan, draft_for_review(plan, draft, sections), batch_notes, batch=(n, len(batches))
+                ),
+                review_schema(),
+                temperature=0.1,
+                max_tokens=REVIEW_MAX_TOKENS,
+            )
+            if data is None:
+                failed += [s.heading for s in draft.sections if s.id in sections]
+                continue
+            for key in ("issues", "review_points"):
+                for raw in data.get(key) or []:
+                    if not isinstance(raw, dict):
+                        continue
+                    sid = normalize_sid(raw.get("section_id"), "S", len(plan.sections)) or ""
+                    if sid and sid not in sections:
+                        continue  # 這一批沒有這一節，模型猜的
+                    text = str(raw.get("problem") or raw.get("item") or "").strip()
+                    if (key, sid, text) in seen:
+                        continue
+                    seen.add((key, sid, text))
+                    merged[key].append(raw)
+            if str(data.get("summary", "")).strip():
+                summaries.append(str(data["summary"]).strip())
+        if len(failed) == sum(len(b) for b in batches):
+            return None, []
+        merged["summary"] = f"文件太長，分成 {len(batches)} 批審查。" + " ".join(summaries)
+        return merged, failed
+
+
+def _section_order(draft: Draft):
+    order = {s.id: i for i, s in enumerate(draft.sections)}
+    return lambda sid: order.get(sid, len(order))
 
 
 _SID_PREFIX_RE = re.compile(r"^\s*\[S\d+\]\s*")

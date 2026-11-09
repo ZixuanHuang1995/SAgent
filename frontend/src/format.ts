@@ -36,6 +36,17 @@ export const RUN_STATUS: Record<RunStatus, string> = {
 }
 
 /** Spec 清單和標題旁的 AI 狀態標籤 */
+/** AI 工作為什麼停下來（agent_runs.stop_reason） */
+export const STOP_REASON: Record<string, string> = {
+  passed: '審查沒有錯誤',
+  revision_limit: '達到修訂次數上限',
+  no_improvement: '修訂後錯誤沒有變少',
+  nothing_to_revise: '沒有可以自動修訂的章節',
+  failed: '失敗',
+  cancelled: '取消',
+  walltime: '超過整個工作的時間上限',
+}
+
 export const AI_STATUS: Record<ActiveRunStatus, string> = {
   queued: 'AI 排隊中',
   running: 'AI 撰寫中',

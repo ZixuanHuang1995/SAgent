@@ -19,3 +19,9 @@ tools/
 
 # 這台電腦自己的設定（start.ps1 啟動時讀）
 /local.env
+
+# SpecEval 的輸出（可能有客戶資料）
+speceval-out/
+
+# SpecEval 從使用紀錄挑的任務卡草稿（可能有客戶資料，人審過、去識別化後才搬進 speceval/tasks/）
+speceval/tasks-candidates/

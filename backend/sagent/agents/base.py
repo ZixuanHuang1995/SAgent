@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -63,6 +65,17 @@ class StepInfo:
     eval_s: float = 0.0
     load_s: float = 0.0
     context_length: int = 0
+    # 這一步最後一次呼叫模型的提示詞（C-09）：雜湊一律記，全文只在開啟「儲存提示詞」時記
+    prompt_hash: str = ""
+    messages: list[dict[str, str]] | None = None
+
+    def prompts(self) -> dict[str, Any]:
+        out: dict[str, Any] = {}
+        if self.prompt_hash:
+            out["prompt_hash"] = self.prompt_hash
+        if self.messages is not None:
+            out["messages"] = self.messages
+        return out
 
     def usage(self) -> dict[str, Any]:
         """步驟結束時記進紀錄的用量。時間拆解用來看花在讀提示詞（prefill）還是生成（decode）。"""
@@ -76,6 +89,37 @@ class StepInfo:
         }
 
 
+class TokenEstimate:
+    """估計提示詞有多少 token（研究計劃 C-14）：用這個工作裡實際呼叫回報的 prompt_tokens ÷ 字元數。
+
+    Ollama 沒有算 token 的 API，換模型係數也不一樣，所以用同一個模型實際的數字。
+    取觀察到的最大比例：提示詞的前段命中快取時 Ollama 回報的 prompt_tokens 會變少，平均會低估。
+    還沒有資料時用 DEFAULT（中文為主的提示詞，qwen 系列大約 0.7～0.9）。
+    """
+
+    DEFAULT = 0.9
+    MIN_CHARS = 500  # 太短的提示詞，固定的格式 token 佔比太高，不拿來算
+
+    def __init__(self) -> None:
+        self._ratio: dict[str, float] = {}
+
+    def add(self, model: str, chars: int, tokens: int) -> None:
+        if chars >= self.MIN_CHARS and tokens > 0:
+            self._ratio[model] = max(self._ratio.get(model, 0.0), tokens / chars)
+
+    def ratio(self, model: str) -> float:
+        return self._ratio.get(model) or max(self._ratio.values(), default=self.DEFAULT)
+
+    def tokens(self, model: str, chars: int) -> int:
+        return int(chars * self.ratio(model)) + 1
+
+
+def prompt_hash(messages: list[dict[str, str]]) -> str:
+    """提示詞的 SHA-256（C-09）：比較兩次工作同一步送給模型的內容一不一樣，不用存全文。"""
+    text = json.dumps(messages, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 class AgentBase:
     role = "agent"
 
@@ -84,6 +128,10 @@ class AgentBase:
         self.emitter = emitter
         self.stats = stats.setdefault(self.role, AgentStats())
         self._step: StepInfo | None = None
+        # 每一步的提示詞全文存進 step_end（C-09，SpecPipeline 依選項設定）
+        self.store_prompts = False
+        # 估計 token 數用（C-14），SpecPipeline 讓三個 agent 共用一個
+        self.token_estimate = TokenEstimate()
 
     async def log(self, message: str, level: str = "info", **data: Any) -> None:
         await self.emitter.emit("log", self.role, message, {"level": level, **data})
@@ -108,6 +156,7 @@ class AgentBase:
                     "error": str(exc),
                     "duration_ms": int((time.monotonic() - started) * 1000),
                     **info.usage(),
+                    **info.prompts(),
                 },
             )
             raise
@@ -121,6 +170,7 @@ class AgentBase:
                 "ok": True,
                 "duration_ms": int((time.monotonic() - started) * 1000),
                 **info.usage(),
+                **info.prompts(),
                 "output": info.output,
             },
         )
@@ -145,6 +195,9 @@ class AgentBase:
             on_token=on_token,
             purpose=f"{self.role}:{step_id}",
         )
+        self.token_estimate.add(
+            self.llm.model, sum(len(m.get("content", "")) for m in messages), result.prompt_tokens
+        )
         # 小模型偶爾會混入簡體字
         result.text = to_traditional(result.text)
         self.stats.calls += 1
@@ -155,6 +208,9 @@ class AgentBase:
         self.stats.eval_seconds += result.eval_s
         self.stats.load_seconds += result.load_s
         if self._step is not None:
+            self._step.prompt_hash = prompt_hash(messages)
+            if self.store_prompts:
+                self._step.messages = [dict(m) for m in messages]
             self._step.prompt_tokens += result.prompt_tokens
             self._step.completion_tokens += result.completion_tokens
             self._step.prompt_eval_s += result.prompt_eval_s

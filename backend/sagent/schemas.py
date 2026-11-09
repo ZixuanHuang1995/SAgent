@@ -222,6 +222,8 @@ class RunOptionsIn(BaseModel):
     max_diagrams: int | None = Field(None, ge=0, le=10)
     # 規劃完先停下來，讓使用者回答待確認問題、調整大綱再撰寫（只用在撰寫模式）
     plan_first: bool | None = None
+    # 撰寫時參考同專案的其他 Spec（研究計劃 C-13），最多 3 份
+    reference_spec_ids: list[int] = Field(default_factory=list, max_length=3)
 
 
 class RunCreate(BaseModel):
@@ -267,6 +269,12 @@ class RunOut(ORMModel):
     started_at: datetime | None
     finished_at: datetime | None
     stats: dict[str, Any] | None
+    # 為什麼停下來、實際經過的秒數（C-06）。舊紀錄是 None
+    stop_reason: str | None = None
+    wall_seconds: float | None = None
+    # 使用者判斷這份 AI 版可不可以直接交付（C-10）：yes、partial、no；None 還沒判斷
+    human_verdict: str | None = None
+    human_verdict_note: str = ""
     spec_title: str = ""
     queue_position: int | None = None
 
@@ -287,6 +295,13 @@ class RunDetail(RunOut):
     # 處理過的項目怎麼處理的：fixed 已處理、false 誤報、skip 略過（舊資料沒有記錄的當成 fixed）
     review_labels: dict[str, str] = {}
     events: list[EventOut]
+
+
+class VerdictIn(BaseModel):
+    """這份 AI 版可以直接交付嗎（C-10）。verdict 送 null 表示清掉判斷。"""
+
+    verdict: Literal["yes", "partial", "no"] | None
+    note: str = Field("", max_length=500)
 
 
 class ReviewCheckIn(BaseModel):

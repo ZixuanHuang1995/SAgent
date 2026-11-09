@@ -26,10 +26,14 @@
 | 重新產生示範資料（腳本模型，約 2 分鐘） | `uv run --project backend python scripts/seed_demo.py --data-dir data-demo-build --script scripts/demo_content`，確認後改名成 `data-demo`。內容檔格式見 `scripts/demo_content/README.md` |
 | 重新產生示範資料（真模型，約 20～24 小時） | 上一行去掉 `--script …`。四個情境的需求內容在 `scripts/demo_scenarios.py`，模型預設讀 `data/sagent.db` 的設定 |
 | 用真模型跑一次 AI 流程 | `uv run --project backend python scripts/run_pipeline.py --requirement-file 需求.txt --out 輸出.md` |
-| 分析 AI 工作紀錄（時間佔比、JSON 和截斷出錯、修訂前後錯誤數） | `uv run --project backend python scripts/analyze_runs.py --db data/sagent.db`（不跑模型，資料庫只讀；`data-demo` 沒有 AI 工作紀錄，要看真的紀錄用 `data/`；可加 `--model`、`--doc-type`、`--from-run`；`--group-by prompt` 依提示詞版本分組，比較改提示詞前後；也會列出使用者標記算出的審查準確度、標註密度等監看指標） |
+| 分析 AI 工作紀錄（時間佔比、JSON 和截斷出錯、修訂前後錯誤數） | `uv run --project backend python scripts/analyze_runs.py --db data/sagent.db`（不跑模型，資料庫只讀；`data-demo` 沒有 AI 工作紀錄，要看真的紀錄用 `data/`；可加 `--model`、`--doc-type`、`--from-run`；`--group-by prompt` 依提示詞版本和模型 digest 分組，比較改提示詞前後；也會列出使用者標記算出的審查準確度、標註密度等監看指標；停止原因讀 `stop_reason` 欄位；整個工作的時間比各步驟加總多 20% 以上又多 60 秒的標「時間不可信」，不算進時間統計） |
 | AI 版被人改了多少（逐節修改幅度、最常被大改的章節） | `uv run --project backend python scripts/analyze_edits.py --db data/sagent.db`（不跑模型，資料庫只讀；可加 `--doc-type`、`--top`） |
-| 真模型可靠度（跨次一致、換句話說、資訊不夠） | `uv run --project backend python scripts/eval_reliability.py --requirement-file 需求.txt --times 3 --rephrased-file 換句話說.txt --sparse-file 資訊不夠.txt --out-dir 輸出資料夾`（每次約 20 分鐘，先問使用者；加 `--fake` 只檢查流程；一份失敗會接著跑下一份，每跑完一份就更新 `summary.json`） |
+| 真模型可靠度（跨次一致、換句話說、資訊不夠） | `uv run --project backend python scripts/eval_reliability.py --requirement-file 需求.txt --times 3 --rephrased-file 換句話說.txt --sparse-file 資訊不夠.txt --out-dir 輸出資料夾`（每次約 20 分鐘，先問使用者；加 `--fake` 只檢查流程；一份失敗會接著跑下一份，每跑完一份就更新 `summary.json`；`--context-file` 給同專案的其他文件，`numbers_to_check` 是要人確認的數字，不等於編造） |
 | 審查一致性（同一份文件審查好幾次，比較錯誤重疊多少） | `uv run --project backend python scripts/review_consistency.py --db data/sagent.db --run-id 6 --times 3`（資料庫只讀；需求會接上當時確認大綱的回答，名詞表照當時的大綱；功能規格書一次審查約 10 分鐘；自訂範本的文件加 `--templates-dir`） |
+| SpecEval 對照組（oracle 和 trivial 代理在程式檢查上的通過率，不跑模型，約 1 分鐘） | `uv run --project backend python scripts/speceval/controls.py --out speceval-out/controls.json`。改了 `static_checks()` 或審查提示詞之後要跑：6 種 trivial 代理都不能通過，22 份 oracle 都要通過。其他 SpecEval 腳本（`run_suite.py`、`judge.py` 等）的用法寫在各檔案開頭，真模型的先問使用者 |
+| SpecEval 排程（每晚 tiny-4、週末 full-12） | `.\scripts\speceval\nightly.ps1 -Suite tiny`（有 AI 工作在跑就不跑；加 `-Fake` 幾秒鐘只檢查流程）。用 `schtasks` 註冊的指令寫在檔案開頭和 README 的「SpecEval」，不要替使用者註冊。任務卡寫 `holdout: true` 的是保留集，`run_suite.py` 要加 `--holdout` 才跑 |
+| 從使用紀錄挑新的 SpecEval 任務 | 先 `export_traces.py --db data/sagent.db --out speceval-out/traces.jsonl`（資料庫只讀），再 `uv run --project backend python scripts/speceval/mine_tasks.py --traces speceval-out/traces.jsonl`：AI 版有章節被人改了三成以上的工作產生任務卡草稿，放在 `speceval/tasks-candidates/`（不進 git，可能有客戶資料）。人挑過、去識別化後才搬進 `speceval/tasks/` |
+| SpecEval 可交付率（主要指標） | 任務卡：`uv run --project backend python scripts/speceval/build_tasks.py --out-dir speceval/tasks`（要人審過才 commit）。跑：`uv run --project backend python scripts/speceval/run_suite.py --suite tiny --out-dir speceval-out/tiny-A`（tiny-4，真模型約 2～4 小時，先問使用者；加 `--fake` 只檢查流程；`--suite full` 是 12 題 × 3 次）。比較：`uv run --project backend python scripts/analyze_runs.py --speceval speceval-out/tiny-A --speceval speceval-out/tiny-B`（配對差和 95% 信賴區間） |
 | 真模型驗證筆記的建議（D2、D4、D8、D11、D13、D14、D17 等） | `uv run --project backend python scripts/verify_real_model.py`（暫存資料夾、三節小範本，約 15 分鐘，先問使用者；加 `--fake` 幾秒鐘只檢查流程）。計畫和結果見 `docs/real-model-test-plan.md` |
 
 ## 改完程式要做的檢查
@@ -39,7 +43,7 @@
 | 後端 | `uv run pytest` 和 `uv run ruff check`，都要通過 |
 | 前端 | `npm run build`。後端提供的是 `dist`，沒有重新打包，畫面不會更新 |
 | 畫面 | 用 `.claude/launch.json` 的 `sagent-demo` 開預覽（埠 8766、假模型、資料在 `data-demo/`）實際操作確認 |
-| 提示詞、agent 流程 | pytest 用假模型，只能測流程。要看真模型的結果用 `run_pipeline.py`，但 CPU 上一份文件要 30～70 分鐘，先問使用者再跑。改之前和之後用 `analyze_runs.py` 比較，改完跑 `verify_real_model.py` 確認沒有壞掉 |
+| 提示詞、agent 流程 | pytest 用假模型，只能測流程。要看真模型的結果用 `run_pipeline.py`，但 CPU 上一份文件要 30～70 分鐘，先問使用者再跑。改之前和之後用 `analyze_runs.py` 比較，改完跑 `verify_real_model.py` 確認沒有壞掉。判斷改好或改壞看 SpecEval 的可交付率，不看錯誤數：用 SpecEval tiny-4 確認沒變壞，合併前跑 full-12（`docs/real-model-test-plan.md` 第 4 節） |
 | 圖表語法規則（`diagram_kinds.py`、`services/diagrams.py`） | 跑 `tests/test_diagrams.py`。它用前端同版本 Mermaid 產生的標準答案比對 |
 | 插入圖表的骨架（`services/diagram_snippets.py`） | 用 `mermaid-validate.mjs` 檢查改過的骨架，更新 `mermaid_cases.json` 裡對應的 `snippet_*` 案例，再跑 `tests/test_diagrams.py`（會比對案例和骨架是否一致） |
 | 升級 Mermaid | 用 `frontend/scripts/mermaid-validate.mjs` 重新產生 `backend/tests/data/mermaid_cases.json`，再跑測試 |
@@ -54,9 +58,11 @@
 | `config.py`、`cli.py` | 環境變數和命令列參數 |
 | `models.py`、`migrations.py` | 資料表、舊資料庫升級 |
 | `api/` | API 路由，保持精簡，邏輯放 `services/` |
-| `services/` | 版本控制、基準版本、匯出、差異、圖表檢查、插入圖表的骨架、PlantUML |
-| `agents/` | `planner.py`、`writer.py`、`reviewer.py`、`pipeline.py`、`runner.py`、`prompts.py`、`diagram_kinds.py`、`fake_llm.py`、`zh.py` |
+| `services/` | 版本控制、基準版本、匯出、差異、圖表檢查、插入圖表的骨架、PlantUML、審查進度和人工判斷（`reviews.py`）、詞彙表抽取（`glossary.py`）、參考文件（`references.py`）、電腦保持喚醒（`power.py`） |
+| `agents/` | `planner.py`、`writer.py`、`reviewer.py`、`pipeline.py`、`runner.py`、`prompts.py`、`diagram_kinds.py`、`fake_llm.py`、`zh.py`、`examples.py`（few-shot 範例，實驗） |
 | `doc_templates/` | 內建文件範本（YAML） |
+
+`scripts/speceval/`：SpecEval 評估工具（對照組 `controls.py`、任務卡 `build_tasks.py`、執行器 `run_suite.py`、L1 `l1.py`、L2 評審 `judge.py`、trace 匯出 `export_traces.py`、記憶稽核 `memory_audit.py`、挑任務 `mine_tasks.py`、排程 `nightly.ps1`）。輸出放 `speceval-out/`，不進 git。研究計劃的修改清單和真模型要確認的事見 `docs/real-model-test-plan.md` 第 4 節和各檔案開頭。
 
 前端 `frontend/src/`：
 
@@ -101,7 +107,7 @@
 - 不要用 LangChain 之類的框架，代理是自己實作的。
 - 文件的寫作規則有六種，由範本的 `style` 決定：`spec` 規格文件（只寫需求有的內容）、`advice` 建議類文件（可以提出需求沒寫的做法）、`idea` 構想文件（不寫細節規格，有使用者故事和粗略的驗收條件，只有「可能的做法」一節可以提建議）、`decision` 技術決策文件（限制和評估標準照需求，方案可以由 AI 提出，不能編造數字）、`algorithm` 演算法設計文件（問題的事實照需求，解法、虛擬碼由 AI 設計）、`experiment` 實驗設計文件（評估對象和判斷標準照需求，實驗方法由 AI 設計，不能寫實驗結果）。每種的寫作規則不同，見 `docs/architecture.md` 第 4.6、4.7、4.9 節。改其中一種的寫作規則時，不要動到其他種。內建範本已經沒有 `experiment`，但自訂範本還能用，程式和測試都要保留。
 - 內建範本有 9 個，`order` 1～9 就是寫 Spec 的順序：構想提案、UI/UX 設計建議（類型 Concept）、功能規格書、測試計畫、技術決策、系統架構設計、資料庫設計、演算法設計、變更需求說明。移除的 5 個（使用案例規格、SDD 五節、API 規格、實驗設計、變更紀錄）備份在 `backup/doc_templates/`，測試用 `conftest.py` 的 `BACKUP_TEMPLATES`、`install_backup_template()` 讀它們，不要刪。
-- Reviewer 只找格式、邏輯錯誤（交給 Writer 修）和需要人工覆核的地方（只列給使用者），不評論完整度、不打分數。格式問題盡量用程式檢查。各種文件共用審查提示詞 `reviewer_system()`，見 `docs/architecture.md` 第 4.8 節。
+- Reviewer 只找格式、邏輯錯誤（交給 Writer 修）和需要人工覆核的地方（只列給使用者），不評論完整度、不打分數。格式問題盡量用程式檢查；空洞和照抄由程式檢查（`static_checks()`），不要改成叫模型判斷。審查可以用另一個模型（`reviewer_model`）。各種文件共用審查提示詞 `reviewer_system()`，見 `docs/architecture.md` 第 4.8 節。
 - 新增 Spec 時先選類型（範本的 `category`：idea、feature、design、algorithm、change），類型清單在 `doc_templates.py` 的 `CATEGORIES`。新增內建範本要寫 `category` 和 `order`。同一類型裡範本照 `order` 排，第一個是新增時的預設。
 - 範本章節要編號時寫 `ids: FR`，不要把「編號 FR-01」寫在 `goal` 裡（舊寫法還認得，但內建範本不要用）。內建範本都設 `fixed_sections: true`，章節名稱、順序、目標由程式照範本套回去（Planner 不用寫 goal）；不固定的寫法留給自訂範本，測試用 `test_pipeline.py` 的 `free_input()`。見 `docs/architecture.md` 第 4.10 節。
 - 改了範本的章節，`scripts/demo_content/` 對應的內容檔也要跟著改，再跑 `check_demo_content.py`；章節固定的範本，內容檔少一節就會失敗。

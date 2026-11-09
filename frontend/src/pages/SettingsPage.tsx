@@ -15,10 +15,20 @@ const CTX_PRESETS = [0, 8192, 16384, 32768]
 const MAX_CTX = 262144
 
 /** 數字欄位用字串存，清空時才看得出來，不會悄悄變成 0 */
-type Form = Omit<Settings, 'temperature' | 'num_ctx'> & { temperature: string; num_ctx: string }
-type Errors = Partial<Record<'ollama_url' | 'temperature' | 'num_ctx', string>>
+type NumberField = 'temperature' | 'num_ctx' | 'max_run_minutes'
+/** seed 可以留空（不固定），空字串存成 null */
+type Form = Omit<Settings, NumberField | 'seed'> & Record<NumberField, string> & { seed: string }
+type Errors = Partial<Record<'ollama_url' | NumberField | 'seed', string>>
+const MAX_RUN_MINUTES = 1440
+const MAX_SEED = 2147483647
 
-const toForm = (s: Settings): Form => ({ ...s, temperature: String(s.temperature), num_ctx: String(s.num_ctx) })
+const toForm = (s: Settings): Form => ({
+  ...s,
+  temperature: String(s.temperature),
+  num_ctx: String(s.num_ctx),
+  max_run_minutes: String(s.max_run_minutes),
+  seed: s.seed == null ? '' : String(s.seed),
+})
 const normalizeUrl = (url: string) => url.trim().replace(/\/+$/, '')
 
 function validate(f: Form): Errors {
@@ -30,11 +40,25 @@ function validate(f: Form): Errors {
   const c = f.num_ctx.trim() === '' ? NaN : Number(f.num_ctx)
   if (!Number.isInteger(c)) errors.num_ctx = '請填整數'
   else if (c < 0 || c > MAX_CTX) errors.num_ctx = `要在 0～${MAX_CTX} 之間`
+  const m = f.max_run_minutes.trim() === '' ? NaN : Number(f.max_run_minutes)
+  if (!Number.isInteger(m)) errors.max_run_minutes = '請填整數'
+  else if (m < 0 || m > MAX_RUN_MINUTES) errors.max_run_minutes = `要在 0～${MAX_RUN_MINUTES} 之間`
+  if (f.seed.trim() !== '') {
+    const seed = Number(f.seed)
+    if (!Number.isInteger(seed) || seed < 0 || seed > MAX_SEED) errors.seed = `要是 0～${MAX_SEED} 的整數，或留空`
+  }
   return errors
 }
 
 function toSettings(f: Form): Settings {
-  return { ...f, ollama_url: normalizeUrl(f.ollama_url), temperature: Number(f.temperature), num_ctx: Number(f.num_ctx) }
+  return {
+    ...f,
+    ollama_url: normalizeUrl(f.ollama_url),
+    temperature: Number(f.temperature),
+    num_ctx: Number(f.num_ctx),
+    max_run_minutes: Number(f.max_run_minutes),
+    seed: f.seed.trim() === '' ? null : Number(f.seed),
+  }
 }
 
 /** 欄位名稱和一組按鈕：不能用 Field（label），點名稱會按到第一個按鈕 */
@@ -308,6 +332,21 @@ export function SettingsPage() {
               ))}
             </select>
           </Field>
+          <Field
+            label="審查模型"
+            error={form.reviewer_model && modelList && !fake && !modelList.some((m) => m.name === form.reviewer_model) ? '這個 Ollama 沒有這個模型，請換一個，或先用 ollama pull 下載' : undefined}
+            hint="Reviewer 用的模型。選「跟預設模型相同」就跟撰寫用同一個；用不同的模型審查，比較不會偏好自己寫的內容，但兩個模型都要載入，記憶體要夠。"
+          >
+            <select className="input" value={form.reviewer_model} onChange={(e) => set('reviewer_model', e.target.value)}>
+              <option value="">跟預設模型相同</option>
+              {form.reviewer_model && !modelList?.some((m) => m.name === form.reviewer_model) && <option value={form.reviewer_model}>{form.reviewer_model}</option>}
+              {modelList?.map((m) => (
+                <option key={m.name} value={m.name}>
+                  {modelLabel(m)}
+                </option>
+              ))}
+            </select>
+          </Field>
           <div className="form-row">
             <Field label="溫度（0～1.5）" error={errors.temperature} hint="越低越穩定，越高越有變化">
               <input
@@ -429,6 +468,60 @@ export function SettingsPage() {
               ))}
             </select>
           </Field>
+          <Field
+            label="整個工作的時間上限（分鐘）"
+            error={errors.max_run_minutes}
+            hint="從開始算到結束（確認大綱前等待的時間不算），超過就停止並標成失敗，不會存成新版本。0 = 不限制。CPU 上一份功能規格書約 30～70 分鐘，要設的話建議 120 以上。"
+          >
+            <input
+              className={`input${errors.max_run_minutes ? ' invalid' : ''}`}
+              type="number"
+              step={10}
+              min={0}
+              max={MAX_RUN_MINUTES}
+              value={form.max_run_minutes}
+              onChange={(e) => set('max_run_minutes', e.target.value)}
+            />
+          </Field>
+        </section>
+
+        <section className="card">
+          <div className="card-title">進階（回歸測試、研究用）</div>
+          <p className="muted small mt-0">平常不用改。用來比較改提示詞前後的結果、重現某一次 AI 工作。</p>
+          <Field
+            label="亂數種子"
+            error={errors.seed}
+            hint="只在回歸測試用，正式撰寫留空。固定之後，同一份需求、同樣設定的結果會盡量一樣（CPU 上的浮點運算仍可能有細微差異）。"
+          >
+            <input
+              className={`input${errors.seed ? ' invalid' : ''}`}
+              type="number"
+              step={1}
+              min={0}
+              max={MAX_SEED}
+              placeholder="留空 = 不固定"
+              value={form.seed}
+              onChange={(e) => set('seed', e.target.value)}
+            />
+          </Field>
+          <label className="check-row">
+            <input type="checkbox" checked={form.store_prompts} onChange={(e) => set('store_prompts', e.target.checked)} />
+            <span>
+              儲存每一步的提示詞
+              <span className="muted small check-row-hint">
+                AI 工作紀錄會存下送給模型的完整提示詞，之後可以用 scripts/speceval/export_traces.py 匯出、重放。會讓資料庫變大，內容含需求原文；不開時只存提示詞的雜湊，看得出兩次的提示詞一不一樣。
+              </span>
+            </span>
+          </label>
+          <label className="check-row">
+            <input type="checkbox" checked={form.fewshot_examples} onChange={(e) => set('fewshot_examples', e.target.checked)} />
+            <span>
+              實驗：用人改過的章節當範例
+              <span className="muted small check-row-hint">
+                Writer 寫每一節時，附上資料資料夾 examples/文件類型/章節名稱.md 裡的範例（人挑過、改過的同一節），只學格式和寫法。還在實驗，效果要用 SpecEval 比較過才改成預設。沒有範例檔的章節照原本的寫法。
+              </span>
+            </span>
+          </label>
         </section>
 
         <section className="card">

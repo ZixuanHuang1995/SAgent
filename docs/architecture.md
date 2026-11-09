@@ -45,12 +45,12 @@ erDiagram
 
 | 資料表 | 說明 |
 |---|---|
-| projects | 專案，含專案詞彙表 `glossary`（`[{name, kind, note}]`，最多 40 個）。可以從 Spec 抽出名詞加進來（`services/glossary.py`）：程式抽名詞定義表、角色表、狀態表、實體表（英文代號改用說明開頭的中文名稱）、Mermaid 狀態圖，以及內文「狀態為「已提交」」這類寫法，不呼叫模型。跟詞彙表比對後分成新的名詞（預設勾選）和說法不一樣的（預設不勾，文件沒寫明種類時保留詞彙表原本的種類），使用者勾選後才更新。從文件自動寫進詞彙表會讓一份寫錯的文件影響之後所有的文件，所以一定要人確認。詞彙表用文字框編輯，所以不另外記每個名詞的來源 |
+| projects | 專案，含專案詞彙表 `glossary`（`[{name, kind, note}]`，最多 40 個）。可以從 Spec 抽出名詞加進來（`services/glossary.py`）：程式抽名詞定義表、角色表、狀態表、實體表（英文代號改用說明開頭的中文名稱）、Mermaid 狀態圖，以及內文「狀態為「已提交」」這類寫法；研究計劃 C-12 再加上任何表格裡標題是「狀態」「目前狀態」「新狀態」的欄位、「狀態依序為：A、B、C」和「依「A、B、C」的順序管理狀態」的列舉，以及提到「狀態」的行裡的轉換「A → B」「從 A 改為 B」（狀態名稱限 2～6 個中文字），不呼叫模型。跟詞彙表比對後分成新的名詞（預設勾選）和說法不一樣的（預設不勾，文件沒寫明種類時保留詞彙表原本的種類），使用者勾選後才更新。從文件自動寫進詞彙表會讓一份寫錯的文件影響之後所有的文件，所以一定要人確認。詞彙表用文字框編輯，所以不另外記每個名詞的來源 |
 | phases | 功能階段，名稱自訂（例如「需求萃取」「第二期」），可排序 |
 | specs | Spec 文件，記錄目前最新版本號 `head_version_no`、狀態、是否封存，以及從哪一份 Spec 轉過來的 `source_spec_id`（例如構想 → 功能規格） |
 | spec_versions | 每個版本的完整內容，以及跟前一版比較新增、刪除幾行。建立後不再修改，只有「標籤」可以改 |
 | baselines / baseline_items | 基準版本：某個時間點每份 Spec 用的是哪一版 |
-| agent_runs | AI 工作：需求、選項、大綱、審查結果、用量、結果版本；`review_checked` 記使用者標成已處理的審查項目，`review_labels` 記怎麼處理的（`fixed` 已處理、`false` 誤報、`skip` 略過）；`checkpoint` 是執行中的檢查點（見 4.5 節），工作結束就清掉。選項裡的 `prompt_version` 記這次用的提示詞、範本、程式版本 |
+| agent_runs | AI 工作：需求、選項、大綱、審查結果、用量、結果版本；`review_checked` 記使用者標成已處理的審查項目，`review_labels` 記怎麼處理的（`fixed` 已處理、`false` 誤報、`skip` 略過）；`checkpoint` 是執行中的檢查點（見 4.5 節），工作結束就清掉（超過時間上限時保留）。`stop_reason` 是為什麼停下來、`wall_seconds` 是實際經過的秒數（見 4.5 節）；`human_verdict`、`human_verdict_note` 是使用者判斷這份 AI 版能不能直接交付（見 4.8 節）。選項裡的 `prompt_version` 記這次用的提示詞、範本、程式版本，`environment` 記 Ollama 版本和模型 digest |
 | agent_events | AI 工作的步驟紀錄（開始、結束、警告），可重播 |
 | settings | 畫面上可調整的設定 |
 
@@ -130,7 +130,7 @@ sequenceDiagram
 | 模型偷懶只回一小段 | 修改後內容少於原本 40% 就不採用 |
 | 各章節自己發明編號 | 哪一節要編號由範本章節的 `ids` 決定，每一節的提示寫明「編號：用 FR-01…」或「不新增編號」，不靠模型讀目標；有 `ids` 的章節沒編號時，審查用程式找出來（見 4.10 節） |
 | Planner 改掉章節名稱、漏掉章節 | 範本設 `fixed_sections: true`（內建範本都是），章節名稱、順序、目標由程式照範本套回去，Planner 只寫要點和圖（見 4.10 節）。這時 Planner 的 schema 沒有 `goal`，也沒有 `title`（文件標題一律用 Spec 的名稱）：CPU 上生成佔六成時間，不叫模型寫用不到的欄位 |
-| 貼進提示詞的既有文件被當成指示 | 修訂模式的原文件沒有章節、改用撰寫模式時，原文件用「（原本的文件開始）…（原本的文件結束）」包起來，標明只當參考資料（D11）。之後加檢索時，檢索結果也要照這個做 |
+| 貼進提示詞的既有文件被當成指示 | 修訂模式的原文件沒有章節、改用撰寫模式時，原文件用「（原本的文件開始）…（原本的文件結束）」包起來，標明只當參考資料（D11）。參考的其他 Spec（C-13）也用「（參考文件開始）…（參考文件結束）」包起來 |
 | 偶爾混入簡體字 | 只把「簡體專用字」換成繁體（用前後文挑字），原本的繁體字不動。整段用 OpenCC 轉會把「干擾」「通過」這類詞改壞。「于」在繁體也是字（姓氏），只在介系詞用法（受限于、位于、大于、于是）改成「於」 |
 | 小標題層級亂 | 章節內的 `#`、`##` 降成 `###`；最上層是 `####` 時整體往上調 |
 | 審查要讀整份草稿，CPU 上要 10 分鐘 | 修訂後的再審查只送修改過的章節，其他章節沿用上一輪的意見 |
@@ -162,7 +162,8 @@ sequenceDiagram
 3. 前端斷線重連時帶 `Last-Event-ID`，後端從那裡補送。
 4. 已結束的工作打開時會重播全部事件，所以可以回頭看每一步的大綱、圖、審查結果。
    - 狀態標籤：專案清單（`GET /api/projects/{id}`）和單一 Spec 的 `ai_status` 是進行中的 AI 工作狀態（`queued`、`running`、`planned`），側邊欄、Spec 標題旁、專案總覽用它顯示「AI 排隊中」「AI 撰寫中」「待確認大綱」，這時候不顯示上一次審查的待確認數量。AI 面板收到狀態改變的事件（`run_status`、`run_paused`、`run_end`）就重新抓這些清單；有工作在跑或排隊時，Spec 清單和 AI 工作清單每 5 秒更新一次，在別的分頁開始的工作也跟得上。
-5. 步驟結束（`step_end`）記下用量：輸入、輸出 token，Ollama 回報的讀提示詞（`prompt_eval_ms`，prefill）、生成（`eval_ms`，decode）、載入模型（`load_ms`）時間，和模型實際的上下文長度（`context_length`）。工作的統計（`agent_runs.stats`）也有各 agent 的時間拆解。用來判斷時間花在 prefill 還是 decode、快取有沒有命中、模型有沒有被重新載入。
+5. 步驟結束（`step_end`）記下用量：輸入、輸出 token，Ollama 回報的讀提示詞（`prompt_eval_ms`，prefill）、生成（`eval_ms`，decode）、載入模型（`load_ms`）時間，和模型實際的上下文長度（`context_length`）。工作的統計（`agent_runs.stats`）也有各 agent 的時間拆解。用來判斷時間花在 prefill 還是 decode、快取有沒有命中、模型有沒有被重新載入。另外一律記這一步最後一次呼叫的提示詞雜湊（`prompt_hash`，messages 的 SHA-256），看得出兩次工作同一步的提示詞一不一樣；設定開了「儲存提示詞」（`store_prompts`，研究計劃 C-09）時再記 `messages` 全文，`scripts/speceval/export_traces.py` 會匯出成 `prompts`，可以直接重送給 Ollama 重放一步。全文會讓資料庫變大，內容含需求原文，所以預設不存。
+6. 設定的「亂數種子」（`seed`，研究計劃 C-08）有值時，建立工作時記進選項，`OllamaClient` 每次呼叫都放進 `options.seed`。只在回歸測試用，正式撰寫留空；CPU 上的浮點運算仍可能讓同 seed 的結果有細微差異，要用真模型確認。
 
 ### 4.5 執行規則
 
@@ -177,6 +178,13 @@ sequenceDiagram
   - 伺服器正常關閉時，執行中的工作維持 `running`（原本會被當成使用者取消），下次啟動續跑。
 - AI 工作執行期間讓電腦保持喚醒（`services/power.py`）：Windows 的 power request（`PowerCreateRequest`），同時要求系統保持執行和螢幕保持亮著，工作結束（完成、失敗、取消、停在確認大綱、伺服器關閉）就放開。這台筆電是新式待命（S0 低電源閒置），螢幕因為閒置關掉時就進入待命、程式整個暫停，只要求系統保持執行擋不住；2026-11-04 晚上的可靠度評估有兩份因此從 16 分鐘拖到 280 分鐘以上。闔上螢幕、按電源鍵還是會待命。要求附上原因「SAgent：AI 工作執行中」，系統管理員用 `powercfg /requests` 看得到。不是 Windows 或呼叫失敗時什麼都不做，不影響 AI 工作；`SAGENT_KEEP_AWAKE=0` 關掉。`eval_reliability.py`、`run_pipeline.py`、`review_consistency.py` 直接呼叫 AI 流程，也一樣保持喚醒。
 - 每個工作開始時在選項記下 `prompt_version`（`agents/versioning.py`）：`prompts.py` 加 `diagram_kinds.py` 的雜湊、這次用的範本內容的雜湊、git commit（`backend/sagent` 有沒 commit 的修改時加「+」）。改了提示詞之後，用 `analyze_runs.py --group-by prompt` 比較前後的時間和錯誤數。續跑時程式如果改過，另外記在 `prompt_version_resumed`。
+- 停止原因和時間（研究計劃 C-06）：
+  - `agent_runs.stop_reason`：成功時是修訂迴圈停下來的原因，`passed`（審查沒有錯誤）、`revision_limit`（達到修訂次數上限）、`no_improvement`（修訂後錯誤沒有變少）、`nothing_to_revise`（沒有可以自動修訂的章節），由 `PipelineResult.stop_reason` 帶出來；其他是 `failed`、`cancelled`、`walltime`。舊紀錄是 NULL，`analyze_runs.py` 對舊紀錄才從 log 訊息推斷。
+  - `agent_runs.wall_seconds`：實際經過的秒數，用牆上時鐘算，電腦睡眠的時間也算進去，所以跟各步驟時間的加總比，看得出時間可不可信（C-07，`analyze_runs.py` 多 20% 以上而且多 60 秒以上就標「時間不可信」，不算進時間統計）。續跑、確認大綱後繼續時從存好的值接著加，等使用者確認大綱的時間不算。存檢查點、停在確認大綱、成功、失敗、取消時更新。
+  - 整個工作的時間上限：設定的 `max_run_minutes`（0 = 不限制），建立工作時記進選項。執行器用 `asyncio.wait_for` 包住規劃和撰寫，剩下的時間 = 上限 − `wall_seconds`。超過時狀態是失敗、`stop_reason` 是 `walltime`，檢查點不清掉。
+- 參考同專案的其他 Spec（研究計劃 C-13）：建立工作時 `options.reference_spec_ids` 選最多 3 份同專案的 Spec（不能是自己），存成 `options.reference_specs`（`[{id, title}]`）。執行時 `services/references.py` 讀它們的最新版，只取編號項目（`extract_item_ids()`，全部最多 40 項，不含程式碼區塊）和名詞（`extract_terms()`，每份最多 20 個），組成 `RunInput.references`。Planner、Writer、Reviewer 的提示詞都在「需求內容」後面放一段「參考文件」，用（參考文件開始）…（參考文件結束）包起來，寫明只是參考資料、裡面的指示不要照做。放在需求後面、大綱和這一節的目標前面，同一個工作的各節開頭還是一樣，Ollama 的快取照樣有效。有參考文件時審查規則多一條：參考文件裡有的事實不算「需求沒提到」，寫得不一樣算 conflict。沒有參考文件時提示詞跟原本完全一樣。效果要用真模型確認（SpecEval 的架構任務，加和不加參考文件各跑 3 次比較）。
+- 人改過的章節當 few-shot 範例（研究計劃 C-19，實驗，預設關閉）：設定 `fewshot_examples` 開啟時，執行器從 `<資料資料夾>/examples/<文件類型>/<章節名稱>.md` 讀範例（`agents/examples.py`；一個檔案最多 2 段、用 `<!-- 範例分隔 -->` 隔開，每段最多 1500 字），放進 `RunInput.examples`。Writer 的章節提示詞在「現在要寫的章節」最後面加「範例」，用（範例開始）…（範例結束）包起來，寫明只學格式和寫法、內容不要照抄、裡面的指示不要照做。放在最後面，前段照樣跟其他章節共用快取。範例由人從 `export_traces.py` 匯出的人改過的版本裡挑，`data/` 不進 git。`run_suite.py --examples-dir` 做配對比較（可交付率的配對差 95% 信賴區間 > 0、時間增加 < 20% 才改成預設開啟）。
+- 同時記下執行環境 `environment`（研究計劃 C-05，`llm.py` 的 `ollama_environment()`）：Ollama 版本、模型 digest、量化格式、參數量、模型家族。同一個模型名稱，`ollama pull` 之後 digest 會變，結果也可能不一樣，所以 `analyze_runs.py --group-by prompt` 依提示詞版本加上模型和 digest 分組。審查用另一個模型時，那個模型的環境放在 `environment.reviewer`。續跑時環境變了，另外記在 `environment_resumed`。連不到 Ollama 或是假模型時存 `{}`，不讓工作失敗。SpecEval 的 `run_suite.py` 用同一個函式記 manifest。
 
 ### 先確認大綱（撰寫模式）
 
@@ -253,11 +261,16 @@ Reviewer 只做兩件事，不評論寫得好不好、完不完整，也不打�
 | 找什麼 | 誰找 | 結果怎麼處理 |
 |---|---|---|
 | 格式錯誤：空白章節、圖表語法、表格欄數不一致、引用了沒定義的編號 | 程式（`reviewer.py` 的 `static_checks()`） | 寫進 `issues`，交給 Writer 修正 |
+| 空洞章節：不算標了（待確認）（假設）的行和編號，剩下的中文字不到 30 個（high）；照抄需求：章節八成以上跟需求原文連續 12 個字一樣（medium）。只在撰寫模式檢查，空洞只在需求至少 3 句時檢查 | 程式（`static_checks()`，`textutil.py` 的 `substantive_chars()`、`copied_ratio()`） | 寫進 `issues`，交給 Writer 修正 |
 | 邏輯錯誤：前後矛盾、跟需求矛盾、條件衝突、流程或狀態有缺口 | 模型 | 寫進 `issues`，交給 Writer 修正 |
 | 文件標註（假設）、（待確認）的地方 | 程式（`marked_points()`） | 寫進 `review_points`，只列給使用者 |
 | 需求沒提到、文件卻寫得很具體的內容；要業務單位決定的事 | 模型 | 寫進 `review_points`，只列給使用者 |
 
 - 格式問題盡量用程式檢查，因為小模型數表格欄位、對編號都不可靠。
+- 空洞和照抄的檢查（研究計劃 C-01）：2026-11-05 用 `scripts/speceval/controls.py` 的對照組實驗發現，「每一節只寫一句待確認加三個假編號」和「需求原文每句前面加 FR-01」兩種假文件，22 份示範任務全部通過原本的程式檢查，而模型審查的規則是不評論完整度，也擋不住。加了這兩個檢查之後，6 種假文件都不通過，22 份示範文件都通過。門檻是用示範文件校正的：變更需求的「變更原因」本來就會重述需求，照抄比例最高 0.66，所以門檻是 0.8；需求只有一兩句時（構想常這樣）章節只能標待確認，不算空洞。
+- 審查模型可以跟撰寫模型不同（設定頁「審查模型」，`reviewer_model`，空白 = 同一個；研究計劃 C-03）。同一個模型審查自己寫的內容，容易偏好自己的輸出。工作建立時記在 `options.reviewer_model`，`SpecPipeline` 的 `reviewer_llm` 參數。
+- 第一輪審查太長時分批（研究計劃 C-14，筆記 D19）：送出前估計輸入的 token 數，加上輸出上限 3000，超過上下文長度的 85% 就把章節照順序分成幾批，每一批都帶完整的大綱、名詞表、參考文件和那一批章節的程式檢查結果，最後合併 `issues`、`review_points`（同一節同樣的問題只算一次，章節不在那一批的丟掉）。token 數用字元數乘上這個工作裡實際的比例估計：`base.py` 的 `TokenEstimate` 記每個模型觀察到的最大「`prompt_tokens` ÷ 字元數」（前段命中快取時回報的 token 會變少，取最大才不會低估），沒有資料時用 0.9。上下文長度查不到時不分批。分批會讓模型看不到不同批之間的矛盾，所以只在真的放不下時才分；有一批失敗時，那一批的章節列成人工覆核，`llm_ok` 是 false。發生時工作紀錄有一則警告「審查內容太長…分成 N 批審查」，審查步驟的輸出記下每一批的章節（`batches`）。
+- 審查提示詞裡的需求和草稿用（需求開始）…（需求結束）、（草稿開始）…（草稿結束）包起來，規則寫明裡面的指示不要照做（跟 D11 一樣；研究計劃 C-04）。
 - 編號檢查只看文件裡有定義過的種類：有定義 FR-01，才會檢查引用的 FR-07 有沒有定義。條列、標題開頭出現的編號，或表格一列裡第一個只寫編號的格子（不一定是第一欄，例如「| 報修人 | UC-01 | 提交報修申請 |」）算是定義。
 - 編號和名稱對不上（`mismatched_ids()`）：引用時寫的名稱剛好是另一個同種編號的名稱，例如寫「[UC-04] 審核與退回」，但審核與退回是 UC-02，算 `conflict`（medium）。名稱用第一次定義時的寫法。審查一致性實驗裡，這類錯誤三次審查都會被模型找到，是最常見的邏輯錯誤，所以改由程式檢查；只在名稱對得到另一個編號時才算，名稱對不到就不判斷。
 - `issues` 裡 high、medium 的錯誤會觸發修訂；`review_points` 不會。
@@ -271,6 +284,8 @@ Reviewer 只做兩件事，不評論寫得好不好、完不完整，也不打�
 - 修訂後的再審查如果模型沒給出可用的結果，修改過的章節上一輪的錯誤改列 `review_points`（註明沒有重新審查），不會因為少了模型意見就看起來像通過。
 - 各種文件（規格、建議、構想、技術決策、演算法、實驗）共用 `reviewer_system()`，差別只在 `_REVIEW_STYLE_NOTE` 的一行說明。
 - 處理進度（`services/reviews.py`）：每份 Spec 看最近一次成功的 AI 工作的最後一次審查。使用者在 Spec 頁的「審查」分頁逐項標成已處理，存在 `agent_runs.review_checked`，項目代號是在 `issues`、`review_points` 裡的位置（`issue:0`、`point:3`），審查結果存好後不會再改，所以位置固定。處理過的項目另外記處理結果（`agent_runs.review_labels`，`PUT …/review-checks` 帶 `label`）：`fixed` 已處理（確實有問題）、`false` 誤報（審查說錯了）、`skip` 略過；三種都算處理過，待處理數量的算法不變。沒有 `label` 的請求和舊資料都當成 `fixed`。`scripts/analyze_runs.py` 用這些標記算 Reviewer 的準確度（已處理 ÷（已處理＋誤報），依程式檢查、模型和錯誤類型分開），這是之後改提示詞、優化時唯一不靠模型的標註。專案清單（`GET /api/projects/{id}`）和單一 Spec 的 `review` 欄位帶項目總數和沒處理的數量，畫面上的「待處理 N」用這個（不叫「待確認」，免得跟文件裡標「待確認」的地方搞混）。
+- 人工覆核項目的分組（研究計劃 C-11）：`GET /api/agent/runs/{id}` 回傳時，最後一次審查的每個 `review_points` 項目加上 `group`（`services/reviews.py` 的 `with_groups()`，不改資料庫裡存的內容，位置也不變）：`trace` 需求追溯（`requirement_gaps()` 產生的，看 `reason`）、`model` 審查模型列的（`source` 是 `llm`）、`marked` 文件自己標的。畫面照這個順序排，文件自己標的預設摺疊，每一組可以全部標成已處理（前端一個一個送，避免同時寫同一列互相蓋掉）。`analyze_runs.py` 的審查準確度也把需求追溯分開算。
+- 文件層級的人工判斷（研究計劃 C-10）：`agent_runs.human_verdict`（`yes` 可以直接交付、`partial` 要小改、`no` 不行，NULL 還沒判斷）和 `human_verdict_note`（一句理由）。`PUT /api/agent/runs/{id}/verdict` 設定，只有成功的工作可以標（其他回 409），`verdict` 送 null 是清掉。畫面在「審查」分頁最上面和 AI 工作詳細內容。`scripts/speceval/export_traces.py` 匯出這兩欄；`judge.py --calibrate --from-db` 拿它們跟 L2 評審比對：評審逐節判斷，全部章節可交付才算 yes，人工的「要小改」算不能直接交付，算一致率和 Cohen's κ。
 
 ### 4.9 技術決策、演算法設計和實驗設計文件
 
@@ -370,6 +385,7 @@ Reviewer 只做兩件事，不評論寫得好不好、完不完整，也不打�
 | GET | `/api/agent/runs/{id}/events` | 即時進度（SSE） |
 | POST | `/api/agent/runs/{id}/continue` | 先確認大綱的工作：送出回答、名詞表、要點後繼續撰寫 |
 | PUT | `/api/agent/runs/{id}/review-checks` | 把審查的一個項目標成已處理或取消（`{key, done, label}`，`label` 是 `fixed`、`false`、`skip`） |
+| PUT | `/api/agent/runs/{id}/verdict` | 這份 AI 版可以直接交付嗎（`{verdict, note}`，`verdict` 是 `yes`、`partial`、`no` 或 null） |
 | POST | `/api/agent/runs/{id}/cancel` | 取消（排隊中、執行中、等待確認大綱） |
 | GET/PUT | `/api/settings` | 設定。Ollama 網址要是 http:// 或 https:// 開頭 |
 | POST | `/api/ollama/check` | 設定頁的「測試連線」：用還沒存檔的網址查 Ollama 版本和模型清單，不改設定 |

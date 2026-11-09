@@ -227,6 +227,8 @@ export interface RunOptions {
   max_diagrams?: number | null
   /** 規劃完先停下來確認大綱和待確認問題（只用在撰寫模式） */
   plan_first?: boolean
+  /** 撰寫時參考同專案的其他 Spec，最多 3 份 */
+  reference_spec_ids?: number[]
 }
 
 export interface Run {
@@ -246,6 +248,12 @@ export interface Run {
   started_at: string | null
   finished_at: string | null
   stats: Record<string, AgentStat> | null
+  // 為什麼停下來、實際經過的秒數（含電腦睡眠）。舊的工作是 null
+  stop_reason: string | null
+  wall_seconds: number | null
+  // 使用者判斷這份 AI 版可不可以直接交付；null 還沒判斷
+  human_verdict: Verdict | null
+  human_verdict_note: string
   spec_title: string
   queue_position: number | null
 }
@@ -309,7 +317,14 @@ export interface ReviewPoint {
   item: string
   reason: string
   source: 'check' | 'llm'
+  // 分組（後端加的，只有最後一次審查有）：trace 需求追溯、model 審查模型列的、marked 文件自己標的
+  group?: ReviewPointGroup
 }
+
+export type ReviewPointGroup = 'trace' | 'model' | 'marked'
+
+/** 這份 AI 版可以直接交付嗎：可以、要小改、不行 */
+export type Verdict = 'yes' | 'partial' | 'no'
 
 /** 審查結果。issues 是格式、邏輯錯誤，會交給 Writer 修正 */
 export interface ReviewOut {
@@ -349,12 +364,22 @@ export interface RunDetail extends Run {
 export interface Settings {
   ollama_url: string
   default_model: string
+  // 審查用的模型；空字串 = 跟撰寫用同一個
+  reviewer_model: string
   temperature: number
   max_revisions: number
   uml_syntax: UmlSyntax
   diagrams: boolean
   num_ctx: number
   plantuml_server: string
+  // 整個 AI 工作的時間上限（分鐘），0 = 不限制
+  max_run_minutes: number
+  // 固定的亂數種子，回歸測試用；null = 不固定
+  seed: number | null
+  // 每一步的提示詞全文存進工作紀錄
+  store_prompts: boolean
+  // 實驗：Writer 用人改過的同一節當範例（資料資料夾的 examples/）
+  fewshot_examples: boolean
 }
 
 export interface Health {
@@ -517,6 +542,8 @@ export const api = {
       done,
       label,
     }),
+  setVerdict: (id: number, verdict: Verdict | null, note: string) =>
+    request<Run>('PUT', `/api/agent/runs/${id}/verdict`, { verdict, note }),
   runEventsUrl: (id: number) => `/api/agent/runs/${id}/events`,
 
   // 系統

@@ -6,11 +6,14 @@ import { Link } from 'react-router'
 import { api, type RunMode, type SpecDetail } from '../api'
 import { formatDuration, relativeTime, requirementHelp, RUN_STATUS, RUN_TIME_TEXT, runDuration } from '../format'
 import { useRunStream } from '../hooks/useRunStream'
-import { keys, useHealth, useRuns, useSettings, useTemplates } from '../queries'
+import { keys, useHealth, useProjectTree, useRuns, useSettings, useTemplates } from '../queries'
 import { Icon } from './icons'
 import { RunProgress } from './RunProgress'
 import { RunDetailModal } from './RunDetail'
-import { Badge, errorText, Field, Spinner, useToast } from './ui'
+import { Badge, errorText, Field, Popover, Spinner, useToast } from './ui'
+
+/** 撰寫時最多參考幾份同專案的 Spec（後端也是 3） */
+const MAX_REFERENCES = 3
 
 const DRAFT_KEY = (specId: number) => `sagent:requirement:${specId}`
 
@@ -186,8 +189,13 @@ function RunForm({ spec }: { spec: SpecDetail }) {
   const [planFirst, setPlanFirst] = useState(true)
   const [busy, setBusy] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
+  // 參考同專案的其他 Spec（C-13）：只列有內容、沒封存的
+  const tree = useProjectTree(spec.project_id)
+  const [refIds, setRefIds] = useState<number[]>([])
+  const candidates = (tree.data?.specs ?? []).filter((s) => s.id !== spec.id && !s.archived && s.head_version_no > 0)
 
   useEffect(() => saveDraft(spec.id, requirement), [spec.id, requirement])
+  useEffect(() => setRefIds([]), [spec.id])
 
   const ollamaDown = health.data?.llm_provider === 'ollama' && health.data && !health.data.ollama.reachable
   // 文件類型建立後不能改，AI 一律照這份 Spec 的範本寫
@@ -202,7 +210,10 @@ function RunForm({ spec }: { spec: SpecDetail }) {
     setBusy(true)
     try {
       // 模型、圖表、修訂輪數不在這裡選，後端照「設定」頁的值
-      const options = { plan_first: mode === 'draft' && planFirst }
+      const options = {
+        plan_first: mode === 'draft' && planFirst,
+        reference_spec_ids: refIds.filter((id) => candidates.some((c) => c.id === id)),
+      }
       await api.createRun({ spec_id: spec.id, mode, requirement, doc_type: spec.doc_type, options })
       toast('已開始 AI 工作', 'success')
       qc.invalidateQueries({ queryKey: keys.spec(spec.id) })
@@ -301,6 +312,49 @@ function RunForm({ spec }: { spec: SpecDetail }) {
             <span className="muted small check-row-hint">Planner 規劃完（約 3～5 分鐘）先停下來，讓你回答待確認問題、調整名詞表和要點。</span>
           </span>
         </label>
+      )}
+
+      {candidates.length > 0 && (
+        <div className="ref-picker mb-sm">
+          <Popover
+            trigger={
+              <>
+                參考其他 Spec{refIds.length > 0 ? `（${refIds.length}）` : ''} <Icon name="chevron-down" size={14} />
+              </>
+            }
+            label="參考同專案的其他 Spec"
+            title="AI 撰寫時參考同專案已經寫好的文件（編號項目和名詞），最多 3 份"
+            triggerClassName="btn btn-sm"
+            className="ref-popover"
+          >
+            <div className="muted small">AI 會參考這些文件最新版的編號項目和名詞，沿用裡面的名稱。最多 {MAX_REFERENCES} 份。</div>
+            {candidates.map((c) => {
+              const on = refIds.includes(c.id)
+              return (
+                <label key={c.id} className="check-row">
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    disabled={!on && refIds.length >= MAX_REFERENCES}
+                    onChange={(e) => setRefIds(e.target.checked ? [...refIds, c.id] : refIds.filter((x) => x !== c.id))}
+                  />
+                  <span>
+                    {c.title}
+                    <span className="muted small"> {templates.data?.find((t) => t.key === c.doc_type)?.name ?? c.doc_type}</span>
+                  </span>
+                </label>
+              )
+            })}
+          </Popover>
+          {refIds.length > 0 && (
+            <span className="muted small">
+              {refIds
+                .map((id) => candidates.find((c) => c.id === id)?.title)
+                .filter(Boolean)
+                .join('、')}
+            </span>
+          )}
+        </div>
       )}
 
       {/* 這次會用的設定：AI 面板不另外選，免得開始之後才發現修訂輪數、畫圖跟想的不一樣 */}
