@@ -402,7 +402,8 @@ def restore_version(s: Session, spec: Spec, version_no: int, message: str = "") 
     return add_version(s, spec, old.content, message=message or f"還原到第 {version_no} 版", source="restore")
 
 
-def set_label(s: Session, spec: Spec, version_no: int, label: str | None) -> SpecVersion:
+def set_label(s: Session, spec: Spec, version_no: int, label: str | None, move: bool = False) -> SpecVersion:
+    """同一份 Spec 的標籤不能重複。move 為 True 時，把別的版本上的同名標籤移到這一版。"""
     version = get_version(s, spec, version_no)
     label = (label or "").strip() or None
     if label:
@@ -411,11 +412,27 @@ def set_label(s: Session, spec: Spec, version_no: int, label: str | None) -> Spe
                 SpecVersion.spec_id == spec.id, SpecVersion.label == label, SpecVersion.id != version.id
             )
         )
-        if dup:
+        if dup and not move:
             raise Conflict(f"標籤「{label}」已經用在第 {dup.version_no} 版")
+        if dup:
+            dup.label = None
+            s.flush()
     version.label = label
     s.flush()
     return version
+
+
+def project_labels(s: Session, project: Project) -> list[tuple[str, int]]:
+    """專案裡用過的版本標籤和用了幾次，次數多的在前，同次數照名稱排"""
+    count = func.count(SpecVersion.id)
+    rows = s.execute(
+        select(SpecVersion.label, count)
+        .join(Spec, Spec.id == SpecVersion.spec_id)
+        .where(Spec.project_id == project.id, SpecVersion.label.is_not(None))
+        .group_by(SpecVersion.label)
+        .order_by(count.desc(), SpecVersion.label)
+    ).all()
+    return [(label, n) for label, n in rows]
 
 
 # ---------------------------------------------------------------------------

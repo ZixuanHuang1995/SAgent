@@ -20,6 +20,7 @@ from ..schemas import (
     PhaseSummary,
     PhaseUpdate,
     ProjectCreate,
+    ProjectLabel,
     ProjectOut,
     ProjectTree,
     ProjectUpdate,
@@ -210,8 +211,19 @@ def list_baselines(project_id: int, state: AppState = Depends(get_state)):
 def create_baseline(project_id: int, body: BaselineCreate, state: AppState = Depends(get_state)):
     with state.db() as s:
         project = spec_service.get_project(s, project_id)
-        baseline = baseline_service.create_baseline(s, project, body.name, body.note, body.phase_id)
-        return baseline_out(s, baseline)
+        baseline, labeled = baseline_service.create_baseline(
+            s, project, body.name, body.note, body.phase_id, apply_label=body.apply_label
+        )
+        out = baseline_out(s, baseline)
+        return out.model_copy(update={"labeled_count": labeled}) if body.apply_label else out
+
+
+@router.get("/projects/{project_id}/labels", response_model=list[ProjectLabel])
+def list_labels(project_id: int, state: AppState = Depends(get_state)):
+    """專案裡用過的版本標籤（含封存的 Spec），用得多的排前面"""
+    with state.db() as s:
+        project = spec_service.get_project(s, project_id)
+        return [ProjectLabel(label=label, count=count) for label, count in spec_service.project_labels(s, project)]
 
 
 @router.get("/baselines/{baseline_id}")

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import type { PlanOut, RunContinue } from '../api'
 import { TERMS_FORMAT, termsToText, textToTerms } from '../format'
-import { Field, Spinner } from './ui'
+import { ArrowLabel, Field, Spinner } from './ui'
 
 export function PlanConfirm(props: { plan: PlanOut; onContinue: (body: RunContinue) => Promise<void>; onCancel: () => void }) {
   const { plan } = props
@@ -72,7 +72,7 @@ export function PlanConfirm(props: { plan: PlanOut; onContinue: (body: RunContin
 
       <div className="row gap-sm">
         <button className="btn btn-primary" onClick={submit} disabled={busy}>
-          {busy ? <Spinner small /> : answeredCount ? `繼續撰寫（已回答 ${answeredCount} 題）` : '繼續撰寫'}
+          {busy ? <Spinner small /> : <ArrowLabel>{answeredCount ? `繼續撰寫（已回答 ${answeredCount} 題）` : '繼續撰寫'}</ArrowLabel>}
         </button>
         <button className="btn btn-danger-outline" onClick={props.onCancel} disabled={busy}>
           取消工作

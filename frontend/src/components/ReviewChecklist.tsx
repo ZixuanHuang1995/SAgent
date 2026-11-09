@@ -147,23 +147,26 @@ export function ReviewChecklist(props: {
                 onChange={(e) => toggle(i.key, e.target.checked)}
                 aria-label={`${isDone ? '取消已處理' : '標成已處理'}：${i.text}`}
               />
+              {/* 先讀問題本身，章節、來源放在下面一行 */}
               <div className="check-item">
+                <div className="check-item-text">{i.text}</div>
+                {i.note && <div className="muted small check-item-note">{i.note}</div>}
                 <div className="check-item-meta">
                   {label && label !== 'fixed' && <Badge title={LABELS[label].hint}>{LABELS[label].text}</Badge>}
                   {i.severity && <Badge tone={SEVERITY[i.severity].tone}>{SEVERITY[i.severity].text}</Badge>}
-                  {heading ? (
-                    <button className="link-btn small" title="跳到文件裡的這一節" onClick={() => props.onJump(heading)}>
-                      {heading}
-                    </button>
-                  ) : (
-                    <span className="muted small">整份文件</span>
-                  )}
+                  <span className="meta-item">
+                    {heading ? (
+                      <button className="link-btn link-quiet" title="跳到文件裡的這一節" onClick={() => props.onJump(heading)}>
+                        {heading}
+                      </button>
+                    ) : (
+                      '整份文件'
+                    )}
+                  </span>
                   {i.severity
-                    ? i.source === 'check' && <span className="muted small">・程式檢查</span>
-                    : <span className="muted small">・{GROUPS.find((g) => g.key === i.group)?.source}</span>}
+                    ? i.source === 'check' && <span className="meta-item">程式檢查</span>
+                    : <span className="meta-item">{GROUPS.find((g) => g.key === i.group)?.source}</span>}
                 </div>
-                <div className="check-item-text">{i.text}</div>
-                {i.note && <div className="muted small">{i.note}</div>}
               </div>
               {!spec.archived && (
                 <Menu
@@ -190,21 +193,21 @@ export function ReviewChecklist(props: {
     )
   }
 
+  const openIssues = issues.filter((i) => !checked.has(i.key)).length
+  const openPoints = points.filter((i) => !checked.has(i.key)).length
+  const count = (n: number) => (
+    <span className={`count ${n > 0 ? 'is-open' : ''}`} title={n > 0 ? `還有 ${n} 項沒處理` : '都處理了'}>
+      {n > 0 ? `${n} 項未處理` : '都處理了'}
+    </span>
+  )
+
   return (
     <div className="review-checklist">
-      <RunVerdict run={run.data} disabled={spec.archived} />
-      <div className="review-progress">
+      <section className="card review-summary">
         <div className="review-progress-text">
-          <strong>
+          <strong className="review-progress-count">
             已處理 {done} / {total}
           </strong>
-          {(marked('false') > 0 || marked('skip') > 0) && (
-            <span className="muted small">
-              {[marked('false') > 0 && `誤報 ${marked('false')}`, marked('skip') > 0 && `略過 ${marked('skip')}`]
-                .filter(Boolean)
-                .join('、')}
-            </span>
-          )}
           <label className="check-row small muted">
             <input type="checkbox" checked={hideDone === '1'} onChange={(e) => setHideDone(e.target.checked ? '1' : '0')} />
             隱藏已處理
@@ -213,59 +216,78 @@ export function ReviewChecklist(props: {
         <div className="review-progress-bar" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done} aria-label="審查項目處理進度">
           <span style={{ width: `${total ? (done / total) * 100 : 0}%` }} />
         </div>
-      </div>
-      <div className="muted small">
-        AI 工作 #{runId}・{relativeTime(run.data.finished_at)}
-        {summary.version_no !== null && `・審查 v${summary.version_no}`}・
-        <button className="link-btn" onClick={() => setShowRun(true)}>
-          看完整過程
-        </button>
-      </div>
-      {stale && (
-        <div className="info-box small">
-          審查的是 v{summary.version_no}，之後又存了 {spec.head_version_no - summary.version_no!} 個版本，有些問題可能已經改好了。
-        </div>
-      )}
-      {done === total && <div className="success-box small">審查列出的項目都處理完了。</div>}
-      {review.summary && <p className="small">{review.summary}</p>}
-
-      <div className="subhead">
-        格式、邏輯錯誤 <span className="muted small">{issues.filter((i) => !checked.has(i.key)).length} 項未處理</span>
-      </div>
-      {renderList(issues, '沒有發現格式或邏輯錯誤。')}
-      <div className="subhead">
-        需要人工覆核 <span className="muted small">{points.filter((i) => !checked.has(i.key)).length} 項未處理</span>
-      </div>
-      {points.length === 0 && <div className="muted small">沒有需要特別確認的地方。</div>}
-      {GROUPS.map((g) => {
-        const items = points.filter((p) => p.group === g.key)
-        if (items.length === 0) return null
-        const open = items.filter((i) => !checked.has(i.key))
-        const collapsed = g.key === 'marked' && !showMarked
-        return (
-          <div key={g.key} className="point-group">
-            <div className="point-group-head" title={g.hint}>
-              {g.key === 'marked' ? (
-                <button className="link-btn point-group-title" aria-expanded={!collapsed} onClick={() => setShowMarked(!showMarked)}>
-                  {collapsed ? '▸' : '▾'} 文件自己標的 {items.length} 項
-                </button>
-              ) : (
-                <span className="point-group-title">
-                  {g.title} {items.length} 項
-                </span>
-              )}
-              <span className="muted small">{open.length} 項未處理</span>
-              <span className="spacer" />
-              {!spec.archived && open.length > 1 && (
-                <button className="link-btn small" onClick={() => markAll(open.map((i) => i.key))}>
-                  全部標成已處理
-                </button>
-              )}
-            </div>
-            {!collapsed && renderList(items, '')}
+        {(marked('false') > 0 || marked('skip') > 0) && (
+          <div className="muted small review-marks">
+            其中{[marked('false') > 0 && `誤報 ${marked('false')} 項`, marked('skip') > 0 && `略過 ${marked('skip')} 項`].filter(Boolean).join('、')}
           </div>
-        )
-      })}
+        )}
+        {review.summary && <p className="review-summary-text">{review.summary}</p>}
+        {stale && (
+          <div className="info-box small">
+            審查的是 v{summary.version_no}，之後又存了 {spec.head_version_no - summary.version_no!} 個版本，有些問題可能已經改好了。
+          </div>
+        )}
+        {done === total && <div className="success-box small">審查列出的項目都處理完了。</div>}
+        <div className="review-meta muted small">
+          <span>
+            AI 工作 #{runId}・{relativeTime(run.data.finished_at)}
+            {summary.version_no !== null && `・審查 v${summary.version_no}`}
+          </span>
+          <button className="link-btn small" onClick={() => setShowRun(true)}>
+            看完整過程
+          </button>
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="card-title">
+          格式、邏輯錯誤 {issues.length > 0 && count(openIssues)}
+        </div>
+        {renderList(issues, '沒有發現格式或邏輯錯誤。')}
+      </section>
+
+      <section className="card">
+        <div className="card-title">
+          需要人工覆核 {points.length > 0 && count(openPoints)}
+        </div>
+        {points.length === 0 && <div className="muted small">沒有需要特別確認的地方。</div>}
+        {GROUPS.map((g) => {
+          const items = points.filter((p) => p.group === g.key)
+          if (items.length === 0) return null
+          const open = items.filter((i) => !checked.has(i.key))
+          const collapsed = g.key === 'marked' && !showMarked
+          return (
+            <div key={g.key} className="point-group">
+              <div className="point-group-head">
+                {g.key === 'marked' ? (
+                  <button className="point-group-title" title={g.hint} aria-expanded={!collapsed} onClick={() => setShowMarked(!showMarked)}>
+                    <span className={`chev ${collapsed ? '' : 'is-open'}`}>
+                      <Icon name="chevron-down" size={14} />
+                    </span>
+                    {g.title}・{items.length} 項
+                  </button>
+                ) : (
+                  <span className="point-group-title" title={g.hint}>
+                    {g.title}・{items.length} 項
+                  </span>
+                )}
+                <span className="spacer" />
+                {!spec.archived && open.length > 1 && (
+                  <button className="btn btn-sm" onClick={() => markAll(open.map((i) => i.key))}>
+                    全部標成已處理
+                  </button>
+                )}
+              </div>
+              {!collapsed && renderList(items, '')}
+            </div>
+          )
+        })}
+      </section>
+
+      <section className="card">
+        <div className="card-title">交付判斷</div>
+        <RunVerdict run={run.data} disabled={spec.archived} />
+      </section>
 
       {showRun && (
         <RunDetailModal

@@ -101,6 +101,27 @@
 - 等寬字型用 `var(--font-mono)`，並加 `font-variant-ligatures: none`，Mermaid 的 `-->` 才不會顯示成箭頭。
 - 呼叫 API 一律經過 `api.ts`，資料讀取用 `queries.ts` 的 hooks。
 
+#### 設計規則
+
+完整的色票、元件和使用規則在使用者的 Design System artifact「SAgent 設計系統」（https://claude.ai/artifact/6pkTPdnu9JopBZMLovTxzK ，從 `styles.css` 產生，只有使用者能開）。值以 `styles.css` 為準，改了 token 或下面的規則要同步更新那份。重點：
+
+- 顏色只表示狀態：`--success` 完成、通過，`--warn` 要注意（審核中、待處理、未儲存），`--danger` 錯誤、失敗、刪除。「已停用」不是錯誤，用中性灰。
+- 識別一律中性灰，用文字區分：類型（`CategoryBadge`）、專案代碼、版本號、「最新」、Planner／Writer／Reviewer（`.agent-badge`）。不要依種類換顏色。
+- 介面以純灰為底（不帶藍）。雙輔色各管一件事：
+  - 黑白負責「選了什麼、要按哪個」：`--accent`（淺色近黑、深色近白）是選取（分頁、側欄、`is-active`、勾選的核取方塊，淡底 `--accent-soft`、勾 `--on-accent`）；`--primary`（淺色黑、深色白，參考 figma.com）只給主要按鈕，字用 `--on-primary`，一張卡片、一個對話框最多一個。
+  - 天藍只用來點綴，不讓畫面太死板：連結用 `--blue-text`，焦點框、AI 工作的進度（`.stepper`、轉圈）、專案卡片的階段條用 `--blue`，淡底 `--blue-soft`。`--writer`（AI 撰寫中、blue 徽章、訊息框圖示）也是同一個藍。選取不要用藍色。
+  - 藍色是色相約 205° 的天藍（`#0b8ae6`／文字 `#0a6dbf`，深色 `#4aa8ff`）：不偏紫、不偏青，`--blue` 只給圖形（白底 3.6:1），文字一定用 `--blue-text`。
+- 按鈕字一律 13px 半粗，大小只差高度。刪除用 `btn-danger-outline`（平常只有紅字），真的要刪的確認按鈕才用實心 `btn-danger`。
+- 訊息框（`info-box`、`success-box`、`warn-box`、`error-box`）是淡底、細框加左邊的圖示，文字用內文顏色，不要整段染色。
+- 核取方塊用全站的樣式（`styles.css` 的 `input[type='checkbox']`），不要換回瀏覽器預設的。
+- 動態少而快：顏色變化 180ms ease-out。只有往下一步走的主要按鈕（開始 AI 撰寫、繼續撰寫、查看文件）用 `ArrowLabel`：滑過時文字左移、淡入箭頭。不要每個按鈕都加；「減少動態」時不移動。
+- 徽章（`Badge`）的 tone 照意思選：`neutral` 識別、`green`／`amber`／`red` 狀態、`violet` AI 產生的版本、`blue` 執行中或要人看一下、`outline` 只給版本標籤（加 `tag` 圖示）。
+- 圓角：`--radius-xs` 徽章和小標記，`--radius-sm` 按鈕、輸入框、篩選按鈕，`--radius` 卡片和對話框。膠囊形只給數字計數（`.count`、`.tab-count`）和頂端列的狀態。
+- 切換用 `.seg`：選中的是白底，不是整塊主色。小的篩選、建議用 `.doc-chip`（選中加 `is-active`）。
+- 表格裡的標題連結是內文顏色，滑過才變主色。次要的文字按鈕（從檔案載入、跳到章節）用 `link-btn link-quiet`。
+- 側欄面板（AI 撰寫、審查）的內容放在卡片裡，一張卡片一件事，區塊之間留 12～16px；設定這類資訊用小的對照表，不要用「・」串成一長句。
+- 不要在卡片左邊加彩色直線、不要用漸層、不要用 emoji 或 ✓ ✕ ▸ ▾ 這類文字符號代替圖示（用 `Icon` 的 `check`、`x`、`chevron-down`）。一個圖示只代表一件事：`tag` 版本標籤、`flag` 基準版本、`book` 專案詞彙表。
+
 ### AI 代理
 
 - 模型是在 CPU 上跑的 8B 左右小模型，又慢又容易出錯。改提示詞或流程前，先讀 `docs/architecture.md` 第 4.2 節「為了小模型做的設計」。

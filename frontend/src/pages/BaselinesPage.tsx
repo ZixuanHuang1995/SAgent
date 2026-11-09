@@ -34,7 +34,8 @@ export function BaselinesPage() {
         <div>
           <h1>基準版本</h1>
           <p className="muted">
-            把目前每份 Spec 的最新版記錄成一個「基準」，例如「需求凍結 v1.0」「第一期驗收版」。之後可以跟目前內容比較，或匯出當時的所有文件。
+            把整個專案（或一個階段）每份 Spec 的最新版一起記錄成一個「基準」，例如「需求凍結 v1.0」「第一期驗收版」。之後可以跟目前內容比較，或匯出當時的所有文件。只想標記單一份
+            Spec 的某一版，用 Spec 頁「版本」分頁裡的版本標籤。
           </p>
         </div>
         <button className="btn btn-primary" onClick={() => setCreating(true)}>
@@ -61,7 +62,7 @@ export function BaselinesPage() {
                 <tr key={b.id}>
                   <td>
                     <button className="link-btn strong" onClick={() => setViewing(b.id)}>
-                      <Icon name="tag" size={14} /> {b.name}
+                      <Icon name="flag" size={14} /> {b.name}
                     </button>
                   </td>
                   <td className="muted">{b.note}</td>
@@ -211,11 +212,20 @@ function CreateBaselineDialog({ projectId, onClose }: { projectId: number; onClo
   const [name, setName] = useState('')
   const [note, setNote] = useState('')
   const [phaseId, setPhaseId] = useState<number | ''>('')
+  const [applyLabel, setApplyLabel] = useState(true)
   const create = useMutation({
-    mutationFn: () => api.createBaseline(projectId, { name, note, phase_id: phaseId === '' ? null : phaseId }),
+    mutationFn: () =>
+      api.createBaseline(projectId, { name, note, phase_id: phaseId === '' ? null : phaseId, apply_label: applyLabel }),
     onSuccess: (b) => {
       qc.invalidateQueries({ queryKey: keys.baselines(projectId) })
-      toast(`已建立基準版本「${b.name}」，包含 ${b.item_count} 份 Spec`, 'success')
+      if (applyLabel) {
+        // 加了標籤：Spec 頁的標題和版本清單也要更新
+        qc.invalidateQueries({ queryKey: keys.labels(projectId) })
+        qc.invalidateQueries({ queryKey: ['versions'] })
+        qc.invalidateQueries({ queryKey: ['spec'] })
+      }
+      const labeled = b.labeled_count != null ? `，${b.labeled_count} 份加上了同名標籤` : ''
+      toast(`已建立基準版本「${b.name}」，包含 ${b.item_count} 份 Spec${labeled}`, 'success')
       onClose()
     },
     onError: (e) => toast(errorText(e), 'error'),
@@ -251,6 +261,15 @@ function CreateBaselineDialog({ projectId, onClose }: { projectId: number; onClo
           ))}
         </select>
       </Field>
+      <label className="check-row">
+        <input type="checkbox" checked={applyLabel} onChange={(e) => setApplyLabel(e.target.checked)} />
+        <span>
+          順便替每份 Spec 的那一版加上同名的版本標籤
+          <span className="muted small check-row-hint">
+            打開 Spec 時就看得到「{name.trim() || '這個名稱'}」之後又改了幾版。已經有標籤的版本不會被蓋掉。
+          </span>
+        </span>
+      </label>
     </Modal>
   )
 }

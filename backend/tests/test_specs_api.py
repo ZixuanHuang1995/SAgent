@@ -112,7 +112,26 @@ def test_diff_restore_label(client, project):
 
     assert client.put(f"/api/specs/{sid}/versions/1/label", json={"label": "v1.0"}).json()["label"] == "v1.0"
     assert client.put(f"/api/specs/{sid}/versions/2/label", json={"label": "v1.0"}).status_code == 409
-    assert client.put(f"/api/specs/{sid}/versions/1/label", json={"label": ""}).json()["label"] is None
+    # move：把 v1 的標籤移到 v2
+    moved = client.put(f"/api/specs/{sid}/versions/2/label", json={"label": "v1.0", "move": True})
+    assert moved.status_code == 200 and moved.json()["label"] == "v1.0"
+    labels = {v["version_no"]: v["label"] for v in client.get(f"/api/specs/{sid}/versions").json()}
+    assert labels[1] is None and labels[2] == "v1.0"
+    assert client.put(f"/api/specs/{sid}/versions/2/label", json={"label": ""}).json()["label"] is None
+
+
+def test_project_labels(client, project):
+    pid = project["project"]["id"]
+    a = _create_spec(client, project, title="甲", init="content", content="# 甲\n\nv1")
+    b = _create_spec(client, project, title="乙", init="content", content="# 乙\n\nv1")
+    client.put(f"/api/specs/{a['id']}/versions/1/label", json={"label": "客戶確認版"})
+    client.put(f"/api/specs/{b['id']}/versions/1/label", json={"label": "客戶確認版"})
+    client.put(f"/api/specs/{b['id']}/content", json={"content": "# 乙\n\nv2"})
+    client.put(f"/api/specs/{b['id']}/versions/2/label", json={"label": "v1.1"})
+    assert client.get(f"/api/projects/{pid}/labels").json() == [
+        {"label": "客戶確認版", "count": 2},
+        {"label": "v1.1", "count": 1},
+    ]
 
 
 def test_search_archive_and_export(client, project):

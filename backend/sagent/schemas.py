@@ -179,6 +179,8 @@ class SaveResult(BaseModel):
 
 class LabelIn(BaseModel):
     label: str | None = Field(None, max_length=100)
+    # 同名標籤已經在別的版本時，移到這一版（不然回 409）
+    move: bool = False
 
 
 class RestoreIn(BaseModel):
@@ -198,6 +200,8 @@ class BaselineCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     note: str = ""
     phase_id: int | None = None
+    # 順便替每份 Spec 納入的那一版加上同名的版本標籤（已經有標籤的不蓋掉）
+    apply_label: bool = False
 
 
 class BaselineOut(ORMModel):
@@ -208,6 +212,15 @@ class BaselineOut(ORMModel):
     phase_id: int | None
     created_at: datetime
     item_count: int = 0
+    # 只有建立時回傳：這次加上同名標籤的 Spec 數量
+    labeled_count: int | None = None
+
+
+class ProjectLabel(BaseModel):
+    """專案裡用過的版本標籤，給加標籤時挑選"""
+
+    label: str
+    count: int
 
 
 # --- AI 工作 ---

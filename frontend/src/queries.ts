@@ -11,6 +11,7 @@ export const keys = {
   runs: (params: { project_id?: number; spec_id?: number }) => ['runs', params] as const,
   run: (runId: number) => ['run', runId] as const,
   baselines: (projectId: number) => ['baselines', projectId] as const,
+  labels: (projectId: number) => ['labels', projectId] as const,
   templates: ['templates'] as const,
   templateCategories: ['template-categories'] as const,
   diagramKinds: ['diagram-kinds'] as const,
@@ -60,6 +61,10 @@ export const useRuns = (params: { project_id?: number; spec_id?: number }, refet
 
 export const useBaselines = (projectId: number) =>
   useQuery({ queryKey: keys.baselines(projectId), queryFn: () => api.baselines(projectId) })
+
+/** 專案裡用過的版本標籤，加標籤時列出來挑，讓各份 Spec 的名稱一致 */
+export const useProjectLabels = (projectId: number) =>
+  useQuery({ queryKey: keys.labels(projectId), queryFn: () => api.projectLabels(projectId) })
 
 export const useTemplates = () => useQuery({ queryKey: keys.templates, queryFn: api.templates, staleTime: 60_000 })
 

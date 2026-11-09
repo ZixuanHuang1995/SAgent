@@ -40,7 +40,7 @@ const STATUS_TONE: Record<SpecStatus, 'neutral' | 'amber' | 'green' | 'red'> = {
   draft: 'neutral',
   reviewing: 'amber',
   approved: 'green',
-  deprecated: 'red',
+  deprecated: 'neutral',
 }
 
 const PANEL_TABS: { key: PanelTab; icon: IconName; label: string }[] = [
@@ -128,6 +128,11 @@ export function SpecPage() {
   }
   const dirty = draft !== null && draft !== data?.content
   const headChanged = dirty && baseNo !== null && data !== undefined && data.head_version_no !== baseNo
+
+  // 最新版號變了（AI 存了新版本、別的分頁存檔），版本清單也要跟著更新，不然停在「版本」分頁時看不到新版
+  useEffect(() => {
+    if (headNo > 0) qc.invalidateQueries({ queryKey: keys.versions(specId) })
+  }, [headNo, specId, qc])
 
   const onChange = (value: string) => {
     if (baseNo === null) setBaseNo(data?.head_version_no ?? 0)
@@ -378,7 +383,7 @@ export function SpecPage() {
               {data.title}
             </h1>
           )}
-          <Badge tone="blue" title={data.head ? `${VERSION_SOURCE[data.head.source]}：${data.head.message}` : ''}>
+          <Badge title={data.head ? `${VERSION_SOURCE[data.head.source]}：${data.head.message}` : ''}>
             {data.head_version_no > 0 ? `v${data.head_version_no}` : '尚無版本'}
           </Badge>
           <Badge tone={STATUS_TONE[data.status]} title="文件狀態，可以在下方「屬性」修改">
@@ -395,8 +400,10 @@ export function SpecPage() {
               title={`v${labeled.no} 標成「${labeled.label}」，之後又存了 ${headNo - labeled.no} 個版本。按一下比較 v${labeled.no} 和最新版`}
               onClick={() => setDiff({ from: labeled.no, to: headNo })}
             >
-              <Icon name="tag" size={12} /> {labeled.label} v{labeled.no}
-              <span className="badge-note">・之後改了 {headNo - labeled.no} 版</span>
+              <Icon name="tag" size={12} /> {labeled.label}
+              <span className="badge-note">
+                （v{labeled.no}）之後改了 {headNo - labeled.no} 版
+              </span>
             </button>
           )}
           {dirty && <Badge tone="amber">未儲存</Badge>}
@@ -442,7 +449,7 @@ export function SpecPage() {
               </MenuItem>
             )}
             {data.head_version_no > 0 && !data.archived && (
-              <MenuItem icon="tag" title="名詞定義、角色、狀態加進專案詞彙表，這個專案的其他文件就會用一樣的名稱" onSelect={() => setExtracting(true)}>
+              <MenuItem icon="book" title="名詞定義、角色、狀態加進專案詞彙表，這個專案的其他文件就會用一樣的名稱" onSelect={() => setExtracting(true)}>
                 從這份文件抽出名詞…
               </MenuItem>
             )}
@@ -462,8 +469,8 @@ export function SpecPage() {
           <Popover
             trigger={
               <>
+                {/* 類型（Functionality…）跟文件類型重複，這裡只寫文件類型；類型在展開後看得到 */}
                 <span className="muted">屬性</span> {phases.find((p) => p.id === data.phase_id)?.name ?? ''}・
-                {category ? `${category.name}・` : ''}
                 {template?.name ?? data.doc_type} <Icon name="chevron-down" size={14} />
               </>
             }
@@ -579,7 +586,9 @@ export function SpecPage() {
       )}
       {data.active_run_id && (
         <div className="banner banner-info">
-          AI 正在撰寫這份文件，完成後會存成新版本。
+          {data.ai_status === 'planned'
+            ? '大綱規劃好了，等你確認後才會開始撰寫。'
+            : 'AI 正在撰寫這份文件，完成後會存成新版本。'}
           {dirty && ' 你現在的修改請先存檔，之後再用版本比較確認差異。'}
           {!panelOpen || tab !== 'agent' ? (
             <button className="link-btn" onClick={() => { setPanelOpen(true); setTab('agent') }}>
@@ -708,7 +717,7 @@ export function SpecPage() {
                 <ReviewChecklist key={review.run_id} spec={data} onJump={jumpToHeading} onOpenDiff={(from, to) => setDiff({ from, to })} />
               )}
               {tab === 'versions' && (
-                <VersionPanel specId={specId} headNo={data.head_version_no} archived={data.archived} dirty={dirty} />
+                <VersionPanel projectId={projectId} specId={specId} headNo={data.head_version_no} archived={data.archived} dirty={dirty} />
               )}
               {tab === 'outline' &&
                 (outline.length === 0 ? (

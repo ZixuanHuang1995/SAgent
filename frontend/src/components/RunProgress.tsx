@@ -8,7 +8,7 @@ import { assemblePreview, type RunStreamState, type StepState } from '../hooks/u
 import { MarkdownView } from './MarkdownView'
 import { PlanConfirm } from './PlanConfirm'
 import { useProjectTree } from '../queries'
-import { Badge, errorText, Modal, Spinner, useToast } from './ui'
+import { ArrowLabel, Badge, errorText, Modal, Spinner, useToast } from './ui'
 import { Icon } from './icons'
 
 const PHASES = [
@@ -102,14 +102,20 @@ function StepRow({ step }: { step: StepState }) {
           }
         }}
       >
-        <span className="step-icon">{step.status === 'running' ? <Spinner small /> : step.status === 'done' ? '✓' : '✕'}</span>
+        <span className="step-icon">
+          {step.status === 'running' ? <Spinner small /> : <Icon name={step.status === 'done' ? 'check' : 'x'} size={14} />}
+        </span>
         <AgentBadge agent={step.agent} />
         <span className="step-label">{step.status === 'running' ? step.label : step.message || step.label}</span>
         <span className="step-meta muted small">
           {step.durationMs !== undefined && formatDuration(step.durationMs)}
           {step.completionTokens ? `・${step.completionTokens} tokens` : ''}
         </span>
-        {hasDetail && <span className="step-toggle">{open ? '▾' : '▸'}</span>}
+        {hasDetail && (
+          <span className={`step-toggle chev ${open ? 'is-open' : ''}`}>
+            <Icon name="chevron-down" size={14} />
+          </span>
+        )}
       </div>
       {open && hasDetail && <StepDetail step={step} />}
     </li>
@@ -232,7 +238,7 @@ export function ReviewView(props: {
   const sectionLink = (id: string | null) => {
     const heading = headingOf(id)
     return heading && onJump ? (
-      <button className="link-btn small" title="跳到文件裡的這一節" onClick={() => onJump(heading)}>
+      <button className="link-btn link-quiet small" title="跳到文件裡的這一節" onClick={() => onJump(heading)}>
         {heading}
       </button>
     ) : (
@@ -255,10 +261,13 @@ export function ReviewView(props: {
         <ul className="issue-list">
           {issues.map((i: ReviewIssue, k) => (
             <li key={k}>
-              <Badge tone={SEVERITY[i.severity].tone}>{SEVERITY[i.severity].text}</Badge> {sectionLink(i.section_id)}
-              {i.source === 'check' && <span className="muted small">・程式檢查</span>}
               <div>{i.problem}</div>
               {i.suggestion && <div className="muted small">建議：{i.suggestion}</div>}
+              <div className="issue-meta">
+                <Badge tone={SEVERITY[i.severity].tone}>{SEVERITY[i.severity].text}</Badge>
+                {sectionLink(i.section_id)}
+                {i.source === 'check' && <span className="muted small">・程式檢查</span>}
+              </div>
             </li>
           ))}
         </ul>
@@ -272,10 +281,12 @@ export function ReviewView(props: {
             <ul className="issue-list">
               {points.map((p: ReviewPoint, k) => (
                 <li key={k}>
-                  {sectionLink(p.section_id)}
-                  {p.source === 'check' && <span className="muted small">・文件標註</span>}
                   <div>{p.item}</div>
                   {p.reason && <div className="muted small">{p.reason}</div>}
+                  <div className="issue-meta">
+                    {sectionLink(p.section_id)}
+                    {p.source === 'check' && <span className="muted small">・文件標註</span>}
+                  </div>
                 </li>
               ))}
             </ul>
@@ -413,7 +424,7 @@ export function RunProgress(props: {
             <div className="row gap-sm mt-sm">
               {props.onOpenVersion && (
                 <button className="btn btn-sm btn-primary" onClick={() => props.onOpenVersion!(state.end!.versionNo!)}>
-                  查看文件
+                  <ArrowLabel small>查看文件</ArrowLabel>
                 </button>
               )}
               {props.onDiff && state.end.versionNo > 1 && (

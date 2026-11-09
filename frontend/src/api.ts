@@ -135,6 +135,14 @@ export interface Baseline {
   phase_id: number | null
   created_at: string
   item_count: number
+  /** 只有建立時勾了「順便加標籤」才有：加上同名標籤的 Spec 數量 */
+  labeled_count?: number | null
+}
+
+/** 專案裡用過的版本標籤 */
+export interface ProjectLabel {
+  label: string
+  count: number
 }
 
 export interface BaselineItem {
@@ -504,15 +512,20 @@ export const api = {
   version: (specId: number, no: number) => request<VersionDetail>('GET', `/api/specs/${specId}/versions/${no}`),
   restoreVersion: (specId: number, no: number, message = '') =>
     request<SaveResult>('POST', `/api/specs/${specId}/versions/${no}/restore`, { message }),
-  setLabel: (specId: number, no: number, label: string | null) =>
-    request<VersionMeta>('PUT', `/api/specs/${specId}/versions/${no}/label`, { label }),
+  /** move：同名標籤已經在別的版本時，移到這一版 */
+  setLabel: (specId: number, no: number, label: string | null, move = false) =>
+    request<VersionMeta>('PUT', `/api/specs/${specId}/versions/${no}/label`, { label, move }),
+  projectLabels: (projectId: number) => request<ProjectLabel[]>('GET', `/api/projects/${projectId}/labels`),
   diff: (specId: number, fromVersion?: number, toVersion?: number) =>
     request<DiffResult>('GET', `/api/specs/${specId}/diff${qs({ from_version: fromVersion, to_version: toVersion })}`),
   specExportUrl: (specId: number, version?: number) => `/api/specs/${specId}/export${qs({ version })}`,
 
   // 基準版本
   baselines: (projectId: number) => request<Baseline[]>('GET', `/api/projects/${projectId}/baselines`),
-  createBaseline: (projectId: number, body: { name: string; note?: string; phase_id?: number | null }) =>
+  createBaseline: (
+    projectId: number,
+    body: { name: string; note?: string; phase_id?: number | null; apply_label?: boolean },
+  ) =>
     request<Baseline>('POST', `/api/projects/${projectId}/baselines`, body),
   baseline: (id: number) => request<{ baseline: Baseline; items: BaselineItem[] }>('GET', `/api/baselines/${id}`),
   deleteBaseline: (id: number) => request<void>('DELETE', `/api/baselines/${id}`),

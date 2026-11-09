@@ -7,7 +7,7 @@ import { api, type PhaseSummary, type Project } from '../api'
 import { PROJECT_CODE_HINT, PROJECT_DESC_HINT, relativeTime } from '../format'
 import { usePersistent } from '../hooks/layout'
 import { keys, useProjects } from '../queries'
-import { Badge, Empty, errorText, Field, Menu, MenuItem, MenuSeparator, Modal, Skeleton, submitOnEnter, useToast } from '../components/ui'
+import { Empty, errorText, Field, Menu, MenuItem, MenuSeparator, Modal, Skeleton, submitOnEnter, useToast } from '../components/ui'
 import { Icon } from '../components/icons'
 import { NewSpecDialog } from './ProjectLayout'
 
@@ -139,7 +139,7 @@ function ProjectItem({ project: p, layout }: { project: Project; layout: 'card' 
         新增 Spec
       </MenuItem>
       <MenuSeparator />
-      <MenuItem icon="tag" to={`/p/${p.id}/baselines`}>
+      <MenuItem icon="flag" to={`/p/${p.id}/baselines`}>
         基準版本
       </MenuItem>
       <MenuItem icon="bot" to={`/p/${p.id}/runs`}>
@@ -181,8 +181,8 @@ function ProjectItem({ project: p, layout }: { project: Project; layout: 'card' 
 
 /** 有 AI 工作在跑或排隊時才顯示 */
 function RunBadge({ project: p }: { project: Project }) {
-  if (p.running_runs > 0) return <Badge tone="amber">AI 撰寫中</Badge>
-  if (p.queued_runs > 0) return <Badge>AI 排隊中</Badge>
+  if (p.running_runs > 0) return <span className="badge badge-ai ai-running">AI 撰寫中</span>
+  if (p.queued_runs > 0) return <span className="badge badge-ai ai-queued">AI 排隊中</span>
   return null
 }
 

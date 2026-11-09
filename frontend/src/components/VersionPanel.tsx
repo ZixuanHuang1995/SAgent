@@ -4,21 +4,34 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { api, type VersionMeta } from '../api'
 import { formatTime, relativeTime, VERSION_SOURCE } from '../format'
-import { keys, useVersions } from '../queries'
+import { keys, useProjectLabels, useVersions } from '../queries'
 import { DiffModal } from './DiffView'
 import { MarkdownView } from './MarkdownView'
 import { Badge, ConfirmDialog, Empty, errorText, Menu, MenuItem, Modal, Skeleton, Spinner, useToast } from './ui'
 import { Icon } from './icons'
 
+// 版本來源只把 AI 產生的標出顏色，其他用中性灰，版本清單不會太花
 const SOURCE_TONE: Record<VersionMeta['source'], string> = {
   manual: 'neutral',
   agent: 'violet',
-  restore: 'amber',
-  import: 'blue',
+  restore: 'neutral',
+  import: 'neutral',
   template: 'neutral',
 }
 
-export function VersionPanel({ specId, headNo, archived, dirty }: { specId: number; headNo: number; archived: boolean; dirty: boolean }) {
+export function VersionPanel({
+  projectId,
+  specId,
+  headNo,
+  archived,
+  dirty,
+}: {
+  projectId: number
+  specId: number
+  headNo: number
+  archived: boolean
+  dirty: boolean
+}) {
   const versions = useVersions(specId)
   const qc = useQueryClient()
   const toast = useToast()
@@ -32,6 +45,7 @@ export function VersionPanel({ specId, headNo, archived, dirty }: { specId: numb
     qc.invalidateQueries({ queryKey: keys.versions(specId) })
     qc.invalidateQueries({ queryKey: keys.spec(specId) })
     qc.invalidateQueries({ queryKey: ['tree'] })
+    qc.invalidateQueries({ queryKey: keys.labels(projectId) })
   }
 
   const toggle = (no: number) =>
@@ -73,7 +87,7 @@ export function VersionPanel({ specId, headNo, archived, dirty }: { specId: numb
             <div className="version-main">
               <div className="version-line">
                 <strong>v{v.version_no}</strong>
-                {v.version_no === headNo && <Badge tone="blue">最新</Badge>}
+                {v.version_no === headNo && <Badge>最新</Badge>}
                 {v.label && <Badge tone="outline"><Icon name="tag" size={12} /> {v.label}</Badge>}
                 <Badge tone={SOURCE_TONE[v.source]}>{VERSION_SOURCE[v.source]}</Badge>
                 <span className="spacer" />
@@ -146,7 +160,16 @@ export function VersionPanel({ specId, headNo, archived, dirty }: { specId: numb
           onClose={() => setRestoring(null)}
         />
       )}
-      {labeling && <LabelDialog specId={specId} version={labeling} onClose={() => setLabeling(null)} onDone={refresh} />}
+      {labeling && (
+        <LabelDialog
+          projectId={projectId}
+          specId={specId}
+          version={labeling}
+          versions={versions.data}
+          onClose={() => setLabeling(null)}
+          onDone={refresh}
+        />
+      )}
     </div>
   )
 }
@@ -183,17 +206,30 @@ function VersionViewer({ specId, no, onClose }: { specId: number; no: number; on
   )
 }
 
-function LabelDialog(props: { specId: number; version: VersionMeta; onClose: () => void; onDone: () => void }) {
+function LabelDialog(props: {
+  projectId: number
+  specId: number
+  version: VersionMeta
+  versions: VersionMeta[]
+  onClose: () => void
+  onDone: () => void
+}) {
   const toast = useToast()
+  const projectLabels = useProjectLabels(props.projectId)
   const [label, setLabel] = useState(props.version.label ?? '')
+  const value = label.trim()
+  // 同一份 Spec 的標籤不能重複：已經在別的版本上時，儲存改成「移到這一版」
+  const taken = value ? props.versions.find((v) => v.label === value && v.version_no !== props.version.version_no) : undefined
+  const suggestions = (projectLabels.data ?? []).filter((l) => l.label !== props.version.label).slice(0, 8)
   const save = useMutation({
-    mutationFn: (value: string | null) => api.setLabel(props.specId, props.version.version_no, value),
+    mutationFn: (next: string | null) => api.setLabel(props.specId, props.version.version_no, next, Boolean(next && taken)),
     onSuccess: () => {
       props.onDone()
       props.onClose()
     },
     onError: (e) => toast(errorText(e), 'error'),
   })
+  const submit = () => save.mutate(value || null)
   return (
     <Modal
       title={`v${props.version.version_no} 的標籤`}
@@ -205,13 +241,15 @@ function LabelDialog(props: { specId: number; version: VersionMeta; onClose: () 
               移除標籤
             </button>
           )}
-          <button className="btn btn-primary" onClick={() => save.mutate(label.trim() || null)} disabled={save.isPending}>
-            儲存
+          <button className="btn btn-primary" onClick={submit} disabled={save.isPending}>
+            {taken ? '移到這一版' : '儲存'}
           </button>
         </>
       }
     >
-      <p className="muted">標籤用來標記重要的版本，例如「v1.0」「客戶確認版」。同一份 Spec 的標籤不能重複。</p>
+      <p className="muted">
+        標籤標記這份 Spec 的某一版，例如「客戶確認版」。要把整個專案的文件一起凍結，請用左側的「基準版本」。
+      </p>
       <input
         className="input"
         autoFocus
@@ -219,8 +257,30 @@ function LabelDialog(props: { specId: number; version: VersionMeta; onClose: () 
         maxLength={100}
         placeholder="例如：客戶確認版"
         onChange={(e) => setLabel(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && save.mutate(label.trim() || null)}
+        onKeyDown={(e) => e.key === 'Enter' && submit()}
       />
+      {taken && (
+        <p className="warn-text small">
+          v{taken.version_no} 已經用了「{value}」。同一份 Spec 的標籤不能重複，儲存後會從 v{taken.version_no} 移到 v
+          {props.version.version_no}。
+        </p>
+      )}
+      {suggestions.length > 0 && (
+        <div className="label-suggestions">
+          <span className="muted small">這個專案用過：</span>
+          {suggestions.map((l) => (
+            <button
+              key={l.label}
+              type="button"
+              className={`doc-chip ${l.label === value ? 'is-active' : ''}`}
+              title={`${l.count} 份 Spec 用了這個標籤`}
+              onClick={() => setLabel(l.label)}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
+      )}
     </Modal>
   )
 }

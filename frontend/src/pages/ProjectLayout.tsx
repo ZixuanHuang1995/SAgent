@@ -27,7 +27,7 @@ import { Icon, type IconName } from '../components/icons'
 
 const PROJECT_NAV: { to: string; icon: IconName; label: string }[] = [
   { to: '', icon: 'overview', label: '專案總覽' },
-  { to: '/baselines', icon: 'tag', label: '基準版本' },
+  { to: '/baselines', icon: 'flag', label: '基準版本' },
   { to: '/runs', icon: 'bot', label: 'AI 工作紀錄' },
 ]
 
@@ -352,16 +352,20 @@ function SpecLink({ projectId, spec }: { projectId: number; spec: Spec }) {
   const templates = useTemplates()
   const categories = useTemplateCategories()
   // Functionality 是大多數，不標；其他類型（Concept、Technical、Algorithm、Change）在標題前加小標籤
-  const category = templates.data?.find((t) => t.key === spec.doc_type)?.category
-  const tag = category && category !== 'feature' ? categories.data?.find((c) => c.key === category)?.name : undefined
+  const template = templates.data?.find((t) => t.key === spec.doc_type)
+  const category = template?.category
+  const cat = categories.data?.find((c) => c.key === category)
+  const tag = category && category !== 'feature' ? cat?.name : undefined
+  // 滑鼠提示寫出類型和文件類型，沒有小標籤的也看得出是 Functionality
+  const detail = [spec.head_version_no > 0 ? `v${spec.head_version_no}` : '', cat?.name, template?.name].filter(Boolean).join('・')
   return (
-    <NavLink
-      to={`/p/${projectId}/s/${spec.id}`}
-      className="tree-spec"
-      title={spec.head_version_no > 0 ? `${spec.title}（v${spec.head_version_no}）` : spec.title}
-    >
+    <NavLink to={`/p/${projectId}/s/${spec.id}`} className="tree-spec" title={detail ? `${spec.title}（${detail}）` : spec.title}>
       <span className={`status-dot status-${spec.status}`} title={SPEC_STATUS[spec.status]} />
-      {tag && <span className={`tree-spec-cat cat-${category}`}>{tag}</span>}
+      {tag && (
+        <span className={`tree-spec-cat cat-${category}`} title={cat?.description}>
+          {tag}
+        </span>
+      )}
       <span className="tree-spec-title">{spec.title}</span>
       {/* AI 工作進行中時，上一次審查的數字已經不準，改顯示 AI 狀態 */}
       {spec.ai_status ? (

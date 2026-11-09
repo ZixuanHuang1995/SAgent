@@ -17,6 +17,14 @@ const PATHS: Record<string, ReactNode> = {
       <circle cx="7.5" cy="7.5" r="1.3" />
     </>
   ),
+  // 基準版本：里程碑旗子（標籤圖示只給版本標籤用）
+  flag: <path d="M4 22V15M4 15V3.5S5.5 2.5 8.5 2.5s4.5 2 7.5 2 4-1 4-1V15s-1 1-4 1-4.5-2-7.5-2S4 15 4 15Z" />,
+  // 失敗、關閉
+  x: <path d="M18 6 6 18M6 6l12 12" />,
+  // 往下一步的按鈕滑過時出現（ui.tsx 的 ArrowLabel）
+  'arrow-right': <path d="M5 12h14M13 6l6 6-6 6" />,
+  // 詞彙表
+  book: <path d="M4 19.5V4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5a2.5 2.5 0 0 0 0 5H20v-5M8 7h8M8 11h6" />,
   bot: (
     <>
       <path d="M12 8V4H8" />

@@ -17,17 +17,6 @@ export const VERSION_SOURCE: Record<VersionMeta['source'], string> = {
   template: '範本',
 }
 
-/**
- * 類型標籤的顏色（Badge 的 tone）。綠、琥珀、紅留給狀態用，這裡不用。
- * 功能規格是大多數，用中性灰；側邊欄的類型小標籤（styles.css 的 .tree-spec-cat）用同一組顏色。
- */
-export const CATEGORY_TONE: Record<string, string> = {
-  idea: 'pink',
-  feature: 'neutral',
-  design: 'violet',
-  algorithm: 'teal',
-  change: 'blue',
-}
 
 export const RUN_STATUS: Record<RunStatus, string> = {
   queued: '排隊中',

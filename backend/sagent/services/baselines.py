@@ -25,9 +25,22 @@ def list_baselines(s: Session, project: Project) -> list[Baseline]:
     return list(s.scalars(stmt))
 
 
+LABEL_MAX = 100  # 跟 schemas.LabelIn 的長度上限一樣
+
+
 def create_baseline(
-    s: Session, project: Project, name: str, note: str = "", phase_id: int | None = None
-) -> Baseline:
+    s: Session,
+    project: Project,
+    name: str,
+    note: str = "",
+    phase_id: int | None = None,
+    apply_label: bool = False,
+) -> tuple[Baseline, int]:
+    """回傳基準版本和加上同名標籤的 Spec 數量。
+
+    apply_label：每份 Spec 納入的那一版沒有標籤、而且這個名稱沒用在同一份 Spec 的其他版本時，
+    加上跟基準版本同名的標籤。已經有的標籤不蓋掉，也不從別的版本搬過來。
+    """
     name = name.strip()
     if not name:
         raise BadRequest("基準版本名稱不能空白")
@@ -43,6 +56,7 @@ def create_baseline(
     baseline = Baseline(project_id=project.id, name=name, note=note.strip(), phase_id=phase_id)
     s.add(baseline)
     s.flush()
+    labeled = 0
     for spec in specs:
         head = get_head(s, spec)
         assert head is not None
@@ -51,8 +65,16 @@ def create_baseline(
                 baseline_id=baseline.id, spec_id=spec.id, version_id=head.id, version_no=head.version_no
             )
         )
+        if apply_label and len(name) <= LABEL_MAX:
+            if head.label == name:
+                labeled += 1
+            elif head.label is None and not s.scalar(
+                select(SpecVersion.id).where(SpecVersion.spec_id == spec.id, SpecVersion.label == name)
+            ):
+                head.label = name
+                labeled += 1
     s.flush()
-    return baseline
+    return baseline, labeled
 
 
 def delete_baseline(s: Session, baseline: Baseline) -> None:

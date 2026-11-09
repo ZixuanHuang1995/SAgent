@@ -15,7 +15,6 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router'
-import { CATEGORY_TONE } from '../format'
 import { Icon, type IconName } from './icons'
 
 // ---------------------------------------------------------------------------
@@ -513,6 +512,19 @@ export function Empty({ title, children }: { title: string; children?: ReactNode
   )
 }
 
+/**
+ * 往下一步走的按鈕的文字：滑過時文字往左讓位、右邊淡入箭頭（參考 figma.com）。
+ * 只用在「開始 AI 撰寫」「繼續撰寫」「查看文件」這類會往前走的主要按鈕，不要每個按鈕都加。
+ */
+export function ArrowLabel({ children, small }: { children: ReactNode; small?: boolean }) {
+  return (
+    <span className="btn-arrow-inner">
+      <span className="btn-label">{children}</span>
+      <Icon name="arrow-right" size={small ? 14 : 16} />
+    </span>
+  )
+}
+
 export function Badge({ children, tone = 'neutral', title }: { children: ReactNode; tone?: string; title?: string }) {
   return (
     <span className={`badge badge-${tone}`} title={title}>
@@ -521,9 +533,41 @@ export function Badge({ children, tone = 'neutral', title }: { children: ReactNo
   )
 }
 
-/** 類型標籤（Idea、Functionality…）：依類型上色、粗體 */
-export function CategoryBadge({ category, children }: { category: string; children: ReactNode }) {
-  return <span className={`badge badge-${CATEGORY_TONE[category] ?? 'neutral'} badge-category`}>{children}</span>
+/**
+ * 類型標籤（Concept、Functionality…）。一律中性灰、用文字區分，顏色留給狀態用。
+ * 給 onClick 時變成按鈕（例如按了只看這個類型）。
+ */
+export function CategoryBadge({
+  category,
+  children,
+  title,
+  onClick,
+}: {
+  category: string
+  children: ReactNode
+  title?: string
+  onClick?: () => void
+}) {
+  const className = `badge badge-category cat-${category}`
+  if (!onClick)
+    return (
+      <span className={className} title={title}>
+        {children}
+      </span>
+    )
+  return (
+    <button
+      type="button"
+      className={`${className} badge-btn`}
+      title={title}
+      onClick={(e) => {
+        e.stopPropagation()
+        onClick()
+      }}
+    >
+      {children}
+    </button>
+  )
 }
 
 /** error：有值時顯示成紅字，取代 hint */

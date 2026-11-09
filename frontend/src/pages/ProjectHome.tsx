@@ -30,6 +30,10 @@ export function ProjectHome() {
   const [deleting, setDeleting] = useState(false)
   // 要新增 Spec 時記下預設的階段（從某個階段的卡片點的就用那個階段）
   const [newSpec, setNewSpec] = useState<{ phaseId: number | null } | null>(null)
+  // 只看某個類型（idea、feature…），null 是全部
+  const [catFilter, setCatFilter] = useState<string | null>(null)
+  const templates = useTemplates()
+  const categories = useTemplateCategories()
   const navigate = useNavigate()
   const qc = useQueryClient()
   const toast = useToast()
@@ -45,6 +49,15 @@ export function ProjectHome() {
   const counts = specs.reduce<Record<string, number>>((acc, s) => ({ ...acc, [s.status]: (acc[s.status] ?? 0) + 1 }), {})
   // 還沒有 Spec 時只突顯「新增第一份 Spec」，統計、AI 工作這些空的區塊先不顯示
   const hasSpecs = specs.length > 0
+  const categoryOf = (docType: string) => templates.data?.find((t) => t.key === docType)?.category ?? 'feature'
+  // 類型篩選：只列這個專案有的類型，照 CATEGORIES 的順序
+  const catCounts = specs.reduce<Record<string, number>>((acc, s) => {
+    const c = categoryOf(s.doc_type)
+    return { ...acc, [c]: (acc[c] ?? 0) + 1 }
+  }, {})
+  const catOptions = (categories.data ?? []).filter((c) => catCounts[c.key])
+  const filter = catFilter && catCounts[catFilter] ? catFilter : null
+  const matches = (docType: string) => !filter || categoryOf(docType) === filter
 
   const glossaryCard = (
     <section className="card">
@@ -133,8 +146,32 @@ export function ProjectHome() {
 
       {project.glossary.length > 0 && glossaryCard}
 
+      {catOptions.length > 1 && (
+        <div className="category-filter" role="group" aria-label="依類型篩選">
+          <span className="muted small">類型</span>
+          <button type="button" className={`doc-chip ${filter ? '' : 'is-active'}`} onClick={() => setCatFilter(null)}>
+            全部 {specs.length}
+          </button>
+          {catOptions.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              className={`doc-chip ${filter === c.key ? 'is-active' : ''}`}
+              title={c.description}
+              aria-pressed={filter === c.key}
+              onClick={() => setCatFilter(filter === c.key ? null : c.key)}
+            >
+              {c.name} {catCounts[c.key]}
+            </button>
+          ))}
+        </div>
+      )}
+
       {phases.map((phase) => {
-        const list = specs.filter((s) => s.phase_id === phase.id)
+        const all = specs.filter((s) => s.phase_id === phase.id)
+        const list = all.filter((s) => matches(s.doc_type))
+        // 篩選類型時，沒有符合的階段整個不列
+        if (filter && list.length === 0) return null
         // 整個專案都還沒有 Spec 時，上面已經有引導，各階段不用再列
         if (list.length === 0 && !hasSpecs) return null
         if (list.length === 0)
@@ -154,7 +191,7 @@ export function ProjectHome() {
         return (
           <section key={phase.id} className="card">
             <div className="card-title">
-              {phase.name} <span className="muted small">{list.length} 份</span>
+              {phase.name} <span className="muted small">{filter ? `${list.length} / ${all.length} 份` : `${list.length} 份`}</span>
             </div>
             {phase.description && <p className="muted small">{phase.description}</p>}
             <table className="table">
@@ -175,7 +212,7 @@ export function ProjectHome() {
                       <Link to={`/p/${projectId}/s/${s.id}`}>{s.title}</Link>
                     </td>
                     <td>
-                      <DocTypeCell docType={s.doc_type} />
+                      <DocTypeCell docType={s.doc_type} onFilter={setCatFilter} />
                     </td>
                     <td>
                       <span className="row gap-sm">
@@ -361,14 +398,22 @@ function GlossaryDialog(props: { projectId: number; initial: PlanTerm[]; onClose
   )
 }
 
-function DocTypeCell({ docType }: { docType: string }) {
+function DocTypeCell({ docType, onFilter }: { docType: string; onFilter: (category: string) => void }) {
   const templates = useTemplates()
   const categories = useTemplateCategories()
   const template = templates.data?.find((t) => t.key === docType)
   const category = categories.data?.find((c) => c.key === template?.category)
   return (
     <span className="row gap-sm">
-      {category && <CategoryBadge category={category.key}>{category.name}</CategoryBadge>}
+      {category && (
+        <CategoryBadge
+          category={category.key}
+          title={`${category.description}\n按一下只看「${category.name}」類型`}
+          onClick={() => onFilter(category.key)}
+        >
+          {category.name}
+        </CategoryBadge>
+      )}
       <span className="muted small">{template?.name ?? docType}</span>
     </span>
   )

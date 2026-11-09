@@ -135,7 +135,7 @@ def restore_version(spec_id: int, version_no: int, body: RestoreIn, state: AppSt
 def set_label(spec_id: int, version_no: int, body: LabelIn, state: AppState = Depends(get_state)):
     with state.db() as s:
         spec = spec_service.get_spec(s, spec_id)
-        return VersionMeta.model_validate(spec_service.set_label(s, spec, version_no, body.label))
+        return VersionMeta.model_validate(spec_service.set_label(s, spec, version_no, body.label, body.move))
 
 
 @router.get("/{spec_id}/diff")

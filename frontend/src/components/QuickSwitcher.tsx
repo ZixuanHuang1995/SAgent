@@ -33,7 +33,7 @@ export function QuickSwitcher(props: { projectId: number; phases: Phase[]; specs
         to: `/p/${projectId}/s/${s.id}`,
       })),
       { key: 'home', icon: 'overview', label: '專案總覽', detail: '頁面', to: `/p/${projectId}` },
-      { key: 'baselines', icon: 'tag', label: '基準版本', detail: '頁面', to: `/p/${projectId}/baselines` },
+      { key: 'baselines', icon: 'flag', label: '基準版本', detail: '頁面', to: `/p/${projectId}/baselines` },
       { key: 'runs', icon: 'bot', label: 'AI 工作紀錄', detail: '頁面', to: `/p/${projectId}/runs` },
     ]
     const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean)

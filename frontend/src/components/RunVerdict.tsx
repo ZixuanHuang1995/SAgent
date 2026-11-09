@@ -35,9 +35,8 @@ export function RunVerdict(props: { run: Run; disabled?: boolean }) {
 
   return (
     <div className="verdict-box">
-      <div className="verdict-row">
-        <span className="verdict-label">這份 AI 版可以直接交付嗎？</span>
-        <div className="seg seg-sm" role="group" aria-label="這份 AI 版可以直接交付嗎">
+      <span className="verdict-label">這份 AI 版可以直接交付嗎？</span>
+      <div className="seg seg-sm" role="group" aria-label="這份 AI 版可以直接交付嗎">
           {OPTIONS.map((o) => {
             const active = run.human_verdict === o.value
             return (
@@ -54,7 +53,6 @@ export function RunVerdict(props: { run: Run; disabled?: boolean }) {
               </button>
             )
           })}
-        </div>
       </div>
       {run.human_verdict && (
         <input

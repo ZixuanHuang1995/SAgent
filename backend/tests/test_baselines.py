@@ -54,6 +54,33 @@ def test_baseline_snapshot_compare_and_export(client, project):
     assert client.get(f"/api/projects/{pid}/baselines").json() == []
 
 
+def test_baseline_apply_label(client, project):
+    pid = project["project"]["id"]
+    a = _spec(client, project, "登入功能", "# 登入\n\nv1")
+    b = _spec(client, project, "報表功能", "# 報表\n\nv1")
+    c = _spec(client, project, "權限功能", "# 權限\n\nv1")
+    # b 的最新版已經有別的標籤：不蓋掉
+    client.put(f"/api/specs/{b['id']}/versions/1/label", json={"label": "草稿"})
+    # c 的舊版已經用了同名標籤：不從舊版搬過來
+    client.put(f"/api/specs/{c['id']}/versions/1/label", json={"label": "需求凍結"})
+    client.put(f"/api/specs/{c['id']}/content", json={"content": "# 權限\n\nv2"})
+
+    r = client.post(f"/api/projects/{pid}/baselines", json={"name": "需求凍結", "apply_label": True})
+    assert r.status_code == 201, r.text
+    assert r.json()["labeled_count"] == 1
+    def labels(spec):
+        return {v["version_no"]: v["label"] for v in client.get(f"/api/specs/{spec['id']}/versions").json()}
+
+    assert labels(a) == {1: "需求凍結"}
+    assert labels(b) == {1: "草稿"}
+    assert labels(c) == {1: "需求凍結", 2: None}
+
+    # 沒有勾選時不加標籤，也不回 labeled_count
+    r = client.post(f"/api/projects/{pid}/baselines", json={"name": "第二次"})
+    assert r.json()["labeled_count"] is None
+    assert all(v["label"] != "第二次" for v in client.get(f"/api/specs/{a['id']}/versions").json())
+
+
 def test_baseline_requires_versions(client, project):
     pid = project["project"]["id"]
     r = client.post(f"/api/projects/{pid}/baselines", json={"name": "空的"})

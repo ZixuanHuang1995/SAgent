@@ -10,7 +10,7 @@ import { keys, useHealth, useProjectTree, useRuns, useSettings, useTemplates } f
 import { Icon } from './icons'
 import { RunProgress } from './RunProgress'
 import { RunDetailModal } from './RunDetail'
-import { Badge, errorText, Field, Popover, Spinner, useToast } from './ui'
+import { ArrowLabel, Badge, errorText, Popover, Spinner, useToast } from './ui'
 
 /** 撰寫時最多參考幾份同專案的 Spec（後端也是 3） */
 const MAX_REFERENCES = 3
@@ -128,24 +128,28 @@ export function AgentPanel(props: {
       )}
 
       <section className="card">
-        <div className="card-title">這份 Spec 的 AI 工作紀錄</div>
+        <div className="card-title">AI 工作紀錄</div>
         {runs.isLoading && <Spinner small />}
-        {runs.data?.length === 0 && <div className="muted small">還沒有執行過。</div>}
+        {runs.data?.length === 0 && <div className="muted small">這份 Spec 還沒有執行過 AI 工作。</div>}
         <ul className="run-list">
           {runs.data?.map((r) => {
             const ms = runDuration(r)
             return (
               <li key={r.id}>
                 <button className="run-list-item" onClick={() => setDetailRunId(r.id)}>
-                  <span>#{r.id}</span>
-                  <Badge tone={r.status === 'succeeded' ? 'green' : r.status === 'failed' ? 'red' : r.status === 'cancelled' ? 'neutral' : 'blue'}>
+                  <span className="run-list-main">
+                    <span className="run-list-title">
+                      {r.mode === 'revise' ? '依需求修訂' : '撰寫整份文件'}
+                      {r.result_version_no ? ` → v${r.result_version_no}` : ''}
+                    </span>
+                    <span className="muted small">
+                      #{r.id}・{relativeTime(r.created_at)}
+                      {ms !== null && r.finished_at ? `・花了 ${formatDuration(ms)}` : ''}
+                    </span>
+                  </span>
+                  <Badge tone={r.status === 'succeeded' ? 'green' : r.status === 'failed' ? 'red' : r.status === 'planned' ? 'amber' : r.status === 'running' ? 'blue' : 'neutral'}>
                     {RUN_STATUS[r.status]}
                   </Badge>
-                  <span className="muted small">
-                    {r.mode === 'revise' ? '修訂' : '撰寫'}・{relativeTime(r.created_at)}
-                    {ms !== null && r.finished_at ? `・${formatDuration(ms)}` : ''}
-                    {r.result_version_no ? `・→ v${r.result_version_no}` : ''}
-                  </span>
                 </button>
               </li>
             )
@@ -238,13 +242,13 @@ function RunForm({ spec }: { spec: SpecDetail }) {
       </div>
       {showHelp && (
         <div className="info-box small">
-          三個 agent 合作：<b className="c-planner">Planner</b> 規劃大綱 → <b className="c-writer">Writer</b> 逐節撰寫並畫圖 →{' '}
-          <b className="c-reviewer">Reviewer</b> 審查，有問題再交回 Writer 修訂。結果會存成新版本，舊版本都保留。
+          三個 agent 合作：<b>Planner</b> 規劃大綱 → <b>Writer</b> 逐節撰寫並畫圖 → <b>Reviewer</b>{' '}
+          審查，有問題再交回 Writer 修訂。結果會存成新版本，舊版本都保留。
           <p className="mt-sm">{RUN_TIME_TEXT}。可以離開這個頁面，完成後會自動存成新版本。</p>
         </div>
       )}
 
-      <div className="seg">
+      <div className="seg" role="group" aria-label="撰寫方式">
         <button className={mode === 'draft' ? 'active' : ''} aria-pressed={mode === 'draft'} onClick={() => setMode('draft')}>
           撰寫整份文件
         </button>
@@ -257,24 +261,23 @@ function RunForm({ spec }: { spec: SpecDetail }) {
           依需求修訂
         </button>
       </div>
-      <div className="muted small mb-sm">
+      <p className="muted small run-form-desc">
         {mode === 'draft'
-          ? `依需求照「${template?.name ?? spec.doc_type}」的章節從頭寫一份完整文件（目前內容會被新版本取代，但仍保留在版本歷程）。`
-          : '在目前內容上修改：只改跟需求有關的章節，其他章節保持不變。'}
-      </div>
+          ? `照「${template?.name ?? spec.doc_type}」的章節從頭寫一份完整文件。目前的內容會保留在版本歷程。`
+          : '在目前內容上修改：只改跟需求有關的章節，其他章節不動。'}
+      </p>
 
-      <Field
-        label={mode === 'draft' ? '需求內容' : '修訂需求'}
-        hint={
-          <span className="row gap-sm">
-            <span>{help.hint}</span>
-            <button className="link-btn" type="button" onClick={() => fileInput.current?.click()}>
-              從檔案載入
-            </button>
-          </span>
-        }
-      >
+      <div className="field">
+        <div className="field-head">
+          <label className="field-label" htmlFor={`requirement-${spec.id}`}>
+            {mode === 'draft' ? '需求內容' : '修訂需求'}
+          </label>
+          <button className="link-btn link-quiet small" type="button" onClick={() => fileInput.current?.click()}>
+            從檔案載入
+          </button>
+        </div>
         <textarea
+          id={`requirement-${spec.id}`}
           className="input textarea"
           rows={7}
           value={requirement}
@@ -287,7 +290,8 @@ function RunForm({ spec }: { spec: SpecDetail }) {
           }}
           placeholder={help.placeholder}
         />
-      </Field>
+        <span className="field-hint">{help.hint}</span>
+      </div>
       <input
         ref={fileInput}
         type="file"
@@ -301,7 +305,7 @@ function RunForm({ spec }: { spec: SpecDetail }) {
       />
 
       {mode === 'draft' && (
-        <label className="check-row mb-sm">
+        <label className="check-row run-option">
           <input
             type="checkbox"
             checked={planFirst}
@@ -315,7 +319,7 @@ function RunForm({ spec }: { spec: SpecDetail }) {
       )}
 
       {candidates.length > 0 && (
-        <div className="ref-picker mb-sm">
+        <div className="ref-picker run-option">
           <Popover
             trigger={
               <>
@@ -359,19 +363,26 @@ function RunForm({ spec }: { spec: SpecDetail }) {
 
       {/* 這次會用的設定：AI 面板不另外選，免得開始之後才發現修訂輪數、畫圖跟想的不一樣 */}
       {settings.data && (
-        <div className="muted small mb-sm">
-          這次會用：{settings.data.default_model}・
-          {settings.data.max_revisions === 0 ? '不修訂' : `修訂最多 ${settings.data.max_revisions} 輪`}・
-          {settings.data.diagrams && template?.allow_diagrams !== false ? '畫圖' : '不畫圖'}{' '}
-          <Link to="/settings">改設定</Link>
-        </div>
+        <dl className="run-settings" aria-label="這次會用的設定">
+          <dt>模型</dt>
+          <dd>{settings.data.default_model}</dd>
+          <dt>修訂</dt>
+          <dd>{settings.data.max_revisions === 0 ? '不自動修訂' : `最多 ${settings.data.max_revisions} 輪`}</dd>
+          <dt>圖表</dt>
+          <dd>{settings.data.diagrams && template?.allow_diagrams !== false ? '會畫圖' : '不畫圖'}</dd>
+          <dd className="run-settings-foot">
+            <Link to="/settings" className="small">
+              改設定
+            </Link>
+          </dd>
+        </dl>
       )}
 
       {/* 按鈕固定在側欄底部，表單很長時也不用捲動才找得到 */}
       <div className="run-form-actions">
         {ollamaDown && <div className="error-box">連不到 Ollama（{health.data?.ollama.url}），請先啟動 Ollama。</div>}
         <button className="btn btn-primary btn-block" onClick={start} disabled={busy || !requirement.trim()} title="Ctrl+Enter">
-          {busy ? <Spinner small /> : '開始 AI 撰寫'}
+          {busy ? <Spinner small /> : <ArrowLabel>開始 AI 撰寫</ArrowLabel>}
         </button>
         {/* 一行就好，固定在底部的區塊越矮，上面的欄位越不會被蓋住 */}
         <div className="muted small run-form-note">{RUN_TIME_TEXT}，可以離開頁面</div>

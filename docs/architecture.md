@@ -64,8 +64,8 @@ erDiagram
 2. 內容沒變就不產生新版本。
 3. 存檔時會帶「我是根據第幾版改的」。如果別人（或 AI）已經存了更新的版本，會回 409，畫面提示使用者比較差異後再決定。
 4. 還原 = 把舊版內容存成新版本，不會刪掉任何版本。
-5. 版本可以加標籤（例如「客戶確認版」）。
-6. 基準版本記錄整個專案（或某個階段）當下的版本組合，之後可以：
+5. 版本可以加標籤（例如「客戶確認版」）。同一份 Spec 的標籤不能重複，已經在別的版本時回 409；帶 `move: true` 會把標籤從那一版移過來（同一個交易）。`GET /api/projects/{id}/labels` 列出專案用過的標籤和次數，加標籤時給使用者挑，名稱才會一致。
+6. 基準版本記錄整個專案（或某個階段）當下的版本組合。建立時 `apply_label: true` 會替納入的每一版加上跟基準同名的標籤：只加在還沒有標籤的版本，同一份 Spec 的其他版本已經用了這個名稱時也跳過，不蓋掉也不搬移；回傳的 `labeled_count` 是有這個標籤的 Spec 數。基準版本之後可以：
    - 跟目前最新版比較：哪些 Spec 有變更、新增、移除
    - 兩個基準版本互相比較
    - 匯出當時的所有文件（zip）
@@ -370,11 +370,12 @@ Reviewer 只做兩件事，不評論寫得好不好、完不完整，也不打�
 | POST | `/api/specs/{id}/archive`、`/unarchive` | 封存、取消封存 |
 | GET | `/api/specs/{id}/versions`、`/versions/{no}` | 版本清單、版本內容 |
 | POST | `/api/specs/{id}/versions/{no}/restore` | 還原 |
-| PUT | `/api/specs/{id}/versions/{no}/label` | 版本標籤 |
+| PUT | `/api/specs/{id}/versions/{no}/label` | 版本標籤（`move: true` 從別的版本移過來） |
+| GET | `/api/projects/{id}/labels` | 專案用過的版本標籤和次數 |
 | GET | `/api/specs/{id}/diff` | 差異比較 |
 | GET | `/api/specs/{id}/export` | 下載 Markdown |
 | GET | `/api/specs/{id}/glossary-suggestions` | 從目前版本抽出名詞，跟專案詞彙表比對（只回建議，不寫入） |
-| GET/POST | `/api/projects/{id}/baselines` | 基準版本 |
+| GET/POST | `/api/projects/{id}/baselines` | 基準版本（建立時 `apply_label: true` 順便加同名標籤） |
 | GET/DELETE | `/api/baselines/{id}` | 基準版本內容 |
 | GET | `/api/projects/{id}/compare` | 比較基準版本 |
 | GET | `/api/projects/{id}/export` | 匯出 zip（最新版或某個基準版本） |
