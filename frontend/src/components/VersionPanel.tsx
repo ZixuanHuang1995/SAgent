@@ -74,7 +74,7 @@ export function VersionPanel({ specId, headNo, archived, dirty }: { specId: numb
               <div className="version-line">
                 <strong>v{v.version_no}</strong>
                 {v.version_no === headNo && <Badge tone="blue">最新</Badge>}
-                {v.label && <Badge tone="green"><Icon name="tag" size={12} /> {v.label}</Badge>}
+                {v.label && <Badge tone="outline"><Icon name="tag" size={12} /> {v.label}</Badge>}
                 <Badge tone={SOURCE_TONE[v.source]}>{VERSION_SOURCE[v.source]}</Badge>
                 <span className="spacer" />
                 <LineStats version={v} />

@@ -284,7 +284,12 @@ function BaselineDetail({ projectId, baselineId, onClose }: { projectId: number;
                   </td>
                   <td className="muted">{i.phase_name}</td>
                   <td>
-                    v{i.version_no} {i.label && <Badge tone="green">{i.label}</Badge>}
+                    v{i.version_no}{' '}
+                    {i.label && (
+                      <Badge tone="outline">
+                        <Icon name="tag" size={12} /> {i.label}
+                      </Badge>
+                    )}
                   </td>
                 </tr>
               ))}

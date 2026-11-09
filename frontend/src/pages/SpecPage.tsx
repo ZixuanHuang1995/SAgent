@@ -15,7 +15,7 @@ import { VersionPanel } from '../components/VersionPanel'
 import { Badge, CategoryBadge, ConfirmDialog, Empty, errorText, Menu, MenuItem, MenuSeparator, Popover, Skeleton, Spinner, Splitter, useToast } from '../components/ui'
 import { useElementWidth, useMediaQuery, usePersistent, usePersistentNumber } from '../hooks/layout'
 import { AI_STATUS, extractOutline, slugify, SPEC_STATUS, VERSION_SOURCE } from '../format'
-import { keys, useProjectTree, useSpec, useTemplateCategories, useTemplates } from '../queries'
+import { keys, useProjectTree, useSpec, useTemplateCategories, useTemplates, useVersions } from '../queries'
 import { NewSpecDialog } from './ProjectLayout'
 import { Icon, type IconName } from '../components/icons'
 
@@ -63,6 +63,7 @@ export function SpecPage() {
   const projectId = Number(params.projectId)
   const specId = Number(params.specId)
   const spec = useSpec(specId)
+  const versions = useVersions(specId)
   const tree = useProjectTree(projectId)
   const templates = useTemplates()
   const categories = useTemplateCategories()
@@ -109,6 +110,16 @@ export function SpecPage() {
   const data = spec.data
   const content = draft ?? data?.content ?? ''
   const review = data?.review ?? null
+  // 最新版沒有標籤時，找最近一個加了標籤的舊版本，標題旁提醒「之後又改了幾版」
+  const headNo = data?.head_version_no ?? 0
+  const labeled = data?.head?.label
+    ? null
+    : (versions.data ?? [])
+        .filter((v) => v.label && v.version_no < headNo)
+        .reduce<{ no: number; label: string } | null>(
+          (best, v) => (best && best.no > v.version_no ? best : { no: v.version_no, label: v.label! }),
+          null,
+        )
   const panelTabs = PANEL_TABS.filter((t) => t.key !== 'review' || review)
   const tab: PanelTab = savedTab === 'review' && !review ? 'agent' : savedTab
   const openReview = () => {
@@ -373,7 +384,21 @@ export function SpecPage() {
           <Badge tone={STATUS_TONE[data.status]} title="文件狀態，可以在下方「屬性」修改">
             {SPEC_STATUS[data.status]}
           </Badge>
-          {data.head?.label && <Badge tone="green"><Icon name="tag" size={12} /> {data.head.label}</Badge>}
+          {data.head?.label && (
+            <Badge tone="outline" title="最新版的標籤">
+              <Icon name="tag" size={12} /> {data.head.label}
+            </Badge>
+          )}
+          {labeled && (
+            <button
+              className="badge badge-outline badge-btn"
+              title={`v${labeled.no} 標成「${labeled.label}」，之後又存了 ${headNo - labeled.no} 個版本。按一下比較 v${labeled.no} 和最新版`}
+              onClick={() => setDiff({ from: labeled.no, to: headNo })}
+            >
+              <Icon name="tag" size={12} /> {labeled.label} v{labeled.no}
+              <span className="badge-note">・之後改了 {headNo - labeled.no} 版</span>
+            </button>
+          )}
           {dirty && <Badge tone="amber">未儲存</Badge>}
           {/* AI 工作進行中時，上一次審查的數字已經不準，改顯示 AI 狀態 */}
           {data.ai_status ? (

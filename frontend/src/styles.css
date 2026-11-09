@@ -46,6 +46,9 @@
   --writer-soft: #e8f0fe;
   --reviewer: #d97706;
   --reviewer-soft: #fdf3e2;
+  /* 類型標籤專用（構想），避開狀態用的綠、琥珀、紅 */
+  --pink: #be185d;
+  --pink-soft: #fdeef5;
 
   --diff-add: #e6f6ea;
   --diff-add-text: #166534;
@@ -90,6 +93,8 @@
   --writer-soft: #1a2a42;
   --reviewer: #fbbf24;
   --reviewer-soft: #3a2d12;
+  --pink: #f472b6;
+  --pink-soft: #3a1d2e;
   --diff-add: #15301f;
   --diff-add-text: #86efac;
   --diff-del: #3a1c1f;
@@ -127,6 +132,8 @@
     --writer-soft: #1a2a42;
     --reviewer: #fbbf24;
     --reviewer-soft: #3a2d12;
+    --pink: #f472b6;
+    --pink-soft: #3a1d2e;
     --diff-add: #15301f;
     --diff-add-text: #86efac;
     --diff-del: #3a1c1f;
@@ -597,6 +604,27 @@ select.input:disabled {
 .badge-teal {
   background: var(--accent-soft);
   color: var(--accent);
+}
+.badge-pink {
+  background: var(--pink-soft);
+  color: var(--pink);
+}
+/* 版本標籤：只有框線，跟狀態（實心底色）分開 */
+.badge-outline {
+  padding: 0 7px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text);
+}
+.badge-outline .icon {
+  color: var(--muted);
+}
+button.badge-outline:hover {
+  border-color: var(--accent);
+  filter: none;
+}
+.badge-outline .badge-note {
+  color: var(--muted);
 }
 
 .card {
@@ -2570,16 +2598,16 @@ kbd {
   color: var(--text-2);
 }
 .tree-spec-cat.cat-idea {
-  background: var(--warn-soft);
-  color: var(--warn);
+  background: var(--pink-soft);
+  color: var(--pink);
 }
 .tree-spec-cat.cat-design {
   background: var(--planner-soft);
   color: var(--planner);
 }
 .tree-spec-cat.cat-change {
-  background: var(--success-soft);
-  color: var(--success);
+  background: var(--info-soft);
+  color: var(--writer);
 }
 .tree-spec-cat.cat-algorithm {
   background: var(--accent-soft);
