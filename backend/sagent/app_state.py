@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 
 from .agents.doc_templates import DocTemplate, load_templates
 from .agents.fake_llm import FakeLLM
-from .agents.llm import LLMClient, OllamaClient
+from .agents.llm import LLMClient, LLMError, OllamaClient
+from .agents.openai_llm import OpenAICompatClient
 from .agents.runner import LLMFactory, RunManager
 from .config import Config
 from .db import Base, make_engine, make_session_factory, session_scope
@@ -60,6 +61,18 @@ class AppState:
         if self.cfg.llm_provider == "fake":
             return FakeLLM(model=model, delay=self.cfg.fake_delay)
         seed = opts.get("seed")
+        # 用哪個來源在建立工作時就記在選項裡，之後改設定、續跑都照當時的
+        if opts.get("llm_source") == "cloud":
+            if not self.cfg.cloud_ready:
+                raise LLMError(
+                    "這個 AI 工作要用雲端 API，但這次啟動沒有設定 SAGENT_CLOUD_BASE_URL 和 SAGENT_CLOUD_API_KEY"
+                )
+            return OpenAICompatClient(
+                self.cfg.cloud_base_url,
+                self.cfg.cloud_api_key,
+                model,
+                seed=int(seed) if seed is not None else None,
+            )
         return OllamaClient(
             opts.get("ollama_url") or self.cfg.ollama_url,
             model,

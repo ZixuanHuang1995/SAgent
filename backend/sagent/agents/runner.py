@@ -513,6 +513,12 @@ class RunManager:
             if review_model and review_model != model:
                 reviewer_llm = self.llm_factory(review_model, opts)
             env = await _environment(llm)
+            if opts.get("llm_source") == "cloud":
+                # 工作紀錄留一筆：這次的需求和文件內容送到哪個服務
+                where = f"（{env['base_url']}）" if env.get("base_url") else ""
+                await emitter.emit(
+                    "log", "system", f"這個工作用雲端 API{where}，需求和文件內容會送到這個服務", {"level": "info"}
+                )
             if reviewer_llm is not None and (reviewer_env := await _environment(reviewer_llm)):
                 env["reviewer"] = reviewer_env
             await self._in_thread(self._save_environment, run_id, env, checkpoint is not None)

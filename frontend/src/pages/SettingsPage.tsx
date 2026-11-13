@@ -3,10 +3,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useBlocker, useNavigate } from 'react-router'
-import { api, type ModelInfo, type OllamaCheck, type Settings, type Template, type UmlSyntax } from '../api'
+import { api, type CloudCheck, type ModelInfo, type OllamaCheck, type Settings, type Template, type UmlSyntax } from '../api'
 import { KIND_NAMES } from '../kinds'
 import { Badge, ConfirmDialog, errorText, Field, Skeleton, Spinner, useToast } from '../components/ui'
-import { formatBytes, UML_SYNTAX } from '../format'
+import { formatBytes, hostOf, UML_SYNTAX } from '../format'
 import { keys, useHealth, useModels, useSettings, useTemplateCategories, useTemplates } from '../queries'
 
 /** 審查要讀整份文件，上下文低於這個值時常不夠用 */
@@ -18,7 +18,7 @@ const MAX_CTX = 262144
 type NumberField = 'temperature' | 'num_ctx' | 'max_run_minutes'
 /** seed 可以留空（不固定），空字串存成 null */
 type Form = Omit<Settings, NumberField | 'seed'> & Record<NumberField, string> & { seed: string }
-type Errors = Partial<Record<'ollama_url' | NumberField | 'seed', string>>
+type Errors = Partial<Record<'ollama_url' | 'cloud_model' | NumberField | 'seed', string>>
 const MAX_RUN_MINUTES = 1440
 const MAX_SEED = 2147483647
 
@@ -34,6 +34,7 @@ const normalizeUrl = (url: string) => url.trim().replace(/\/+$/, '')
 function validate(f: Form): Errors {
   const errors: Errors = {}
   if (!/^https?:\/\/[^/\s]+/i.test(f.ollama_url.trim())) errors.ollama_url = '要用 http:// 或 https:// 開頭，例如 http://127.0.0.1:11434'
+  if (f.llm_source === 'cloud' && !f.cloud_model.trim()) errors.cloud_model = '請填模型名稱，按「測試連線」可以列出這個服務有的模型'
   const t = f.temperature.trim() === '' ? NaN : Number(f.temperature)
   if (Number.isNaN(t)) errors.temperature = '請填數字'
   else if (t < 0 || t > 1.5) errors.temperature = '要在 0～1.5 之間'
@@ -54,6 +55,8 @@ function toSettings(f: Form): Settings {
   return {
     ...f,
     ollama_url: normalizeUrl(f.ollama_url),
+    cloud_model: f.cloud_model.trim(),
+    cloud_reviewer_model: f.cloud_reviewer_model.trim(),
     temperature: Number(f.temperature),
     num_ctx: Number(f.num_ctx),
     max_run_minutes: Number(f.max_run_minutes),
@@ -88,6 +91,7 @@ export function SettingsPage() {
   // Context 長度選了「自訂」：數字剛好等於預設選項時也維持自訂，輸入框才不會打到一半消失
   const [ctxCustom, setCtxCustom] = useState(false)
   const [check, setCheck] = useState<OllamaCheck | null>(null)
+  const [cloudCheck, setCloudCheck] = useState<CloudCheck | null>(null)
   const navigate = useNavigate()
   const saved = settings.data ? toForm(settings.data) : null
   const dirty = !!form && !!saved && JSON.stringify(form) !== JSON.stringify(saved)
@@ -138,6 +142,12 @@ export function SettingsPage() {
     onError: (e) => toast(errorText(e), 'error'),
   })
 
+  const testCloud = useMutation({
+    mutationFn: () => api.checkCloud(),
+    onSuccess: (r) => setCloudCheck(r),
+    onError: (e) => toast(errorText(e), 'error'),
+  })
+
   const canSave = dirty && !hasErrors && !save.isPending
   const submit = () => {
     if (form && canSave) save.mutate(toSettings(form))
@@ -168,6 +178,23 @@ export function SettingsPage() {
   const fake = h?.llm_provider === 'fake'
   const ollamaUp = h?.llm_provider === 'ollama' && h.ollama.reachable
   const plantumlOn = !!h?.plantuml.available
+  // 雲端 API：網址和金鑰在 local.env，兩個都有設才能選。cloudOn 是已經存檔、現在生效的來源
+  const cloudReady = !!h?.cloud.configured
+  const cloudOn = h?.llm_source === 'cloud'
+  const cloudHost = h ? hostOf(h.cloud.base_url) : ''
+  const useCloud = form.llm_source === 'cloud'
+  // 雲端模型欄位下方的訊息：連線失敗、還沒填、填的名稱不在這個服務的清單裡（後兩種在測試連線成功後說得更清楚）
+  const cloudModels = cloudCheck?.reachable ? cloudCheck.models : []
+  const cloudModelError =
+    cloudCheck && !cloudCheck.reachable
+      ? cloudCheck.error
+      : errors.cloud_model
+        ? cloudModels.length
+          ? `已連線，這個服務有 ${cloudModels.length} 個模型。請填模型名稱，點輸入框可以從清單挑`
+          : errors.cloud_model
+        : cloudModels.length && !cloudModels.includes(form.cloud_model.trim())
+          ? '這個服務的模型清單裡沒有這個名稱，請確認有沒有打錯'
+          : undefined
 
   // 模型清單：網址改過、測試連線成功時用新網址的清單，否則用已存的網址
   const url = normalizeUrl(form.ollama_url)
@@ -225,8 +252,23 @@ export function SettingsPage() {
           ) : (
             <dl className="kv">
               <dt>模型來源</dt>
-              <dd>{fake ? <Badge tone="amber">示範模式（假模型）</Badge> : 'Ollama（本機）'}</dd>
-              {h.llm_provider === 'ollama' && (
+              <dd>
+                {fake ? (
+                  <Badge tone="amber">示範模式（假模型）</Badge>
+                ) : cloudOn ? (
+                  <>
+                    雲端 API{' '}
+                    {cloudReady ? (
+                      <span className="muted small">{h.cloud.base_url}・{h.cloud.model}</span>
+                    ) : (
+                      <Badge tone="red">這次啟動沒有設定網址和金鑰</Badge>
+                    )}
+                  </>
+                ) : (
+                  'Ollama（本機）'
+                )}
+              </dd>
+              {h.llm_provider === 'ollama' && !cloudOn && (
                 <>
                   <dt>Ollama</dt>
                   <dd>
@@ -285,68 +327,144 @@ export function SettingsPage() {
               示範模式用假模型，這張卡的設定不會用到。要連 Ollama，啟動時不要加 <code>--fake-llm</code>。
             </div>
           )}
-          <Field
-            label="Ollama 網址"
-            error={errors.ollama_url}
+          <FieldGroup
+            label="模型來源"
             hint={
-              checked ? (
-                checked.reachable ? (
-                  <Badge tone="green">
-                    已連線 {checked.version}・{checked.models.length} 個模型
-                  </Badge>
-                ) : (
-                  <span className="error-text">{checked.error}</span>
-                )
-              ) : urlChanged ? (
-                '網址改了：按「測試連線」確認連得到，預設模型的清單也會換成這個網址的'
-              ) : undefined
+              cloudReady ? (
+                `雲端 API 是 ${cloudHost}（OpenAI 相容），網址和金鑰在 local.env 設定。改了之後，下一個開始的 AI 工作才會套用。`
+              ) : (
+                <>
+                  要用雲端 API（OpenAI 相容，例如 Grok、Gemini、OpenRouter），先在 <code>local.env</code> 設定{' '}
+                  <code>SAGENT_CLOUD_BASE_URL</code> 和 <code>SAGENT_CLOUD_API_KEY</code>，再重新啟動 SAgent。
+                </>
+              )
             }
           >
-            <span className="input-with-btn">
-              <input
-                className={`input${errors.ollama_url ? ' invalid' : ''}`}
-                value={form.ollama_url}
-                onChange={(e) => set('ollama_url', e.target.value)}
-              />
-              <button
-                className="btn"
-                type="button"
-                disabled={!!errors.ollama_url || testConnection.isPending}
-                onClick={() => testConnection.mutate(url)}
-              >
-                {testConnection.isPending ? <Spinner small /> : '測試連線'}
+            <div className="seg seg-sm">
+              <button type="button" className={useCloud ? '' : 'active'} aria-pressed={!useCloud} onClick={() => set('llm_source', 'ollama')}>
+                本機 Ollama
               </button>
-            </span>
-          </Field>
-          <Field
-            label="預設模型"
-            error={modelMissing ? '這個 Ollama 沒有這個模型，請換一個，或先用 ollama pull 下載' : undefined}
-            hint="預設是 MoE 模型 qwen3.6:35b-a3b，在 CPU 上比 8B 快、品質也比較好，但需要約 22GB 記憶體；記憶體不到 32GB 改用 qwen3:8b。"
-          >
-            <select className="input" value={form.default_model} onChange={(e) => set('default_model', e.target.value)}>
-              {!modelList?.some((m) => m.name === form.default_model) && <option value={form.default_model}>{form.default_model}</option>}
-              {modelList?.map((m) => (
-                <option key={m.name} value={m.name}>
-                  {modelLabel(m)}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field
-            label="審查模型"
-            error={form.reviewer_model && modelList && !fake && !modelList.some((m) => m.name === form.reviewer_model) ? '這個 Ollama 沒有這個模型，請換一個，或先用 ollama pull 下載' : undefined}
-            hint="Reviewer 用的模型。選「跟預設模型相同」就跟撰寫用同一個；用不同的模型審查，比較不會偏好自己寫的內容，但兩個模型都要載入，記憶體要夠。"
-          >
-            <select className="input" value={form.reviewer_model} onChange={(e) => set('reviewer_model', e.target.value)}>
-              <option value="">跟預設模型相同</option>
-              {form.reviewer_model && !modelList?.some((m) => m.name === form.reviewer_model) && <option value={form.reviewer_model}>{form.reviewer_model}</option>}
-              {modelList?.map((m) => (
-                <option key={m.name} value={m.name}>
-                  {modelLabel(m)}
-                </option>
-              ))}
-            </select>
-          </Field>
+              <button
+                type="button"
+                className={useCloud ? 'active' : ''}
+                aria-pressed={useCloud}
+                disabled={!cloudReady && !useCloud}
+                onClick={() => set('llm_source', 'cloud')}
+              >
+                雲端 API
+              </button>
+            </div>
+          </FieldGroup>
+          {useCloud && (
+            <>
+              <div className="info-box small">
+                用雲端 API 撰寫時，需求內容、專案詞彙表、參考文件和 AI 寫的內容會送到 {cloudHost || '雲端服務'}。
+              </div>
+              <Field
+                label="雲端模型"
+                error={cloudModelError}
+                hint={
+                  cloudCheck?.reachable ? (
+                    <Badge tone="green">{cloudCheck.note || `已連線・${cloudCheck.models.length} 個模型`}</Badge>
+                  ) : (
+                    '填這個服務的模型名稱。按「測試連線」確認金鑰可以用，也會列出有哪些模型。'
+                  )
+                }
+              >
+                <span className="input-with-btn">
+                  <input
+                    className={`input${errors.cloud_model ? ' invalid' : ''}`}
+                    list="cloud-models"
+                    value={form.cloud_model}
+                    onChange={(e) => set('cloud_model', e.target.value)}
+                  />
+                  <button className="btn" type="button" disabled={!cloudReady || testCloud.isPending} onClick={() => testCloud.mutate()}>
+                    {testCloud.isPending ? <Spinner small /> : '測試連線'}
+                  </button>
+                </span>
+              </Field>
+              <Field label="雲端審查模型" hint="Reviewer 用的模型。留空就跟雲端模型相同；用不同的模型審查，比較不會偏好自己寫的內容。">
+                <input
+                  className="input"
+                  list="cloud-models"
+                  placeholder="跟雲端模型相同"
+                  value={form.cloud_reviewer_model}
+                  onChange={(e) => set('cloud_reviewer_model', e.target.value)}
+                />
+              </Field>
+              <datalist id="cloud-models">
+                {cloudCheck?.models.map((m) => (
+                  <option key={m} value={m} />
+                ))}
+              </datalist>
+            </>
+          )}
+          {!useCloud && (
+            <>
+              <Field
+                label="Ollama 網址"
+                error={errors.ollama_url}
+                hint={
+                  checked ? (
+                    checked.reachable ? (
+                      <Badge tone="green">
+                        已連線 {checked.version}・{checked.models.length} 個模型
+                      </Badge>
+                    ) : (
+                      <span className="error-text">{checked.error}</span>
+                    )
+                  ) : urlChanged ? (
+                    '網址改了：按「測試連線」確認連得到，預設模型的清單也會換成這個網址的'
+                  ) : undefined
+                }
+              >
+                <span className="input-with-btn">
+                  <input
+                    className={`input${errors.ollama_url ? ' invalid' : ''}`}
+                    value={form.ollama_url}
+                    onChange={(e) => set('ollama_url', e.target.value)}
+                  />
+                  <button
+                    className="btn"
+                    type="button"
+                    disabled={!!errors.ollama_url || testConnection.isPending}
+                    onClick={() => testConnection.mutate(url)}
+                  >
+                    {testConnection.isPending ? <Spinner small /> : '測試連線'}
+                  </button>
+                </span>
+              </Field>
+              <Field
+                label="預設模型"
+                error={modelMissing ? '這個 Ollama 沒有這個模型，請換一個，或先用 ollama pull 下載' : undefined}
+                hint="預設是 MoE 模型 qwen3.6:35b-a3b，在 CPU 上比 8B 快、品質也比較好，但需要約 22GB 記憶體；記憶體不到 32GB 改用 qwen3:8b。"
+              >
+                <select className="input" value={form.default_model} onChange={(e) => set('default_model', e.target.value)}>
+                  {!modelList?.some((m) => m.name === form.default_model) && <option value={form.default_model}>{form.default_model}</option>}
+                  {modelList?.map((m) => (
+                    <option key={m.name} value={m.name}>
+                      {modelLabel(m)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field
+                label="審查模型"
+                error={form.reviewer_model && modelList && !fake && !modelList.some((m) => m.name === form.reviewer_model) ? '這個 Ollama 沒有這個模型，請換一個，或先用 ollama pull 下載' : undefined}
+                hint="Reviewer 用的模型。選「跟預設模型相同」就跟撰寫用同一個；用不同的模型審查，比較不會偏好自己寫的內容，但兩個模型都要載入，記憶體要夠。"
+              >
+                <select className="input" value={form.reviewer_model} onChange={(e) => set('reviewer_model', e.target.value)}>
+                  <option value="">跟預設模型相同</option>
+                  {form.reviewer_model && !modelList?.some((m) => m.name === form.reviewer_model) && <option value={form.reviewer_model}>{form.reviewer_model}</option>}
+                  {modelList?.map((m) => (
+                    <option key={m.name} value={m.name}>
+                      {modelLabel(m)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </>
+          )}
           <div className="form-row">
             <Field label="溫度（0～1.5）" error={errors.temperature} hint="越低越穩定，越高越有變化">
               <input
@@ -359,53 +477,56 @@ export function SettingsPage() {
                 onChange={(e) => set('temperature', e.target.value)}
               />
             </Field>
-            <Field
-              label="Context 長度"
-              error={errors.num_ctx}
-              hint={
-                ctxTooSmall ? (
-                  <span className="warn-text">
-                    {ctxSetting > 0 ? '' : '目前實際 '}
-                    {ctxActual}，審查要讀整份文件，常常不夠用，建議選 {SUGGESTED_CTX}。
-                  </span>
-                ) : (
-                  `審查要讀整份文件，建議 ${SUGGESTED_CTX} 以上。改了之後 Ollama 要重新載入模型，下一次 AI 撰寫會慢一點。`
-                )
-              }
-            >
-              <select
-                className="input"
-                value={ctxSelect}
-                onChange={(e) => {
-                  const v = e.target.value
-                  if (v === 'custom') {
-                    setCtxCustom(true)
-                    if (form.num_ctx === '0') set('num_ctx', String(SUGGESTED_CTX))
-                  } else {
-                    setCtxCustom(false)
-                    set('num_ctx', v)
-                  }
-                }}
+            {/* Context 長度是 Ollama 載入模型用的，雲端 API 沒有這個設定 */}
+            {!useCloud && (
+              <Field
+                label="Context 長度"
+                error={errors.num_ctx}
+                hint={
+                  ctxTooSmall ? (
+                    <span className="warn-text">
+                      {ctxSetting > 0 ? '' : '目前實際 '}
+                      {ctxActual}，審查要讀整份文件，常常不夠用，建議選 {SUGGESTED_CTX}。
+                    </span>
+                  ) : (
+                    `審查要讀整份文件，建議 ${SUGGESTED_CTX} 以上。改了之後 Ollama 要重新載入模型，下一次 AI 撰寫會慢一點。`
+                  )
+                }
               >
-                <option value="0">由 Ollama 決定（沒有 GPU 時通常只有 4096）</option>
-                <option value="8192">8192</option>
-                <option value="16384">16384（建議）</option>
-                <option value="32768">32768</option>
-                <option value="custom">自訂…</option>
-              </select>
-              {ctxCustom && (
-                <input
-                  className={`input mt-xs${errors.num_ctx ? ' invalid' : ''}`}
-                  type="number"
-                  step={1024}
-                  min={0}
-                  max={MAX_CTX}
-                  aria-label="自訂 Context 長度"
-                  value={form.num_ctx}
-                  onChange={(e) => set('num_ctx', e.target.value)}
-                />
-              )}
-            </Field>
+                <select
+                  className="input"
+                  value={ctxSelect}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    if (v === 'custom') {
+                      setCtxCustom(true)
+                      if (form.num_ctx === '0') set('num_ctx', String(SUGGESTED_CTX))
+                    } else {
+                      setCtxCustom(false)
+                      set('num_ctx', v)
+                    }
+                  }}
+                >
+                  <option value="0">由 Ollama 決定（沒有 GPU 時通常只有 4096）</option>
+                  <option value="8192">8192</option>
+                  <option value="16384">16384（建議）</option>
+                  <option value="32768">32768</option>
+                  <option value="custom">自訂…</option>
+                </select>
+                {ctxCustom && (
+                  <input
+                    className={`input mt-xs${errors.num_ctx ? ' invalid' : ''}`}
+                    type="number"
+                    step={1024}
+                    min={0}
+                    max={MAX_CTX}
+                    aria-label="自訂 Context 長度"
+                    value={form.num_ctx}
+                    onChange={(e) => set('num_ctx', e.target.value)}
+                  />
+                )}
+              </Field>
+            )}
           </div>
         </section>
 

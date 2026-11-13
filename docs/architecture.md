@@ -13,6 +13,7 @@ flowchart LR
     BE --> RUN["AI 工作執行器<br/>排隊、一次一個"]
     RUN --> AG["Planner / Writer / Reviewer"]
     AG -->|"HTTP 串流"| OL["Ollama<br/>本機模型"]
+    AG -.->|"選用"| CL["雲端模型<br/>OpenAI 相容 API"]
     BE -.->|"選用"| PU["PlantUML<br/>伺服器或 jar"]
 ```
 
@@ -22,7 +23,7 @@ flowchart LR
 | 後端 API | Python、FastAPI、SQLAlchemy | 專案、Spec、版本、基準版本、匯出 |
 | AI 工作執行器 | asyncio 背景工作 | 排隊執行 AI 工作、推送進度 |
 | AI 代理 | 自己實作（沒有用 LangChain 等框架） | 規劃、撰寫、審查 |
-| 模型 | Ollama（預設 qwen3.6:35b-a3b） | 地端推論，資料不出公司 |
+| 模型 | Ollama（預設 qwen3.6:35b-a3b）；選用雲端的 OpenAI 相容 API | 預設地端推論，資料留在本機。改用雲端時需求和文件內容會送到那個服務（見 4.11 節） |
 | 資料庫 | SQLite（WAL 模式） | 單一檔案，好備份 |
 
 前端打包後是靜態檔，由後端直接提供。執行時不需要 Node.js。
@@ -355,6 +356,27 @@ Reviewer 只做兩件事，不評論寫得好不好、完不完整，也不打�
 
 新增 Spec 和 AI 撰寫的需求欄，說明和例子寫在範本裡，由 `GET /api/agent/templates` 帶給前端（`format.ts` 的 `requirementHelp()`）。以前依 `style` 分組，`spec` 的五種文件（功能規格書、測試計畫、系統架構、資料庫、變更需求）共用同一段，例子只適合功能規格書。現在每種內建範本各寫一段：說明裡講出 AI 不能編造、要使用者補的事實（測試人員和時程、資料量和保存期限、部署環境等），沒寫就只會標「待確認」；可以接著前一份文件寫的，說明貼哪幾節。例子都用請假系統，比較得出每種文件要填的差別（演算法設計例外，用數獨）。自訂範本沒寫這兩個欄位時，照 `style` 顯示共用的說明。
 
+### 4.11 雲端模型（選用）
+
+SAgent 是地端系統，預設用本機的 Ollama。資料要不要送到外部服務由使用者決定，所以 AI 撰寫可以改接雲端模型：設定頁的「模型來源」（`llm_source`：`ollama` 或 `cloud`）。
+
+| 項目 | 做法 |
+|---|---|
+| API 格式 | OpenAI 相容的 Chat Completions（`agents/openai_llm.py` 的 `OpenAICompatClient`）。xAI Grok、Gemini、Groq、OpenRouter、Ollama 雲端的 `/v1` 和公司內部的閘道都是這個格式，一個用戶端就能接。跟 `OllamaClient` 一樣實作 `LLMClient`，三個 agent 不用知道模型在哪裡 |
+| 網址和金鑰 | 只從環境變數讀（`SAGENT_CLOUD_BASE_URL`、`SAGENT_CLOUD_API_KEY`，`config.py`），兩個都有設才能選雲端。不存資料庫、不能在畫面上填：系統沒有登入功能，網址能在畫面上改的話，任何連得到 SAgent 的人都能把金鑰導到別的地方。金鑰不進工作選項、事件和 API 回應，錯誤訊息裡出現金鑰時會遮掉 |
+| 模型名稱 | 存在設定（`cloud_model`、`cloud_reviewer_model`），跟本機的模型分開記，切回本機不用重填 |
+| 建立工作 | `api/agent.py` 把來源記在 `options.llm_source`，模型和審查模型用雲端的。之後改設定、續跑都照當時的來源（`app_state.py` 的 `default_llm_factory`）。舊的工作沒有這個欄位，當成本機 |
+| 沒有金鑰 | 設定存的是雲端、這次啟動卻沒有金鑰時，建立工作回 503，不會自動改用本機模型（速度和品質差很多，要讓使用者自己決定） |
+| 示範模式 | `llm_provider` 是 `fake` 時一律不用雲端（`services/settings.py` 的 `uses_cloud()`），什麼都不會送出去 |
+| JSON 輸出 | `response_format` 的 `json_schema`。服務回 400 時退到 `json_object`，再不行就不帶，交給 `chat_json` 的重試和備案；輸入太長這類 400 不會降級 |
+| 參數不相容 | 400 的訊息點名參數時調整後再試：`max_tokens` 換成 `max_completion_tokens`，`seed`、`temperature`、`stream_options` 拿掉。同一個用戶端（一個工作）之後的呼叫照這個結果 |
+| 用量上限 | 429 和 5xx 等一下再試，最多 3 次；等多久照 `Retry-After`（最多 60 秒），沒有就用 2、5、15 秒 |
+| 用量和環境 | token 數從串流最後的 `usage` 讀（`stream_options.include_usage`）。雲端沒有讀提示詞和生成的時間拆解，也查不到上下文長度（回 0），所以不會警告上下文不夠、第一輪審查也不分批。`environment` 只記 `provider` 和 `base_url`，沒有 digest：同一個模型名稱背後換了版本看不出來 |
+| 系統狀態 | `GET /api/health` 回 `llm_source` 和 `cloud`（有沒有設定、網址、模型），用雲端時不檢查 Ollama。這個 API 畫面常常呼叫，所以不連雲端；要確認連得到用 `POST /api/cloud/check`（查 `/models`，沒有這個端點的服務當成連得到、但沒有清單） |
+| 工作紀錄 | 用雲端的工作開始時記一則 log：用的是哪個網址，需求和文件內容會送到那裡 |
+
+還沒做的：提示詞和流程是為地端小模型調的，換成雲端模型沒有重新調整，也沒有跑過 SpecEval；`scripts/` 的工具（`run_pipeline.py`、SpecEval、可靠度評估）還是直接用 `OllamaClient`；沒有辦法關掉雲端模型的 thinking。
+
 ## 5. API 一覽
 
 | 方法 | 路徑 | 說明 |
@@ -390,7 +412,8 @@ Reviewer 只做兩件事，不評論寫得好不好、完不完整，也不打�
 | POST | `/api/agent/runs/{id}/cancel` | 取消（排隊中、執行中、等待確認大綱） |
 | GET/PUT | `/api/settings` | 設定。Ollama 網址要是 http:// 或 https:// 開頭 |
 | POST | `/api/ollama/check` | 設定頁的「測試連線」：用還沒存檔的網址查 Ollama 版本和模型清單，不改設定 |
-| GET | `/api/health` | 系統狀態（含已載入的模型和上下文長度、PlantUML、資料資料夾 `data_dir`） |
+| POST | `/api/cloud/check` | 設定頁的「測試連線」（雲端 API）：用環境變數的網址和金鑰查有哪些模型，不收任何參數 |
+| GET | `/api/health` | 系統狀態（含模型來源 `llm_source`、雲端 API 有沒有設定、已載入的模型和上下文長度、PlantUML、資料資料夾 `data_dir`） |
 | POST | `/api/render/plantuml` | PlantUML 轉 SVG |
 
 輸入資料不正確（422）時，`services/validation.py` 把 pydantic 的錯誤轉成中文，例如「輸入資料不正確：溫度不能大於 1.5」。欄位的中文名稱在 `FIELD_LABELS`，沒列到的顯示原本的欄位名稱；認不得的錯誤種類照原本的英文訊息顯示。
@@ -408,6 +431,7 @@ backend/sagent/
   services/          版本控制、基準版本、匯出、差異、圖表檢查、插入圖表的骨架、PlantUML
   agents/
     llm.py           Ollama 用戶端（串流、JSON Schema）
+    openai_llm.py    雲端模型用戶端（OpenAI 相容 API，選用）
     planner.py       Planner
     writer.py        Writer
     reviewer.py      Reviewer

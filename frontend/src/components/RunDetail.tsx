@@ -36,7 +36,10 @@ export function RunDetailModal(props: {
               <div className="card-title">設定</div>
               <dl className="kv">
                 <dt>模型</dt>
-                <dd>{run.model}</dd>
+                <dd>
+                  {run.model}
+                  {run.options.llm_source === 'cloud' && <span className="muted small">（雲端 API）</span>}
+                </dd>
                 {!!run.options.reviewer_model && run.options.reviewer_model !== run.model && (
                   <>
                     <dt>審查模型</dt>

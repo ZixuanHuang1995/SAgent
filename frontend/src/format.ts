@@ -158,6 +158,17 @@ export const PROJECT_DESC_HINT = '可以寫：給誰用、要解決什麼問題�
 
 /** AI 撰寫一份文件大概要多久（CPU 推論），各處的說明都用這個 */
 export const RUN_TIME_TEXT = '本機 CPU 上一份文件約 30～70 分鐘'
+/** 用雲端 API 時的說法：速度看服務，不寫死時間 */
+export const RUN_TIME_TEXT_CLOUD = '用雲端模型撰寫，時間依服務而定'
+
+/** 網址只留主機名稱，例如 https://api.x.ai/v1 → api.x.ai；不是網址時照原樣 */
+export function hostOf(url: string): string {
+  try {
+    return new URL(url).host || url
+  } catch {
+    return url
+  }
+}
 
 const REQUIREMENT_HELP: Record<Template['style'], { hint: string; placeholder: string }> = {
   idea: {

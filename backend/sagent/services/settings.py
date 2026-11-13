@@ -39,6 +39,12 @@ class AppSettings(BaseModel):
     store_prompts: bool = False
     # 實驗（C-19）：Writer 的章節提示詞加上人改過的同一節當範例（<資料資料夾>/examples/<文件類型>/<章節>.md）
     fewshot_examples: bool = False
+    # 模型來源：ollama 本機，cloud 雲端的 OpenAI 相容 API（網址和金鑰在環境變數，見 config.py）。
+    # 預設是本機；要不要把需求和文件內容送到雲端服務由使用者決定
+    llm_source: Literal["ollama", "cloud"] = "ollama"
+    # 雲端的撰寫模型和審查模型（空白 = 跟撰寫用同一個）。跟本機的模型分開記，切回本機不用重填
+    cloud_model: str = Field("", max_length=200)
+    cloud_reviewer_model: str = Field("", max_length=200)
 
 
 class SettingsPatch(BaseModel):
@@ -55,6 +61,18 @@ class SettingsPatch(BaseModel):
     seed: int | None = Field(None, ge=0, le=2**31 - 1)
     store_prompts: bool | None = None
     fewshot_examples: bool | None = None
+    llm_source: Literal["ollama", "cloud"] | None = None
+    cloud_model: str | None = Field(None, max_length=200)
+    cloud_reviewer_model: str | None = Field(None, max_length=200)
+
+
+CLOUD_SETUP_HINT = "請在 local.env 設定 SAGENT_CLOUD_BASE_URL 和 SAGENT_CLOUD_API_KEY，再重新啟動 SAgent"
+CLOUD_NOT_READY = f"還沒設定雲端 API：{CLOUD_SETUP_HINT}"
+
+
+def uses_cloud(cfg: Config, current: AppSettings) -> bool:
+    """這次 AI 工作要不要用雲端 API。示範模式（假模型）一律不用，什麼都不會送出去。"""
+    return cfg.llm_provider != "fake" and current.llm_source == "cloud"
 
 
 def check_http_url(url: str, label: str) -> None:
@@ -90,8 +108,16 @@ def update_settings(s: Session, cfg: Config, patch: SettingsPatch) -> AppSetting
             changes[key] = changes[key].strip().rstrip("/")
     if "ollama_url" in changes:
         check_http_url(changes["ollama_url"], "Ollama 網址")
+    for key in ("cloud_model", "cloud_reviewer_model"):
+        if key in changes:
+            changes[key] = changes[key].strip()
     current.update(changes)
     validated = AppSettings.model_validate(current)
+    if validated.llm_source == "cloud":
+        if not cfg.cloud_ready:
+            raise BadRequest(CLOUD_NOT_READY)
+        if not validated.cloud_model:
+            raise BadRequest("模型來源選雲端 API 時，要填雲端模型的名稱")
     row = s.get(Setting, _KEY)
     if row is None:
         s.add(Setting(key=_KEY, value=validated.model_dump()))

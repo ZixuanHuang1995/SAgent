@@ -4,7 +4,7 @@
 
 ## 專案概要
 
-- SAgent：用網頁撰寫、管理系統分析文件（Spec），由本機 Ollama 模型協助撰寫。
+- SAgent：用網頁撰寫、管理系統分析文件（Spec），由本機 Ollama 模型協助撰寫；也可以改接雲端的 OpenAI 相容 API（選用）。
 - 後端 `backend/`：Python 3.11 以上、FastAPI、SQLAlchemy、SQLite。用 uv 管理套件，沒有 uv 時用 `backend\.venv`（見「環境注意事項」）。
 - 前端 `frontend/`：React 19、Vite 8、TypeScript、TanStack Query、CodeMirror、Mermaid 12。
 - 前端打包到 `frontend/dist`，由後端直接提供。執行時不需要 Node.js。
@@ -46,6 +46,7 @@
 | 提示詞、agent 流程 | pytest 用假模型，只能測流程。要看真模型的結果用 `run_pipeline.py`，但 CPU 上一份文件要 30～70 分鐘，先問使用者再跑。改之前和之後用 `analyze_runs.py` 比較，改完跑 `verify_real_model.py` 確認沒有壞掉。判斷改好或改壞看 SpecEval 的可交付率，不看錯誤數：用 SpecEval tiny-4 確認沒變壞，合併前跑 full-12（`docs/real-model-test-plan.md` 第 4 節） |
 | 圖表語法規則（`diagram_kinds.py`、`services/diagrams.py`） | 跑 `tests/test_diagrams.py`。它用前端同版本 Mermaid 產生的標準答案比對 |
 | 插入圖表的骨架（`services/diagram_snippets.py`） | 用 `mermaid-validate.mjs` 檢查改過的骨架，更新 `mermaid_cases.json` 裡對應的 `snippet_*` 案例，再跑 `tests/test_diagrams.py`（會比對案例和骨架是否一致） |
+| 雲端模型用戶端、模型來源（`agents/openai_llm.py`、`app_state.py` 的 `default_llm_factory`） | 跑 `tests/test_cloud_llm.py`（不連真的服務）。示範模式不會用雲端，`sagent-demo` 看不到雲端模式的畫面；要看的話另外起一個假的 OpenAI 相容服務（內容可以用 `FakeLLM` 產生），把兩個環境變數指到它 |
 | 升級 Mermaid | 用 `frontend/scripts/mermaid-validate.mjs` 重新產生 `backend/tests/data/mermaid_cases.json`，再跑測試 |
 
 ## 程式在哪裡
@@ -59,7 +60,7 @@
 | `models.py`、`migrations.py` | 資料表、舊資料庫升級 |
 | `api/` | API 路由，保持精簡，邏輯放 `services/` |
 | `services/` | 版本控制、基準版本、匯出、差異、圖表檢查、插入圖表的骨架、PlantUML、審查進度和人工判斷（`reviews.py`）、詞彙表抽取（`glossary.py`）、參考文件（`references.py`）、電腦保持喚醒（`power.py`） |
-| `agents/` | `planner.py`、`writer.py`、`reviewer.py`、`pipeline.py`、`runner.py`、`prompts.py`、`diagram_kinds.py`、`fake_llm.py`、`zh.py`、`examples.py`（few-shot 範例，實驗） |
+| `agents/` | `planner.py`、`writer.py`、`reviewer.py`、`pipeline.py`、`runner.py`、`prompts.py`、`diagram_kinds.py`、`fake_llm.py`、`zh.py`、`examples.py`（few-shot 範例，實驗）、`llm.py`（Ollama 用戶端）、`openai_llm.py`（雲端模型用戶端，OpenAI 相容 API） |
 | `doc_templates/` | 內建文件範本（YAML） |
 
 `scripts/speceval/`：SpecEval 評估工具（對照組 `controls.py`、任務卡 `build_tasks.py`、執行器 `run_suite.py`、L1 `l1.py`、L2 評審 `judge.py`、trace 匯出 `export_traces.py`、記憶稽核 `memory_audit.py`、挑任務 `mine_tasks.py`、排程 `nightly.ps1`）。輸出放 `speceval-out/`，不進 git。研究計劃的修改清單和真模型要確認的事見 `docs/real-model-test-plan.md` 第 4 節和各檔案開頭。
@@ -126,6 +127,7 @@
 
 - 模型是在 CPU 上跑的 8B 左右小模型，又慢又容易出錯。改提示詞或流程前，先讀 `docs/architecture.md` 第 4.2 節「為了小模型做的設計」。
 - 不要用 LangChain 之類的框架，代理是自己實作的。
+- 模型來源有兩種：本機 Ollama（預設）和雲端的 OpenAI 相容 API（`agents/openai_llm.py`，見 `docs/architecture.md` 第 4.11 節）。雲端的網址和金鑰只從環境變數讀（`SAGENT_CLOUD_BASE_URL`、`SAGENT_CLOUD_API_KEY`），不要改成存資料庫或從畫面帶進來（沒有登入功能，金鑰會被導到別的地方）；金鑰不能進工作選項、事件、API 回應和錯誤訊息。示範模式（假模型）一律不用雲端。提示詞還是為小模型調的，`scripts/` 的工具只接 Ollama。
 - 文件的寫作規則有六種，由範本的 `style` 決定：`spec` 規格文件（只寫需求有的內容）、`advice` 建議類文件（可以提出需求沒寫的做法）、`idea` 構想文件（不寫細節規格，有使用者故事和粗略的驗收條件，只有「可能的做法」一節可以提建議）、`decision` 技術決策文件（限制和評估標準照需求，方案可以由 AI 提出，不能編造數字）、`algorithm` 演算法設計文件（問題的事實照需求，解法、虛擬碼由 AI 設計）、`experiment` 實驗設計文件（評估對象和判斷標準照需求，實驗方法由 AI 設計，不能寫實驗結果）。每種的寫作規則不同，見 `docs/architecture.md` 第 4.6、4.7、4.9 節。改其中一種的寫作規則時，不要動到其他種。內建範本已經沒有 `experiment`，但自訂範本還能用，程式和測試都要保留。
 - 內建範本有 9 個，`order` 1～9 就是寫 Spec 的順序：構想提案、UI/UX 設計建議（類型 Concept）、功能規格書、測試計畫、技術決策、系統架構設計、資料庫設計、演算法設計、變更需求說明。移除的 5 個（使用案例規格、SDD 五節、API 規格、實驗設計、變更紀錄）備份在 `backup/doc_templates/`，測試用 `conftest.py` 的 `BACKUP_TEMPLATES`、`install_backup_template()` 讀它們，不要刪。
 - Reviewer 只找格式、邏輯錯誤（交給 Writer 修）和需要人工覆核的地方（只列給使用者），不評論完整度、不打分數。格式問題盡量用程式檢查；空洞和照抄由程式檢查（`static_checks()`），不要改成叫模型判斷。審查可以用另一個模型（`reviewer_model`）。各種文件共用審查提示詞 `reviewer_system()`，見 `docs/architecture.md` 第 4.8 節。
@@ -140,7 +142,7 @@
 
 - 測試不連 Ollama，全部用 `FakeLLM`。
 - `backend/tests/conftest.py` 的 fixture：
-  - `cfg`：資料放在暫存目錄、假模型、沒有延遲
+  - `cfg`：資料放在暫存目錄、假模型、沒有延遲、沒有雲端 API（這台有設環境變數也不會用到）
   - `client`：已經帶 `X-SAgent-Client` 標頭的 `TestClient`；建立過的 `FakeLLM` 會記在 `fake_llms`
   - `slow_client`：假模型每次呼叫停 0.2 秒，測取消和排隊用
   - `project`：建好一個專案
@@ -152,7 +154,7 @@
 - Windows，PowerShell 5.1。`.ps1` 檔要存成 UTF-8 with BOM，不然中文會變亂碼，還會出現語法錯誤。
 - 這台沒有 GPU，Ollama 只能用 CPU。不要隨便跑真模型。
 - Java（Temurin JRE 21）裝在 `D:\java\jdk-21.0.13+9-jre`，沒有加進 PATH；`start.ps1` 從 `local.env`（不進版控）讀 `SAGENT_JAVA` 指到它。`tools/plantuml.jar` 是 v1.2026.9，所以 PlantUML 是啟用的（jar 模式）。直接用 `sagent serve` 啟動、沒經過 `start.ps1` 時沒有 `SAGENT_JAVA`，PlantUML 會是未啟用。
-- 這是地端系統，資料不能送到外部服務（例如公開的 PlantUML 伺服器）。
+- 這是地端系統，預設資料留在本機，但資料不是一定不能送到外部服務，要不要送由使用者決定（2026-11-13 使用者說明）。AI 撰寫可以改接雲端模型（設定頁的「模型來源」，見 `docs/architecture.md` 第 4.11 節）。開發時沒有被要求，不要自己把 `data/` 的內容送到外部；測試和預覽不要用真的雲端金鑰（測試用 `httpx.MockTransport`）。
 - `data/` 是使用者的正式資料，不要刪改。測試和示範用暫存目錄或 `data-demo/`。`data-demo/` 目前是 2026-11-02 從使用者提供的 5 個「匯出全部（zip）」檔匯入的示範資料（設備報修、採購請購、會議室預約、客服工單、數獨，共 32 份 Spec）：只匯入內建 8 種文件類型（略過使用案例規格、UI/UX、SDD、API 規格 20 份），階段改成新名稱，5 份文件裡提到被略過文件的句子改掉了；另外加了使用者自己的「貪食蛇遊戲」（構想提案、功能規格書各 1 份，匯入前審查修正過編號、流程圖、前後矛盾和沒有根據的數字），共 6 個專案、34 份 Spec。每份只有一個版本，沒有 AI 工作紀錄和基準版本。zip 和匯入腳本都不在 repo 裡，用 repo 的東西重建不出這份資料，不要隨便覆蓋；`scripts/seed_demo.py --script` 產生的是另一套。畫面上測試新增的資料不影響。
 - `agents/zh.py` 會把「峰」「群」改成「峯」「羣」，示範內容檔要避開這兩個字，不然 `check_demo_content.py` 會當成簡體字。
 - 8765 埠常被使用者自己開的 SAgent 占用，預覽用 8766。

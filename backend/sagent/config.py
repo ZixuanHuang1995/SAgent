@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -32,6 +32,14 @@ class Config:
     allowed_hosts: list[str]
     # AI 工作跑的時候讓電腦保持喚醒（Windows），見 services/power.py
     keep_awake: bool = True
+    # 雲端模型（選用）：OpenAI 相容 API 的網址和金鑰。兩個都有設才能在設定頁選「雲端 API」。
+    # 只從環境變數讀，不存資料庫、不經過網頁：沒有登入功能，網址能在畫面上改的話，金鑰會被送到別的地方
+    cloud_base_url: str = ""
+    cloud_api_key: str = field(default="", repr=False)
+
+    @property
+    def cloud_ready(self) -> bool:
+        return bool(self.cloud_base_url and self.cloud_api_key)
 
     @property
     def templates_dir(self) -> Path:
@@ -68,6 +76,8 @@ def load_config(**overrides) -> Config:
         fake_delay=float(env.get("SAGENT_FAKE_DELAY", "0.01")),
         allowed_hosts=_allowed_hosts(host, env.get("SAGENT_ALLOWED_HOSTS", "")),
         keep_awake=env.get("SAGENT_KEEP_AWAKE", "1").strip().lower() not in ("0", "false", "no", "off"),
+        cloud_base_url=env.get("SAGENT_CLOUD_BASE_URL", "").strip().rstrip("/"),
+        cloud_api_key=env.get("SAGENT_CLOUD_API_KEY", "").strip(),
     )
     for key, value in overrides.items():
         setattr(cfg, key, value)

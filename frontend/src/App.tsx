@@ -1,6 +1,7 @@
 import { createBrowserRouter, Link, Outlet, RouterProvider, useMatch, useParams, useRouteError } from 'react-router'
 import { Icon } from './components/icons'
 import { RunIndicator } from './components/RunIndicator'
+import { hostOf } from './format'
 import { useHealth, useProjectTree } from './queries'
 import { useThemePref, type ThemePref } from './theme'
 import { BaselinesPage } from './pages/BaselinesPage'
@@ -21,6 +22,20 @@ function HealthIndicator() {
         示範模式（假模型）
       </Link>
     )
+  if (h.llm_source === 'cloud') {
+    if (!h.cloud.configured)
+      return (
+        <Link to="/settings" className="health health-bad" title="模型來源是雲端 API，但這次啟動沒有設定網址和金鑰">
+          雲端 API 沒有設定
+        </Link>
+      )
+    // 這裡不連雲端確認（要確認用設定頁的「測試連線」），所以圓點是中性的灰色
+    return (
+      <Link to="/settings" className="health" title={`AI 撰寫用雲端 API，需求和文件內容會送到 ${hostOf(h.cloud.base_url)}`}>
+        雲端 API・{h.cloud.model}
+      </Link>
+    )
+  }
   return h.ollama.reachable ? (
     <Link to="/settings" className="health health-ok" title={`Ollama ${h.ollama.version}（${h.ollama.url}）`}>
       Ollama 已連線・{h.default_model}

@@ -33,6 +33,9 @@ def cfg(tmp_path: Path):
         plantuml_jar=tmp_path / "no.jar",
         allowed_hosts=["127.0.0.1", "localhost", "testserver"],
         keep_awake=False,  # 測試不碰真的電源設定；保持喚醒另外用假的 API 測
+        # 這台有設雲端 API 的環境變數時，測試也不能用到
+        cloud_base_url="",
+        cloud_api_key="",
     )
 
 

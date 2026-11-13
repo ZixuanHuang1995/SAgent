@@ -388,13 +388,24 @@ export interface Settings {
   store_prompts: boolean
   // 實驗：Writer 用人改過的同一節當範例（資料資料夾的 examples/）
   fewshot_examples: boolean
+  // 模型來源：ollama 本機、cloud 雲端的 OpenAI 相容 API（網址和金鑰在 local.env）
+  llm_source: LlmSource
+  // 雲端的撰寫模型和審查模型（空字串 = 跟撰寫用同一個）
+  cloud_model: string
+  cloud_reviewer_model: string
 }
+
+export type LlmSource = 'ollama' | 'cloud'
 
 export interface Health {
   status: string
   version: string
   llm_provider: string
   default_model: string
+  /** 現在的 AI 工作用哪裡的模型。示範模式（llm_provider 是 fake）時一律是 ollama */
+  llm_source: LlmSource
+  /** 雲端 API：有沒有在 local.env 設定網址和金鑰、網址、目前選的模型。金鑰不會回傳 */
+  cloud: { configured: boolean; base_url: string; model: string }
   ollama: {
     url: string
     reachable: boolean
@@ -416,6 +427,18 @@ export interface OllamaCheck {
   /** 連不到時給使用者看的原因 */
   error: string
   models: ModelInfo[]
+}
+
+/** 設定頁的「測試連線」（雲端 API）：用 local.env 的網址和金鑰查有哪些模型 */
+export interface CloudCheck {
+  configured: boolean
+  base_url: string
+  reachable: boolean
+  /** 連不到時給使用者看的原因 */
+  error: string
+  /** 連得到但有話要說，例如這個服務不提供模型清單 */
+  note: string
+  models: string[]
 }
 
 export class ApiError extends Error {
@@ -564,6 +587,7 @@ export const api = {
   settings: () => request<Settings>('GET', '/api/settings'),
   updateSettings: (body: Partial<Settings>) => request<Settings>('PUT', '/api/settings', body),
   checkOllama: (url: string) => request<OllamaCheck>('POST', '/api/ollama/check', { url }),
+  checkCloud: () => request<CloudCheck>('POST', '/api/cloud/check'),
   renderPlantUml: async (source: string): Promise<string> => {
     const res = await fetch('/api/render/plantuml', {
       method: 'POST',

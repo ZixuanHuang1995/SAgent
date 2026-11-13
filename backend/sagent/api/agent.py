@@ -24,6 +24,7 @@ from ..models import AgentEvent, AgentRun, Spec
 from ..schemas import EventOut, ReviewCheckIn, RunContinue, RunCreate, RunDetail, RunOut, VerdictIn
 from ..services import references as reference_service
 from ..services import reviews as review_service
+from ..services import settings as settings_service
 from ..services import specs as spec_service
 from ..services.diagram_snippets import SNIPPETS
 from ..services.errors import BadRequest, Conflict, NotFound, Unavailable
@@ -97,6 +98,13 @@ async def create_run(body: RunCreate, state: AppState = Depends(get_state)):
         raise BadRequest("請輸入需求內容")
     current = await run_in_threadpool(state.settings)
     templates = state.templates()
+    cloud = settings_service.uses_cloud(state.cfg, current)
+    if cloud and not state.cfg.cloud_ready:
+        # 設定存的是雲端，但這次啟動沒有金鑰。不偷偷改用本機模型，讓使用者自己決定
+        raise Unavailable(
+            f"模型來源是雲端 API，但這次啟動沒有設定網址和金鑰。{settings_service.CLOUD_SETUP_HINT}；"
+            "或到設定頁把模型來源改回本機 Ollama"
+        )
 
     def _create() -> RunOut:
         with state.db() as s:
@@ -118,10 +126,12 @@ async def create_run(body: RunCreate, state: AppState = Depends(get_state)):
                 and templates[doc_type].allow_diagrams,
                 "max_diagrams": o.max_diagrams,  # None：不限制張數
                 "plan_first": bool(o.plan_first) and body.mode == "draft",
+                # 模型來源：ollama 本機、cloud 雲端 API。記在工作上，之後改設定或續跑都照當時的
+                "llm_source": "cloud" if cloud else "ollama",
                 "ollama_url": current.ollama_url,
                 "num_ctx": current.num_ctx,
                 # 空白 = 審查跟撰寫用同一個模型
-                "reviewer_model": current.reviewer_model.strip(),
+                "reviewer_model": (current.cloud_reviewer_model if cloud else current.reviewer_model).strip(),
                 # 整個工作的時間上限（分鐘），0 = 不限制。之後改設定不影響已經建立的工作
                 "max_run_minutes": current.max_run_minutes,
                 # 固定亂數種子（回歸測試用，None = 不固定）、存不存提示詞全文（C-08、C-09）
@@ -139,7 +149,7 @@ async def create_run(body: RunCreate, state: AppState = Depends(get_state)):
                 spec_id=spec.id,
                 mode=body.mode,
                 status="queued",
-                model=(o.model or current.default_model).strip(),
+                model=(o.model or (current.cloud_model if cloud else current.default_model)).strip(),
                 doc_type=doc_type,
                 requirement=body.requirement.strip(),
                 options=options,
